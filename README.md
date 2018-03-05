@@ -1,4 +1,4 @@
-Issue : OSError: Can't find model 'en'
+- Issue 1 : OSError: Can't find model 'en'
 Solution : python -m spacy download en_core_web_sm
            python -m spacy download en
 

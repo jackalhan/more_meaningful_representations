@@ -1,0 +1,8 @@
+setuptools==38.5.1
+allennlp==0.4.0
+h5py==2.7.1
+numpy==1.14.1
+pandas==0.22.0
+tensorflow==1.4.1
+tqdm==4.19.6
+typing==3.6.4

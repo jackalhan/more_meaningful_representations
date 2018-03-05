@@ -99,3 +99,12 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+
+bilm.egg-info/
+dist/
+build/
+/.idea
+
+*.pyc
+*.swp

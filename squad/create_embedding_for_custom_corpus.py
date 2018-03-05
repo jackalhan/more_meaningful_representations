@@ -12,8 +12,8 @@ from bilm import Batcher, BidirectionalLanguageModel, weight_layers
 import tensorflow as tf
 from allennlp.data.tokenizers import WordTokenizer
 
-dataset_type = 'train'
-#dataset_type = 'dev'
+#dataset_type = 'train'
+dataset_type = 'dev'
 dataset_version = 'v1.1'
 
 index_field = ['Unnamed: 0']

@@ -1,5 +1,4 @@
 setuptools==38.5.1
-allennlp
 h5py==2.7.1
 numpy==1.14.1
 pandas==0.22.0
@@ -9,4 +8,3 @@ typing==3.6.4
 matplotlib
 scikit-learn
 scipy
-# Unnecessary dependency for allennlp therefore : pip3 install http://download.pytorch.org/whl/cpu/torch-0.3.1-cp35-cp35m-linux_x86_64.whl

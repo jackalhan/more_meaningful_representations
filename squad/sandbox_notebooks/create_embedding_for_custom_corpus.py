@@ -12,7 +12,6 @@ from bilm import Batcher, BidirectionalLanguageModel, weight_layers
 import tensorflow as tf
 #from allennlp.data.tokenizers import WordTokenizer
 import spacy
-
 nlp = spacy.blank("en")
 
 def word_tokenize(sent):
@@ -158,18 +157,64 @@ qas_file = os.path.join(datadir, _qas_file_name)
 # ## ------------------------------ CREATE EMBEDDINGS USING GIVEN WEIGHTS----------------------------------------------- ##
 # ## ------------------------------ BEGIN              ----------------------------------------------- ##
 # # Dump the embeddings to a file. Run this once for your dataset.
-# # Paragraphs
-# dump_bilm_embeddings(
-#     vocab_file, paragraphs_file_as_txt, options_file, weight_file, os.path.join(datadir, embedding_paragraph_file_as_h5py)
-# )
-# print('Done Paragraphs!')
+# Paragraphs
+
+
+print('Obtaining paragraphs and questions')
+_paragraphs_file_name_as_txt = '{}_paragraphs.txt'
+paragraphs_file_as_txt = os.path.join(datadir, _paragraphs_file_name_as_txt.format(dataset_type))
+sanity_paragraphs_file_as_txt = os.path.join(datadir, _paragraphs_file_name_as_txt.format('sanity_' + dataset_type ))
+
+_questions_file_name_as_txt = '{}_questions.txt'
+questions_file_as_txt = os.path.join(datadir, _questions_file_name_as_txt.format(dataset_type))
+sanity_questions_file_as_txt = os.path.join(datadir, _questions_file_name_as_txt.format('sanity_' + dataset_type ))
+_qas_file_name = '{}_qas.csv'.format('sanity_' + dataset_type )
+qas_file = os.path.join(datadir, _qas_file_name)
+_voc_file_name_as_txt = '{}_voc.txt'
+voc_file_name_as_txt = os.path.join(datadir, _voc_file_name_as_txt.format('sanity_' + dataset_type ))
+#
+# paragraphs = []
+# questions = []
+# p_look_up = []
+# q_look_up = []
+# with open(sanity_paragraphs_file_as_txt, 'r') as fp_in, open(sanity_questions_file_as_txt, 'r') as fq_in:
+#     for i, line in enumerate(fp_in):
+#         paragraphs.append(line.replace('\n', ' '))
+#         p_look_up.append((i, line.replace('\n','')))
+#     for i, line in enumerate(fq_in):
+#         questions.append(line.replace('\n', ' '))
+#         q_look_up.append((i, line.replace('\n','')))
+# print('Done')
+# df_p_look_up = pd.DataFrame(data=p_look_up, columns=['id', 'paragraph']).set_index('id')
+# df_q_look_up = pd.DataFrame(data=q_look_up, columns=['id', 'question']).set_index('id')
+# tokenized_paragraphs = [word_tokenize(_) for _ in paragraphs]
+# tokenized_questions = [word_tokenize(_) for _ in questions]
+
+
+
+dump_bilm_embeddings(
+    voc_file_name_as_txt, sanity_paragraphs_file_as_txt, options_file, weight_file, os.path.join(datadir, embedding_paragraph_file_as_h5py)
+)
+print('Done Paragraphs!')
 
 #questions
 dump_bilm_embeddings(
-    vocab_file, questions_file_as_txt, options_file, weight_file, os.path.join(datadir, embedding_question_file_as_h5py)
+    voc_file_name_as_txt, sanity_questions_file_as_txt, options_file, weight_file, os.path.join(datadir, embedding_question_file_as_h5py)
 )
 print('Done Questions!')
 
+
+# # PYTORCH ALLENNLP------------------------------------
+#
+from allennlp.commands.elmo import ElmoEmbedder
+ee = ElmoEmbedder(options_file, weight_file)
+print('ee loaded')
+
+with open(sanity_paragraphs_file_as_txt, 'r') as fp_in, open(sanity_questions_file_as_txt, 'r') as fq_in:
+    ee.embed_file(fp_in, os.path.join(datadir, embedding_paragraph_file_as_h5py))
+    print('Done Paragraphs!')
+    ee.embed_file(fq_in, os.path.join(datadir, embedding_question_file_as_h5py))
+    print('Done Questions!')
 
 #
 # # Load the embeddings from the file -- here the 2nd sentence.

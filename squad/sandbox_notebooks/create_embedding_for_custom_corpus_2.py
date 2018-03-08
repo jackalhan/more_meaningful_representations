@@ -46,11 +46,22 @@ _weight_file_name = 'elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5'
 options_file = os.path.join(modeldir, _options_file_name)
 weight_file = os.path.join(modeldir, _weight_file_name)
 
-_embedding_paragraph_file_as_h5py_name = 'elmo_paragraph_embeddings.hdf5'
-embedding_paragraph_file_as_h5py = os.path.join(datadir, _embedding_paragraph_file_as_h5py_name)
+_embedding_token_file_as_h5py_name = 'elmo_token_embeddings.hdf5'
+embedding_token_file_as_h5py_name = os.path.join(datadir, _embedding_token_file_as_h5py_name)
 
-_embedding_question_file_as_h5py_name = 'elmo_question_embeddings.hdf5'
-embedding_question_file_as_h5py = os.path.join(datadir, _embedding_question_file_as_h5py_name)
+_embedding_paragraph_input_file_as_h5py_name = 'elmo_paragraph_embeddings_input.hdf5'
+embedding_paragraph_input_file_as_h5py = os.path.join(datadir, _embedding_paragraph_input_file_as_h5py_name)
+
+_embedding_question_input_file_as_h5py_name = 'elmo_question_embeddings_input.hdf5'
+embedding_question_input_file_as_h5py = os.path.join(datadir, _embedding_question_input_file_as_h5py_name)
+
+
+_embedding_paragraph_output_file_as_h5py_name = 'elmo_paragraph_embeddings_output.hdf5'
+embedding_paragraph_output_file_as_h5py = os.path.join(datadir, _embedding_paragraph_output_file_as_h5py_name)
+
+_embedding_question_output_file_as_h5py_name = 'elmo_question_embeddings_output.hdf5'
+embedding_question_output_file_as_h5py = os.path.join(datadir, _embedding_question_output_file_as_h5py_name)
+
 
 # _embedding_file_as_text_name = 'elmo_embeddings.txt'
 # embedding_file_as_text = os.path.join(datadir, _embedding_file_as_text_name)
@@ -160,7 +171,7 @@ tokenized_questions= [word_tokenize(_) for _ in df_questions['Question']]
 # Dump the embeddings to a file. Run this once for your dataset.
 # Paragraphs
 dump_token_embeddings(
-    vocab_file, options_file, weight_file, os.path.join(datadir, embedding_paragraph_file_as_h5py)
+    vocab_file, options_file, weight_file, os.path.join(datadir, embedding_token_file_as_h5py_name)
 )
 tf.reset_default_graph()
 
@@ -175,7 +186,7 @@ bilm = BidirectionalLanguageModel(
     options_file,
     weight_file,
     use_character_inputs=False,
-    embedding_weight_file= os.path.join(datadir, embedding_paragraph_file_as_h5py)
+    embedding_weight_file= os.path.join(datadir, embedding_token_file_as_h5py_name)
 )
 
 # Get ops to compute the LM embeddings.
@@ -219,6 +230,44 @@ with tf.Session() as sess:
         feed_dict={context_token_ids: context_ids,
                    question_token_ids: question_ids}
     )
+
+    with h5py.File(embedding_question_input_file_as_h5py, 'w') as fq_out, h5py.File(embedding_paragraph_input_file_as_h5py,
+                                                                              'w') as fp_out:
+        for id, line in enumerate(elmo_context_input_):
+            ds = fp_out.create_dataset(
+                '{}'.format(id),
+                line.shape, dtype='float32',
+                data=line
+            )
+        for id, line in enumerate(elmo_question_input_):
+            ds = fq_out.create_dataset(
+                '{}'.format(id),
+                line.shape, dtype='float32',
+                data=line
+            )
+
+    # Compute ELMo representations (here for the input only, for simplicity).
+    elmo_context_output_, elmo_question_output_ = sess.run(
+        [elmo_context_output['weighted_op'], elmo_question_output['weighted_op']],
+        feed_dict={context_token_ids: context_ids,
+                   question_token_ids: question_ids}
+    )
+
+    with h5py.File(embedding_question_output_file_as_h5py, 'w') as fq_out, h5py.File(embedding_paragraph_output_file_as_h5py, 'w') as fp_out:
+        for id, line in enumerate(elmo_context_output_):
+            ds = fp_out.create_dataset(
+                '{}'.format(id),
+                line.shape, dtype='float32',
+                data=line
+            )
+        for id, line in enumerate(elmo_question_output_):
+            ds = fq_out.create_dataset(
+                '{}'.format(id),
+                line.shape, dtype='float32',
+                data=line
+            )
+
+
 
 
 #

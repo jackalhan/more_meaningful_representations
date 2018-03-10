@@ -1,5 +1,10 @@
-
+from tqdm import tqdm
 import tensorflow as tf
+from bilm.data import cached_path
+import json
+from bilm import Batcher, BidirectionalLanguageModel
+from typing import List
+import numpy as np
 
 def weight_layers(name, bilm_ops, l2_coef=None,
                   use_top_only=False, do_layer_norm=False):
@@ -112,3 +117,252 @@ def weight_layers(name, bilm_ops, l2_coef=None,
 
     return ret
 
+def empty_embedding(dims, reshaped=False) -> np.ndarray:
+    if reshaped:
+        return np.zeros((3, 0, dims))
+    else:
+        return np.zeros((0, dims))
+
+DEFAULT_OPTIONS_FILE = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json" # pylint: disable=line-too-long
+DEFAULT_WEIGHT_FILE = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5" # pylint: disable=line-too-long
+DEFAULT_BATCH_SIZE = 64
+
+class ElmoEmbedder():
+    def __init__(self,
+                 options_file: str = DEFAULT_OPTIONS_FILE,
+                 weight_file: str = DEFAULT_WEIGHT_FILE,
+                 dims:int = 1024) -> None:
+        """
+        Parameters
+        ----------
+        options_file : ``str``, optional
+            A path or URL to an ELMo options file.
+        weight_file : ``str``, optional
+            A path or URL to an ELMo weights file.
+        """
+        options_file_path = cached_path(options_file)
+        weight_file_path = cached_path(weight_file)
+        with open(options_file_path, 'r') as fin:
+            options = json.load(fin)
+        self.max_word_length = options['char_cnn']['max_characters_per_token']
+        self.dims = dims
+        self.ids_placeholder = tf.placeholder('int32', shape=(None, None, self.max_word_length))
+        self.model = BidirectionalLanguageModel(options_file_path, weight_file_path)
+        self.ops = self.model(self.ids_placeholder)
+    def __batch_to_vocs(self, batch: List[List[str]]):
+        """
+        Converts a batch of tokenized sentences to a voc as cached so that it can be used for Batchers
+
+        Parameters
+        ----------
+        batch : ``List[List[str]]``, required
+            A list of tokenized sentences.
+
+        Returns
+        -------
+            cached voc file path
+        """
+        file_path = cached_path('voc.txt')
+        self.all_tokens = set(['<S>', '</S>', '<UNK>'])
+        for _content in batch:
+            for token in _content:
+                if token.strip():
+                    self.all_tokens.add(token)
+        with open(file_path, 'w') as fout:
+            fout.write('\n'.join(self.all_tokens))
+
+        return file_path
+
+    def list_to_embeddings(self, batch: List[List[str]], slice=None):
+        """
+        Parameters
+        ----------
+        batch : ``List[List[str]]``, required
+            A list of tokenized sentences.
+
+        """
+        elmo_embeddings = []
+
+        if batch == [[]]:
+            if slice is None:
+                elmo_embeddings.append(empty_embedding(self.dims))
+            else:
+                if slice > 2:
+                    raise ValueError('Slice can not be larger than 3')
+                elmo_embeddings.append(empty_embedding(self.dims, True))
+        else:
+            vocab_file = self.__batch_to_vocs(batch)
+            batcher = Batcher(vocab_file, self.max_word_length)
+            config = tf.ConfigProto(allow_soft_placement=True)
+            with tf.Session(config=config) as sess:
+                sess.run(tf.global_variables_initializer())
+                for i, _contents in enumerate(tqdm(batch, total= len(batch))) :
+                    #for _content in _contents:
+                    #content_tokens_ = _contents.strip().split()
+                    char_ids = batcher.batch_sentences([_contents])
+                    _ops = sess.run(
+                        self.ops, feed_dict={self.ids_placeholder: char_ids}
+                    )
+                    mask = _ops['mask']
+                    lm_embeddings = _ops['lm_embeddings']
+                    token_embeddings = _ops['token_embeddings']
+                    lengths = _ops['lengths']
+                    length = int(mask.sum())
+                    if slice is None:
+                        lm_embeddings_mean = np.apply_over_axes(np.mean, lm_embeddings[0], (0,1))
+                    else:
+                        lm_embeddings_mean = np.apply_over_axes(np.mean, lm_embeddings[0][slice], (0))
+                    # if lm_embeddings.shape != (1,3,1,1024):
+                    #     print('Index of batch:', i)
+                    #     print('Contents:', _contents)
+                    #     print('Content Tokens:', content_tokens_)
+                    #     print('Shape:', lm_embeddings.shape)
+                    #     print(10*'-')
+                    elmo_embeddings.append(lm_embeddings_mean)
+
+        return elmo_embeddings
+
+    # def batch_to_ids(self, batch: List[List[str]]):
+    #     """
+    #     Converts a batch of tokenized sentences to a tensor representing the sentences with encoded characters
+    #     (len(batch), max sentence length, max word length).
+    #
+    #     Parameters
+    #     ----------
+    #     batch : ``List[List[str]]``, required
+    #         A list of tokenized sentences.
+    #
+    #     Returns
+    #     -------
+    #         A tensor of padded character ids.
+    #     """
+    #     instances = []
+    #     for sentence in batch:
+    #         tokens = [Token(token) for token in sentence]
+    #         field = TextField(tokens,
+    #                           {'character_ids': self.indexer})
+    #         instance = Instance({"elmo": field})
+    #         instances.append(instance)
+    #
+    #     dataset = Batch(instances)
+    #     vocab = Vocabulary()
+    #     dataset.index_instances(vocab)
+    #     return dataset.as_tensor_dict()['elmo']['character_ids']
+
+
+    # def embed_sentence(self, sentence: List[str]) -> numpy.ndarray:
+    #     """
+    #     Computes the ELMo embeddings for a single tokenized sentence.
+    #
+    #     Parameters
+    #     ----------
+    #     sentence : ``List[str]``, required
+    #         A tokenized sentence.
+    #
+    #     Returns
+    #     -------
+    #     A tensor containing the ELMo vectors.
+    #     """
+    #
+    #     return self.embed_batch([sentence])[0]
+    #
+    # def embed_batch(self, batch: List[List[str]]) -> List[numpy.ndarray]:
+    #     """
+    #     Computes the ELMo embeddings for a batch of tokenized sentences.
+    #
+    #     Parameters
+    #     ----------
+    #     batch : ``List[List[str]]``, required
+    #         A list of tokenized sentences.
+    #
+    #     Returns
+    #     -------
+    #         A list of tensors, each representing the ELMo vectors for the input sentence at the same index.
+    #     """
+    #     elmo_embeddings = []
+    #
+    #     # Batches with only an empty sentence will throw an exception inside AllenNLP, so we handle this case
+    #     # and return an empty embedding instead.
+    #     if batch == [[]]:
+    #         elmo_embeddings.append(empty_embedding())
+    #     else:
+    #         embeddings, mask = self.batch_to_embeddings(batch)
+    #         for i in range(len(batch)):
+    #             length = int(mask[i, :].sum())
+    #             # Slicing the embedding :0 throws an exception so we need to special case for empty sentences.
+    #             if length == 0:
+    #                 elmo_embeddings.append(empty_embedding())
+    #             else:
+    #                 elmo_embeddings.append(embeddings[i, :, :length, :].data.cpu().numpy())
+    #
+    #     return elmo_embeddings
+    #
+    # def embed_sentences(self,
+    #                     sentences: Iterable[List[str]],
+    #                     batch_size: int = DEFAULT_BATCH_SIZE) -> Iterable[numpy.ndarray]:
+    #     """
+    #     Computes the ELMo embeddings for a iterable of sentences.
+    #
+    #     Parameters
+    #     ----------
+    #     sentences : ``Iterable[List[str]]``, required
+    #         An iterable of tokenized sentences.
+    #     batch_size : ``int``, required
+    #         The number of sentences ELMo should process at once.
+    #
+    #     Returns
+    #     -------
+    #         A list of tensors, each representing the ELMo vectors for the input sentence at the same index.
+    #     """
+    #     for batch in lazy_groups_of(iter(sentences), batch_size):
+    #         yield from self.embed_batch(batch)
+    #
+    # def embed_file(self,
+    #                input_file: IO,
+    #                output_file_path: str,
+    #                output_format: str = "all",
+    #                batch_size: int = DEFAULT_BATCH_SIZE) -> None:
+    #     """
+    #     Computes ELMo embeddings from an input_file where each line contains a sentence tokenized by whitespace.
+    #     The ELMo embeddings are written out in HDF5 format, where each sentences is saved in a dataset.
+    #
+    #     Parameters
+    #     ----------
+    #     input_file : ``IO``, required
+    #         A file with one tokenized sentence per line.
+    #     output_file_path : ``str``, required
+    #         A path to the output hdf5 file.
+    #     output_format : ``str``, optional, (default = "all")
+    #         The embeddings to output.  Must be one of "all", "top", or "average".
+    #     batch_size : ``int``, optional, (default = 64)
+    #         The number of sentences to process in ELMo at one time.
+    #     """
+    #
+    #     assert output_format in ["all", "top", "average"]
+    #
+    #     # Tokenizes the sentences.
+    #     sentences = [line.strip() for line in input_file if line.strip()]
+    #     split_sentences = [sentence.split() for sentence in sentences]
+    #     # Uses the sentence as the key.
+    #     embedded_sentences = zip(sentences, self.embed_sentences(split_sentences, batch_size))
+    #
+    #     logger.info("Processing sentences.")
+    #     with h5py.File(output_file_path, 'w') as fout:
+    #         for key, embeddings in Tqdm.tqdm(embedded_sentences):
+    #             if key in fout.keys():
+    #                 #logger.warning(f"Key already exists in {output_file_path}, skipping: {key}")
+    #                 pass
+    #             else:
+    #                 if output_format == "all":
+    #                     output = embeddings
+    #                 elif output_format == "top":
+    #                     output = embeddings[2]
+    #                 elif output_format == "average":
+    #                     output = numpy.average(embeddings, axis=0)
+    #
+    #                 fout.create_dataset(
+    #                         str(key),
+    #                         output.shape, dtype='float32',
+    #                         data=output
+    #                 )
+    #     input_file.close()

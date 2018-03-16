@@ -169,6 +169,7 @@ print('Questions: Tokenization and Saving Tokenization  is Completed in {} mminu
 ## usae char encoding embedding ##
 ee = ElmoEmbedder()
 ##########################
+voc_file = ee.batch_to_vocs(tokenized_questions + tokenized_paragraphs)
 
 slices = [{'slice_type':'All', 'slice_index':None, 'axis':(1,2)},
           {'slice_type':'1st', 'slice_index':0, 'axis':(1)},
@@ -198,7 +199,7 @@ WM = np.array([1, 0, 0]).reshape((1,3,1,1))
 # tfidf_questions = np.array(tfidf.transform(tokenized_questions).toarray().tolist())
 # CHAR EMBEDDINGS START
 print('Embeddings is started')
-document_embeddings = ee.list_to_embeddings_with_dump(tokenized_paragraphs + tokenized_questions, document_embeddings_file)
+document_embeddings = ee.list_to_embeddings_with_dump(tokenized_questions, document_embeddings_file)
 #document_embeddings = np.reshape(document_embeddings, (document_embeddings.shape[0], ee.dims))
 print('# of Embedded Paragraphs: {}'.format(document_embeddings.shape[0]))
 print('Embedding is completed')

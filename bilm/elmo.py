@@ -165,7 +165,7 @@ class ElmoEmbedder():
                                                     False, self.word_embedding_file)
 
         self.ops = self.model(self.ids_placeholder)
-    def __batch_to_vocs(self, batch: List[List[str]]):
+    def batch_to_vocs(self, batch: List[List[str]]):
         """
         Converts a batch of tokenized sentences to a voc as cached so that it can be used for Batchers
 
@@ -178,16 +178,16 @@ class ElmoEmbedder():
         -------
             cached voc file path
         """
-        file_path = cached_path('voc.txt')
+        self.file_path = cached_path('voc.txt')
         self.all_tokens = set(['<S>', '</S>', '<UNK>'])
         for _content in batch:
             for token in _content:
                 if token.strip():
                     self.all_tokens.add(token)
-        with open(file_path, 'w') as fout:
+        with open(self.file_path, 'w') as fout:
             fout.write('\n'.join(self.all_tokens))
 
-        return file_path
+        return self.file_path
 
     def list_to_token_embeddings(self,  batch: List[List[str]],
                                  inject_tfidf=False,
@@ -203,10 +203,9 @@ class ElmoEmbedder():
         constructing a BidirectionalLanguageModel.
         '''
 
-        vocab_file = self.__batch_to_vocs(batch)
         #batcher = TokenBatcher(vocab_file)
-        vocab = UnicodeCharsVocabulary(vocab_file, self.max_word_length)
-        batcher = Batcher(vocab_file, self.max_word_length)
+        vocab = UnicodeCharsVocabulary(self.file_path, self.max_word_length)
+        batcher = Batcher(self.file_path, self.max_word_length)
         embedding_op = self.ops['token_embeddings']
         n_tokens = vocab.size
         embed_dim = int(embedding_op.shape[2])
@@ -278,7 +277,7 @@ class ElmoEmbedder():
             )
 
 
-        return embeddings, vocab._word_to_id,vocab_file
+        return embeddings, vocab._word_to_id
 
     def list_to_embeddings(self, batch: List[List[str]], slice=None, file_to_dump=None):
         """
@@ -298,8 +297,7 @@ class ElmoEmbedder():
                     raise ValueError('Slice can not be larger than 3')
                 elmo_embeddings.append(empty_embedding(self.dims, True))
         else:
-            vocab_file = self.__batch_to_vocs(batch)
-            batcher = Batcher(vocab_file, self.max_word_length)
+            batcher = Batcher(self.file_path, self.max_word_length)
             config = tf.ConfigProto(allow_soft_placement=True)
             with tf.Session(config=config) as sess:
                 sess.run(tf.global_variables_initializer())
@@ -342,11 +340,11 @@ class ElmoEmbedder():
         if batch == [[]]:
            raise ValueError('Batch should not be emppty')
         else:
-            vocab_file = self.__batch_to_vocs(batch)
+
             if self.word_embedding_file is None:
-                batcher = Batcher(vocab_file, self.max_word_length)
+                batcher = Batcher(self.file_path, self.max_word_length)
             else:
-                batcher = TokenBatcher(vocab_file)
+                batcher = TokenBatcher(self.file_path)
             config = tf.ConfigProto(allow_soft_placement=True)
             with tf.Session(config=config) as sess:
                 sess.run(tf.global_variables_initializer())
@@ -388,8 +386,7 @@ class ElmoEmbedder():
                     raise ValueError('Slice can not be larger than 3')
                 elmo_embeddings.append(empty_embedding(self.dims, True))
         else:
-            vocab_file = self.__batch_to_vocs(batch)
-            batcher = Batcher(vocab_file, self.max_word_length)
+            batcher = Batcher(self.file_path, self.max_word_length)
             config = tf.ConfigProto(allow_soft_placement=True)
             with tf.Session(config=config) as sess:
                 sess.run(tf.global_variables_initializer())

@@ -33,15 +33,15 @@ class TfidfEmbeddingVectorizer(object):
             self.dim = 0
 
     def fit(self, X):
-        tfidf = TfidfVectorizer(analyzer=lambda x: x)
-        tfidf.fit(X)
+        self.tfidf = TfidfVectorizer(analyzer=lambda x: x)
+        self.tfidf.fit(X)
         # if a word was never seen - it must be at least as infrequent
         # as any of the known words - so the default idf is the max of
         # known idf's
-        max_idf = max(tfidf.idf_)
+        max_idf = max(self.tfidf.idf_)
         self.word2weight = defaultdict(
             lambda: max_idf,
-            [(w, tfidf.idf_[i]) for w, i in tfidf.vocabulary_.items()])
+            [(w, self.tfidf.idf_[i]) for w, i in self.tfidf.vocabulary_.items()])
 
         return self
 

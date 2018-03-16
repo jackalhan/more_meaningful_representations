@@ -185,6 +185,20 @@ class UnicodeCharsVocabulary(Vocabulary):
             return np.vstack([self.eos_chars] + chars_ids + [self.bos_chars])
         else:
             return np.vstack([self.bos_chars] + chars_ids + [self.eos_chars])
+    # def encode_chars(self, sentence, reverse=False, split=True):
+    #     '''
+    #     Encode the sentence as a white space delimited string of tokens.
+    #     '''
+    #     if split:
+    #         chars_ids = [self.word_to_char_ids(cur_word)
+    #                  for cur_word in sentence.split()]
+    #     else:
+    #         chars_ids = [self.word_to_char_ids(cur_word)
+    #                  for cur_word in sentence]
+    #     if reverse:
+    #         return np.vstack([self.eos_chars] + chars_ids + [self.bos_chars])
+    #     else:
+    #         return np.vstack([self.bos_chars] + chars_ids + [self.eos_chars])
 
 
 class Batcher(object):
@@ -203,6 +217,28 @@ class Batcher(object):
         self._max_token_length = max_token_length
 
 
+    # def batch_sentences(self, sentences: List[List[str]]):
+    #     '''
+    #     Batch the sentences as character ids
+    #     Each sentence is a list of tokens without <s> or </s>, e.g.
+    #     [['The', 'first', 'sentence', '.'], ['Second', '.']]
+    #     '''
+    #     n_sentences = len(sentences)
+    #     max_length = self._lm_vocab.size
+    #
+    #     X_char_ids = np.zeros(
+    #         (n_sentences, max_length, self._max_token_length),
+    #         dtype=np.int64
+    #     )
+    #
+    #     for k, sent in enumerate(sentences):
+    #         length = len(sent) + 2
+    #         char_ids_without_mask = self._lm_vocab.encode_chars(
+    #             sent, split=False)
+    #         # add one so that 0 is the mask value
+    #         X_char_ids[k, :length, :] = char_ids_without_mask + 1
+    #
+    #     return X_char_ids
     def batch_sentences(self, sentences: List[List[str]]):
         '''
         Batch the sentences as character ids

@@ -178,24 +178,18 @@ class ElmoEmbedder():
         -------
             cached voc file path
         """
-        self.file_path = cached_path('voc.txt')
+        self.voc_file_path = cached_path('voc.txt')
         self.all_tokens = set(['<S>', '</S>', '<UNK>'])
         for _content in batch:
             for token in _content:
                 if token.strip():
                     self.all_tokens.add(token)
-        with open(self.file_path, 'w') as fout:
+        with open(self.voc_file_path, 'w') as fout:
             fout.write('\n'.join(self.all_tokens))
 
-        return self.file_path
+        return self.voc_file_path
 
-    def list_to_token_embeddings(self,  batch: List[List[str]],
-                                 inject_tfidf=False,
-                                 tfidf_smooth_idf=False,
-                                 tfidf_sublinear_tf=False,
-                                 inject_mean_glove=False,
-                                 required_tfidf_mean=False,
-                                 glove_path=None,
+    def list_to_token_embeddings(self,
                                  outfile_to_dump=None):
         '''
         Given an input vocabulary file, dump all the token embeddings to the
@@ -204,48 +198,12 @@ class ElmoEmbedder():
         '''
 
         #batcher = TokenBatcher(vocab_file)
-        vocab = UnicodeCharsVocabulary(self.file_path, self.max_word_length)
-        batcher = Batcher(self.file_path, self.max_word_length)
+        vocab = UnicodeCharsVocabulary(self.voc_file_path, self.max_word_length)
+        batcher = Batcher(self.voc_file_path, self.max_word_length)
         embedding_op = self.ops['token_embeddings']
         n_tokens = vocab.size
         embed_dim = int(embedding_op.shape[2])
         embeddings = np.zeros((n_tokens, embed_dim), dtype=DTYPE)
-
-        token_tfidf_weights = None
-        if inject_tfidf:
-            tfidf = TfidfVectorizer(analyzer=lambda x: x, smooth_idf=tfidf_smooth_idf, sublinear_tf=tfidf_sublinear_tf)
-            tfidf.fit(batch)
-            # if a word was never seen - it must be at least as infrequent
-            # as any of the known words - so the default idf is the max of
-            # known idf's
-            max_idf = max(tfidf.idf_)
-            token_tfidf_weights = defaultdict(
-                lambda: max_idf,
-                [(w, tfidf.idf_[i]) for w, i in tfidf.vocabulary_.items()])
-
-        if inject_mean_glove:
-            glove_big = {}
-            with open(glove_path, "rb") as infile:
-                for line in infile:
-                    parts = line.split()
-                    word = parts[0].decode('utf-8')
-                    if word in self.all_tokens:
-                        nums = np.array(parts[1:], dtype=np.float32)
-                        glove_big[word] = nums
-            # dim = len(glove_big[next(iter(glove_big))])
-            # np.array([
-            #     np.mean([glove_big[w] for w in words if w in glove_big]
-            #             or [np.zeros(dim)], axis=0)
-            #     for words in batch
-            # ])
-        # token_glove_and_tfidf_weights = None
-        # if inject_glove and inject_tfidf:
-        #     return np.array([
-        #         np.mean([glove_big[w] * token_tfidf_weights[w]
-        #                  for w in words if w in glove_big] or
-        #                 [np.zeros(dim)], axis=0)
-        #         for words in batch
-        #     ])
 
 
         config = tf.ConfigProto(allow_soft_placement=True)
@@ -258,18 +216,6 @@ class ElmoEmbedder():
                 embeddings[k, :] = sess.run(
                     embedding_op, feed_dict={self.ids_placeholder: char_ids}
                 )
-                # if inject_tfidf and inject_mean_glove:
-                #     if required_tfidf_mean:
-                #         embeddings[k, :] = embeddings[k, :] * np.mean(token_tfidf_weights[token] * glove_big[token], axis=0)
-                #     else:
-                #         embeddings[k, :] = embeddings[k, :] * token_tfidf_weights[token] * np.mean(glove_big[token], axis=0)
-                # elif inject_tfidf:
-                #     embeddings[k, :] = embeddings[k, :] * token_tfidf_weights[token]
-                # elif inject_mean_glove:
-                #     embeddings[k, :] = embeddings[k, :] * np.mean(glove_big[token], axis=0)
-                # else:
-                #     pass
-
 
         with h5py.File(outfile_to_dump, 'w') as fout:
             ds = fout.create_dataset(
@@ -279,7 +225,7 @@ class ElmoEmbedder():
 
         return embeddings, vocab._word_to_id
 
-    def list_to_embeddings(self, batch: List[List[str]], slice=None, file_to_dump=None):
+    def list_to_embeddings(self, batch: List[List[str]], slice=None):
         """
         Parameters
         ----------
@@ -297,13 +243,11 @@ class ElmoEmbedder():
                     raise ValueError('Slice can not be larger than 3')
                 elmo_embeddings.append(empty_embedding(self.dims, True))
         else:
-            batcher = Batcher(self.file_path, self.max_word_length)
+            batcher = Batcher(self.voc_file_path, self.max_word_length)
             config = tf.ConfigProto(allow_soft_placement=True)
             with tf.Session(config=config) as sess:
                 sess.run(tf.global_variables_initializer())
                 for i, _contents in enumerate(tqdm(batch, total= len(batch))) :
-                    #for _content in _contents:
-                    #content_tokens_ = _contents.strip().split()
                     char_ids = batcher.batch_sentences([_contents])
                     _ops = sess.run(
                         self.ops, feed_dict={self.ids_placeholder: char_ids}
@@ -317,17 +261,11 @@ class ElmoEmbedder():
                         lm_embeddings_mean = np.apply_over_axes(np.mean, lm_embeddings[0], (0,1))
                     else:
                         lm_embeddings_mean = np.apply_over_axes(np.mean, lm_embeddings[0][slice], (0))
-                    # if lm_embeddings.shape != (1,3,1,1024):
-                    #     print('Index of batch:', i)
-                    #     print('Contents:', _contents)
-                    #     print('Content Tokens:', content_tokens_)
-                    #     print('Shape:', lm_embeddings.shape)
-                    #     print(10*'-')
                     elmo_embeddings.append(lm_embeddings_mean)
 
         return elmo_embeddings
 
-    def list_to_embeddings_with_dump(self, batch: List[List[str]],outfile_to_dump=None,tfidfs=None):
+    def list_to_embeddings_with_dump(self, batch: List[List[str]],outfile_to_dump=None):
         """
         Parameters
         ----------
@@ -338,13 +276,13 @@ class ElmoEmbedder():
         document_embeddings = []
 
         if batch == [[]]:
-           raise ValueError('Batch should not be emppty')
+           raise ValueError('Batch should not be empty')
         else:
 
             if self.word_embedding_file is None:
-                batcher = Batcher(self.file_path, self.max_word_length)
+                batcher = Batcher(self.voc_file_path, self.max_word_length)
             else:
-                batcher = TokenBatcher(self.file_path)
+                batcher = TokenBatcher(self.voc_file_path)
             config = tf.ConfigProto(allow_soft_placement=True)
             with tf.Session(config=config) as sess:
                 sess.run(tf.global_variables_initializer())
@@ -368,6 +306,49 @@ class ElmoEmbedder():
                 document_embeddings = np.asarray(document_embeddings)
         return document_embeddings
 
+    def list_to_lazy_embeddings_with_dump(self, batch: List[List[str]],outfile_to_dump=None):
+        """
+        Parameters
+        ----------
+        batch : ``List[List[str]]``, required
+            A list of tokenized sentences.
+
+        """
+        document_embeddings = []
+        if batch == [[]]:
+           raise ValueError('Batch should not be empty')
+        else:
+
+            if self.word_embedding_file is None:
+                batcher = Batcher(self.voc_file_path, self.max_word_length)
+            else:
+                batcher = TokenBatcher(self.voc_file_path)
+            config = tf.ConfigProto(allow_soft_placement=True)
+            with tf.Session(config=config) as sess:
+                sess.run(tf.global_variables_initializer())
+                for i, token in enumerate(tqdm(batch, total=len(batch))):
+                    char_ids = batcher.lazy_batch_sentences([[token]])
+                    _ops = sess.run(
+                        self.ops, feed_dict={self.ids_placeholder: char_ids}
+                    )
+                    mask = _ops['mask']
+                    lm_embeddings = _ops['lm_embeddings']
+                    token_embeddings = _ops['token_embeddings']
+                    lengths = _ops['lengths']
+                    length = int(mask.sum())
+
+                    #### shape of new embeddings [1,3,1,1024] so swap axes
+                    new_embedding = np.swapaxes(lm_embeddings, 1, 2)
+                    new_embedding = new_embedding.reshape((new_embedding.shape[2], new_embedding.shape[3]))
+                    document_embeddings.append(new_embedding)
+            document_embeddings = np.asarray(document_embeddings)
+            with h5py.File(outfile_to_dump, 'w') as fout:
+                ds = fout.create_dataset(
+                    'embeddings',
+                    document_embeddings.shape, dtype='float32',
+                    data=document_embeddings
+                )
+        return document_embeddings
     def list_to_embeddings_with_dump_(self, batch: List[List[str]], slice=None, outfile_to_dump=None,tfidfs=None):
         """
         Parameters
@@ -386,7 +367,7 @@ class ElmoEmbedder():
                     raise ValueError('Slice can not be larger than 3')
                 elmo_embeddings.append(empty_embedding(self.dims, True))
         else:
-            batcher = Batcher(self.file_path, self.max_word_length)
+            batcher = Batcher(self.voc_file_path, self.max_word_length)
             config = tf.ConfigProto(allow_soft_placement=True)
             with tf.Session(config=config) as sess:
                 sess.run(tf.global_variables_initializer())

@@ -510,7 +510,7 @@ paragraphs_train_nontokenized = [" ".join(context) for context in tokenized_trai
 
 
 tfidf = TfidfVectorizer(analyzer=lambda x: x, smooth_idf=False, sublinear_tf=False, tokenizer=tokenize)
-tfidf.fit(questions_nontokenized+paragraphs_nontokenized)
+tfidf.fit(questions_nontokenized+paragraphs_nontokenized+questions_train_nontokenized + paragraphs_train_nontokenized)
 max_idf = max(tfidf.idf_)
 token2idfweight = defaultdict(
     lambda: max_idf,
@@ -557,7 +557,7 @@ print('ELMO Token Embeddings is ended in {} minutes'.format((end-start).seconds/
 # IDFM =
 
 
-idf_vec = create_idf_matrix(tokenized_questions, tokenized_paragraphs, token2idfweight)
+idf_vec = create_idf_matrix(tokenized_train_questions, tokenized_train_paragraphs, token2idfweight)
 #IDF_WEIGHTED
 idf_weighted_token_embeddings = np.multiply(idf_vec, token_embeddings)
 
@@ -584,8 +584,8 @@ for _token_embed_pack in [(idf_weighted_token_embeddings, 'with_idf')]:
 
     for _a_b_c in _a_b_c_s:
         print('Weight {}'.format(_a_b_c))
-        questions_embeddings, paragraphs_embeddings = token_to_document_embeddings(tokenized_questions,
-                                                                                   tokenized_paragraphs, _token_embed,
+        questions_embeddings, paragraphs_embeddings = token_to_document_embeddings(tokenized_train_questions,
+                                                                                   tokenized_train_paragraphs, _token_embed,
                                                                                    token_embeddings_guideline)
         # YES TUNE
         WM = np.array([_a_b_c[0], _a_b_c[1], _a_b_c[2]]).reshape((1, 3, 1))

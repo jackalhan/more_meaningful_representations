@@ -544,7 +544,7 @@ token_embeddings, token_embeddings_guideline = get_elmo_embeddings(tokenized_tra
                                                                    token_embeddings_guideline_file,
                                                                    token_embeddings_file,
                                                                    voc_file_name,
-                                                                   20
+                                                                   1
                                                                    )
 end = datetime.datetime.now()
 print('ELMO Token Embeddings is ended in {} minutes'.format((end-start).seconds/60))

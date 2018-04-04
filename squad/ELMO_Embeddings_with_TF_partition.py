@@ -541,27 +541,46 @@ start = datetime.datetime.now()
 with open(token_embeddings_guideline_file, 'rb') as handle:
     document_embedding_guideline = pickle.load(handle)
 
+total_tokens_in_each_embedding_file = 178844
+
 par_str_doc_first_index = len(tokenized_train_questions)
 par_str_doc_last_index = len(tokenized_train_questions + tokenized_train_paragraphs) - 1
 
 par_token_str_index = document_embedding_guideline[par_str_doc_first_index]['start_index']
 par_token_end_index = document_embedding_guideline[par_str_doc_last_index]['end_index']
 
-total_tokens_in_each_embedding_file = 178844
 partitioned_embs_files_start_indx = math.ceil(par_token_str_index/total_tokens_in_each_embedding_file)
 partitioned_embs_files_end_indx = math.ceil(par_token_end_index/total_tokens_in_each_embedding_file)
 
+is_first_record = True
 for partition_index in range(partitioned_embs_files_start_indx, partitioned_embs_files_end_indx + 1):
+    with h5py.File(token_embeddings_file.replace('@@', str(partition_index)), 'r') as fin:
+        print(partition_index)
+        paragraph_embedding = fin['embeddings'][...]
+        if is_first_record:
+            paragraph_embeddings = paragraph_embedding
+            is_first_record = False
+        else:
+            paragraph_embeddings = np.vstack((paragraph_embeddings, paragraph_embedding))
+#paragraph_embeddings  = np.asarray(paragraph_embeddings)
+# questions_embeddings = []
+#     paragraphs_embeddings = []
+#     for _ in tqdm(range(len(tokenized_questions + tokenized_paragraphs))):
+#         str_index = token_embeddings_guideline[_]['start_index']
+#         end_index = token_embeddings_guideline[_]['end_index']
+#         d_type = token_embeddings_guideline[_]['type']
+#
+#         if d_type == 'q':
+#             questions_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
+#             # idf_question_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
+#         else:
+#             paragraphs_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
+#             # idf_paragraph_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
+#     del token_embeddings
+#
+#
+#     paragraphs_embeddings = np.asarray(paragraphs_embeddings)
 
-
-    token_embeddings, token_embeddings_guideline = get_elmo_embeddings(tokenized_train_questions,
-                                                                       tokenized_train_paragraphs,
-                                                                       token_embeddings_guideline_file,
-                                                                       token_embeddings_file,
-                                                                       voc_file_name,
-                                                                       20,
-                                                                       partition_index
-                                                                       )
 
 
 end = datetime.datetime.now()

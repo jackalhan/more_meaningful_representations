@@ -70,9 +70,9 @@ with open(GLOVE_840B_300D_PATH, "rb") as infile:
     for line in infile:
         parts = line.split()
         word = parts[0].decode(encoding)
-        #if word in all_words:
-        nums=np.array(parts[1:], dtype=np.float32)
-        glove_big[word] = nums
+        if word in all_words:
+            nums=np.array(parts[1:], dtype=np.float32)
+            glove_big[word] = nums
 
 
 mev = MeanEmbeddingVectorizer(glove_big)

@@ -14,6 +14,7 @@ import json
 import h5py
 from sklearn.feature_extraction.text import TfidfVectorizer
 from shutil import copyfile
+import math
 nlp = spacy.blank("en")
 encoding="utf-8"
 tokenize = lambda doc: [token.text for token in nlp(doc)]
@@ -21,7 +22,7 @@ def word_tokenize(sent):
     doc = nlp(sent)
     return [token.text for token in doc]
 
-dataset_type = 'dev'
+dataset_type = 'train'
 dataset_version = 'v1.1'
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
@@ -57,13 +58,13 @@ voc_file_name = os.path.join(datadir, _voc_file_name)
 _squad_file_name = '{}-{}.json'.format(dataset_type, dataset_version)
 squad_file = os.path.join(datadir, _squad_file_name)
 
-_squad_other_file_name = '{}-{}.json'.format('train', dataset_version)
+_squad_other_file_name = '{}-{}.json'.format('dev', dataset_version)
 squad_other_file = os.path.join(datadir, _squad_other_file_name)
 
 _glove_file_name = 'glove.840B.300d.txt'
 glove_file = os.path.join(datadir, _glove_file_name)
 
-dev_prediction_file = os.path.join(datadir, 'dev_answer.json')
+dev_prediction_file = os.path.join(datadir, '{}_answer.json'.format(dataset_type))
 
 
 def convert_idx(text, tokens):
@@ -441,16 +442,14 @@ def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token
     return questions_embeddings, paragraphs_embeddings
 
 
-# def filter_out_squad_paragraphs(paragraphs, questions, q_to_ps):
-
 
 print('Squad Data: Reading Dev Started')
 start = datetime.datetime.now()
 # paragraphs, questions, q_to_p = read_squad_data(squad_other_file)
 # paragraphs_test, questions_test, q_to_p_test = read_squad_data(squad_file)
 train_word_counter, train_char_counter, dev_word_counter, dev_char_counter = Counter(), Counter(), Counter(), Counter()
-dev_examples, dev_eval, dev_questions, dev_paragraphs, dev_q_to_ps = process_file(squad_file, "dev", dev_word_counter, dev_char_counter)
-#train_examples, train_eval, train_questions, train_paragraphs, train_q_to_ps = process_file(squad_other_file, "train", train_word_counter, train_char_counter)
+dev_examples, dev_eval, dev_questions, dev_paragraphs, dev_q_to_ps = process_file(squad_other_file, "dev", dev_word_counter, dev_char_counter)
+train_examples, train_eval, train_questions, train_paragraphs, train_q_to_ps = process_file(squad_file, "train", train_word_counter, train_char_counter)
 
 with open(dev_prediction_file) as prediction_file:
     dev_predictions = json.load(prediction_file)
@@ -462,9 +461,9 @@ print('# of Q_to_P Dev: {}'.format(len(dev_q_to_ps)))
 
 print('#' * 20)
 
-# print('# of Paragraphs in Train : {}'.format(len(train_paragraphs)))
-# print('# of Questions in Train: {}'.format(len(train_questions)))
-# print('# of Q_to_P in Train: {}'.format(len(train_q_to_ps)))
+print('# of Paragraphs in Train : {}'.format(len(train_paragraphs)))
+print('# of Questions in Train: {}'.format(len(train_questions)))
+print('# of Q_to_P in Train: {}'.format(len(train_q_to_ps)))
 print('Squad Data: Reading Dev Ended in {} minutes'.format((end-start).seconds/60))
 
 
@@ -472,9 +471,9 @@ print(20* '-')
 print('Paragraphs: Tokenization and Saving Tokenization Started')
 start = datetime.datetime.now()
 tokenized_paragraphs = tokenize_contexts(dev_paragraphs)
-#tokenized_train_paragraphs = tokenize_contexts(train_paragraphs)
-dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file)
-#dump_tokenized_contexts(tokenized_test_paragraphs, paragraphs_file)
+tokenized_train_paragraphs = tokenize_contexts(train_paragraphs)
+#dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file)
+dump_tokenized_contexts(tokenized_train_paragraphs, paragraphs_file)
 end = datetime.datetime.now()
 print('# of Tokenized Paragraphs: {}'.format(len(tokenized_paragraphs)))
 print('Paragraphs: Tokenization and Saving Tokenization  is Completed in {} minutes'.format((end-start).seconds/60))
@@ -483,8 +482,9 @@ print(20* '-')
 print('Questions: Tokenization and Saving Tokenization Started')
 start = datetime.datetime.now()
 tokenized_questions = tokenize_contexts(dev_questions)
-#tokenized_train_questions = tokenize_contexts(train_questions)
-dump_tokenized_contexts(tokenized_questions,questions_file)
+tokenized_train_questions = tokenize_contexts(train_questions)
+#dump_tokenized_contexts(tokenized_questions,questions_file)
+dump_tokenized_contexts(tokenized_train_questions, questions_file)
 end = datetime.datetime.now()
 print('# of Tokenized Questions: {}'.format(len(tokenized_questions)))
 print('Questions: Tokenization and Saving Tokenization  is Completed in {} minutes'.format((end-start).seconds/60))
@@ -503,12 +503,12 @@ print(20* '-')
 
 questions_nontokenized = [" ".join(context) for context in tokenized_questions]
 paragraphs_nontokenized = [" ".join(context) for context in tokenized_paragraphs]
-# questions_train_nontokenized = [" ".join(context) for context in tokenized_train_questions]
-# paragraphs_train_nontokenized = [" ".join(context) for context in tokenized_train_paragraphs]
+questions_train_nontokenized = [" ".join(context) for context in tokenized_train_questions]
+paragraphs_train_nontokenized = [" ".join(context) for context in tokenized_train_paragraphs]
 
 
 tfidf = TfidfVectorizer(analyzer=lambda x: x, smooth_idf=False, sublinear_tf=False, tokenizer=tokenize)
-tfidf.fit(questions_nontokenized+paragraphs_nontokenized)
+tfidf.fit(questions_nontokenized+paragraphs_nontokenized + questions_train_nontokenized + paragraphs_train_nontokenized)
 max_idf = max(tfidf.idf_)
 token2idfweight = defaultdict(
     lambda: max_idf,
@@ -537,13 +537,33 @@ print('ELMO Token Embeddings is started')
 # -----------------------------
 
 start = datetime.datetime.now()
-token_embeddings, token_embeddings_guideline = get_elmo_embeddings(tokenized_questions,
-                                                                   tokenized_paragraphs,
-                                                                   token_embeddings_guideline_file,
-                                                                   token_embeddings_file,
-                                                                   voc_file_name,
-                                                                   1
-                                                                   )
+
+with open(token_embeddings_guideline_file, 'rb') as handle:
+    document_embedding_guideline = pickle.load(handle)
+
+par_str_doc_first_index = len(tokenized_train_questions)
+par_str_doc_last_index = len(tokenized_train_questions + tokenized_train_paragraphs) - 1
+
+par_token_str_index = document_embedding_guideline[par_str_doc_first_index]['start_index']
+par_token_end_index = document_embedding_guideline[par_str_doc_last_index]['end_index']
+
+total_tokens_in_each_embedding_file = 178844
+partitioned_embs_files_start_indx = math.ceil(par_token_str_index/total_tokens_in_each_embedding_file)
+partitioned_embs_files_end_indx = math.ceil(par_token_end_index/total_tokens_in_each_embedding_file)
+
+for partition_index in range(partitioned_embs_files_start_indx, partitioned_embs_files_end_indx + 1):
+
+
+    token_embeddings, token_embeddings_guideline = get_elmo_embeddings(tokenized_train_questions,
+                                                                       tokenized_train_paragraphs,
+                                                                       token_embeddings_guideline_file,
+                                                                       token_embeddings_file,
+                                                                       voc_file_name,
+                                                                       20,
+                                                                       partition_index
+                                                                       )
+
+
 end = datetime.datetime.now()
 print('ELMO Token Embeddings is ended in {} minutes'.format((end-start).seconds/60))
 # # WEIGHT MATRIX FOR TUNING
@@ -607,9 +627,9 @@ for _token_embed_pack in [(idf_weighted_token_embeddings, 'with_idf')]:
         #                                                                                                             2])))
 
         filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, dev_predictions, dev_paragraphs, dev_eval,
-                                                 s['slice_type'], dev_q_to_ps, len(dev_questions),
+                                                 s['slice_type'], dev_q_to_ps,
                                                  os.path.join(datadir,
-                                                              'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_###.csv'.format(
+                                                              'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_answers_neighbors_###.csv'.format(
                                                                   _type,
                                                                   _a_b_c[
                                                                       0],

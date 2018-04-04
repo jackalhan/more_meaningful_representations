@@ -7,6 +7,7 @@ from .data import UnicodeCharsVocabulary
 from typing import List
 import numpy as np
 import h5py
+import math
 from collections import Counter, defaultdict
 from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -306,7 +307,7 @@ class ElmoEmbedder():
                 document_embeddings = np.asarray(document_embeddings)
         return document_embeddings
 
-    def list_to_lazy_embeddings_with_dump(self, batch: List[List[str]],outfile_to_dump=None):
+    def list_to_lazy_embeddings_with_dump(self, batch: List[List[str]],outfile_to_dump=None, partition=20):
         """
         Parameters
         ----------
@@ -314,7 +315,7 @@ class ElmoEmbedder():
             A list of tokenized sentences.
 
         """
-        document_embeddings = []
+        nothing=[]
         if batch == [[]]:
            raise ValueError('Batch should not be empty')
         else:
@@ -324,31 +325,50 @@ class ElmoEmbedder():
             else:
                 batcher = TokenBatcher(self.voc_file_path)
             config = tf.ConfigProto(allow_soft_placement=True)
-            with tf.Session(config=config) as sess:
-                sess.run(tf.global_variables_initializer())
-                for i, token in enumerate(tqdm(batch, total=len(batch))):
-                    char_ids = batcher.lazy_batch_sentences([[token]])
-                    _ops = sess.run(
-                        self.ops, feed_dict={self.ids_placeholder: char_ids}
-                    )
-                    mask = _ops['mask']
-                    lm_embeddings = _ops['lm_embeddings']
-                    token_embeddings = _ops['token_embeddings']
-                    lengths = _ops['lengths']
-                    length = int(mask.sum())
+            num_of_total_tokens = len(batch)
+            each_partition_size = math.ceil(num_of_total_tokens/partition)
+            for _pi in range(0, partition):
+                document_embeddings = []
+                with tf.Session(config=config) as sess:
+                    sess.run(tf.global_variables_initializer())
+                    _begin_index = _pi * each_partition_size
+                    _end_index = _begin_index + each_partition_size
+                    print(15 * '-')
+                    print('Itration: {}, Data Range {} - {}'.format(_pi+1, _begin_index, _end_index))
+                    for i, token in enumerate(tqdm(batch[_begin_index: _end_index], total=len(batch[_begin_index:_end_index]))):
+                        char_ids = batcher.lazy_batch_sentences([[token]])
+                        _ops = sess.run(
+                            self.ops, feed_dict={self.ids_placeholder: char_ids}
+                        )
+                        mask = _ops['mask']
+                        lm_embeddings = _ops['lm_embeddings']
+                        token_embeddings = _ops['token_embeddings']
+                        lengths = _ops['lengths']
+                        length = int(mask.sum())
 
-                    #### shape of new embeddings [1,3,1,1024] so swap axes
-                    new_embedding = np.swapaxes(lm_embeddings, 1, 2)
-                    new_embedding = new_embedding.reshape((new_embedding.shape[2], new_embedding.shape[3]))
-                    document_embeddings.append(new_embedding)
-            document_embeddings = np.asarray(document_embeddings)
-            with h5py.File(outfile_to_dump, 'w') as fout:
-                ds = fout.create_dataset(
-                    'embeddings',
-                    document_embeddings.shape, dtype='float32',
-                    data=document_embeddings
-                )
-        return document_embeddings
+                        #### shape of new embeddings [1,3,1,1024] so swap axes
+                        new_embedding = np.swapaxes(lm_embeddings, 1, 2)
+                        ## Another method for moving the axis (swapping) is transposing the matrix
+                        #new_embedding_ = lm_embeddings.transpose(0,2,1,3)
+
+                        new_embedding = new_embedding.reshape((new_embedding.shape[2], new_embedding.shape[3]))
+
+                        # ds = fout.create_dataset(
+                        #     '{}'.format(i),
+                        #     new_embedding.shape, dtype='float32',
+                        #     data=new_embedding
+                        # )
+
+                        document_embeddings.append(new_embedding)
+                document_embeddings = np.asarray(document_embeddings)
+                with h5py.File(outfile_to_dump.replace('@@', str(_pi + 1)), 'w') as fout:
+                    ds = fout.create_dataset(
+                        'embeddings',
+                        document_embeddings.shape, dtype='float32',
+                        data=document_embeddings
+                    )
+
+        return nothing
     def list_to_embeddings_with_dump_(self, batch: List[List[str]], slice=None, outfile_to_dump=None,tfidfs=None):
         """
         Parameters

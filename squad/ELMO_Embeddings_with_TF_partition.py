@@ -4,7 +4,7 @@ import re
 import string
 from collections import defaultdict, Counter
 import pickle
-from bilm.elmo import ElmoEmbedder
+
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
@@ -15,6 +15,11 @@ import h5py
 from sklearn.feature_extraction.text import TfidfVectorizer
 from shutil import copyfile
 import math
+import os.path
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from bilm.elmo import ElmoEmbedder
+
 nlp = spacy.blank("en")
 encoding="utf-8"
 tokenize = lambda doc: [token.text for token in nlp(doc)]

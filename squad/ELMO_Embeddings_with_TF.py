@@ -454,8 +454,8 @@ train_word_counter, train_char_counter, dev_word_counter, dev_char_counter = Cou
 dev_examples, dev_eval, dev_questions, dev_paragraphs, dev_q_to_ps = process_file(squad_other_file, "dev", dev_word_counter, dev_char_counter)
 train_examples, train_eval, train_questions, train_paragraphs, train_q_to_ps = process_file(squad_file, "train", train_word_counter, train_char_counter)
 
-with open(dev_prediction_file) as prediction_file:
-    dev_predictions = json.load(prediction_file)
+# with open(dev_prediction_file) as prediction_file:
+#     dev_predictions = json.load(prediction_file)
 
 end = datetime.datetime.now()
 print('# of Paragraphs in Dev : {}'.format(len(dev_paragraphs)))

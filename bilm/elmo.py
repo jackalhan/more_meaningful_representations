@@ -327,6 +327,7 @@ class ElmoEmbedder():
             config = tf.ConfigProto(allow_soft_placement=True)
             num_of_total_tokens = len(batch)
             each_partition_size = math.ceil(num_of_total_tokens/partition)
+            print('Parition Size:{}'.format(partition))
             for _pi in range(0, partition):
                 document_embeddings = []
                 with tf.Session(config=config) as sess:

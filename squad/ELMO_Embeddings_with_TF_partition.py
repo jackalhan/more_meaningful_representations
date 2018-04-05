@@ -302,7 +302,7 @@ def filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, q
                                   _ + 1,
                                   ))
             if is_answered_correctly:
-                continue
+                break
             # is_answered_correctly = False
             # if any_match_for_answer_and_prediction(pred_answer, ques_answers):
             #     is_answered_correctly = True

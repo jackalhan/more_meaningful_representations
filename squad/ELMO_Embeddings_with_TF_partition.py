@@ -202,12 +202,12 @@ def normalize_answer(s):
 
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
-def dump_tokenized_contexts(tokenized_contexts:list, file_path:str):
+def dump_tokenized_contexts(tokenized_contexts, file_path):
     with open(file_path, 'w') as fout:
         for context in tokenized_contexts:
             fout.write(' '.join(context) + '\n')
 
-def tokenize_contexts(contexts:list):
+def tokenize_contexts(contexts):
     tokenized_context = [word_tokenize(context.strip()) for context in contexts]
     return tokenized_context
 

@@ -286,7 +286,7 @@ def filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, q
         #neighbor_id = neighbors[p_id]
         for _, neighbor_id in enumerate(neighbors):
             is_answered_correctly = False
-            if any_match_for_paragraph_and_answer(paragraphs[neighbor_id], ques_answers):
+            if any_match_for_paragraph_and_answer(paragraphs[neighbor_id], pred_answer):
                 is_answered_correctly = True
 
             neighbor_list_within_paragraph.append((slice_type,
@@ -297,6 +297,8 @@ def filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, q
                                   sk_sim[neighbor_id],
                                   _ + 1,
                                   ))
+            if is_answered_correctly:
+                continue
             # is_answered_correctly = False
             # if any_match_for_answer_and_prediction(pred_answer, ques_answers):
             #     is_answered_correctly = True

@@ -69,7 +69,7 @@ squad_other_file = os.path.join(datadir, _squad_other_file_name)
 _glove_file_name = 'glove.840B.300d.txt'
 glove_file = os.path.join(datadir, _glove_file_name)
 
-dev_prediction_file = os.path.join(datadir, '{}_answer.json'.format(dataset_type))
+answers_file = os.path.join(datadir, '{}_answer.json'.format(dataset_type))
 
 
 def convert_idx(text, tokens):
@@ -456,9 +456,6 @@ train_word_counter, train_char_counter, dev_word_counter, dev_char_counter = Cou
 dev_examples, dev_eval, dev_questions, dev_paragraphs, dev_q_to_ps = process_file(squad_other_file, "dev", dev_word_counter, dev_char_counter)
 train_examples, train_eval, train_questions, train_paragraphs, train_q_to_ps = process_file(squad_file, "train", train_word_counter, train_char_counter)
 
-# with open(dev_prediction_file) as prediction_file:
-#     dev_predictions = json.load(prediction_file)
-
 end = datetime.datetime.now()
 print('# of Paragraphs in Dev : {}'.format(len(dev_paragraphs)))
 print('# of Questions in Dev: {}'.format(len(dev_questions)))
@@ -570,7 +567,7 @@ for partition_index in range(1, 5 + 1):
             token_embeddings = np.vstack((token_embeddings, token_embedding))
 
 
-print('OLEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEY')
+print('Token Embeddings Done')
 
 end = datetime.datetime.now()
 print('ELMO Token Embeddings is ended in {} minutes'.format((end-start).seconds/60))
@@ -634,17 +631,20 @@ for _token_embed_pack in [(idf_weighted_token_embeddings, 'with_idf')]:
         #                                                                                                         _a_b_c[
         #                                                                                                             2])))
 
-        # filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, dev_predictions, dev_paragraphs, dev_eval,
-        #                                          s['slice_type'], dev_q_to_ps,
-        #                                          os.path.join(datadir,
-        #                                                       'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_answers_neighbors_###.csv'.format(
-        #                                                           _type,
-        #                                                           _a_b_c[
-        #                                                               0],
-        #                                                           _a_b_c[
-        #                                                               1],
-        #                                                           _a_b_c[
-        #                                                               2])))
+        with open(answers_file) as prediction_file:
+            answers = json.load(prediction_file)
+
+        filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, answers, train_paragraphs, train_eval,
+                                                 s['slice_type'], dev_q_to_ps,
+                                                 os.path.join(datadir,
+                                                              'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_answers_neighbors_###.csv'.format(
+                                                                  _type,
+                                                                  _a_b_c[
+                                                                      0],
+                                                                  _a_b_c[
+                                                                      1],
+                                                                  _a_b_c[
+                                                                      2])))
         print('Nearest Neighbors: Completed')
     end = datetime.datetime.now()
     print('ELMO Embeddings is completed in {} minutes for "{}" type'.format((end - start).seconds / 60, _type))
@@ -654,7 +654,7 @@ dump_embeddings(questions_embeddings, question_embeddings_file)
 paragraphs_embeddings = np.reshape(paragraphs_embeddings, (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
 dump_embeddings(paragraphs_embeddings, paragraph_embeddings_file)
 
-print('OLEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEY 2')
+print('All Done!!!!!!')
 
 
 # print('Nearest Neighbors: Starting')

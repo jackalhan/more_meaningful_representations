@@ -635,7 +635,7 @@ for _token_embed_pack in [(idf_weighted_token_embeddings, 'with_idf')]:
             answers = json.load(prediction_file)
 
         filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, answers, train_paragraphs, train_eval,
-                                                 s['slice_type'], dev_q_to_ps,
+                                                 s['slice_type'], train_q_to_ps, len(train_questions),
                                                  os.path.join(datadir,
                                                               'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_answers_neighbors_###.csv'.format(
                                                                   _type,

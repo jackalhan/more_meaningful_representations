@@ -12,12 +12,12 @@ import squad.sandbox_notebooks.char_rnn.tf_version.config as my_config
 
 def main(_):
     config = my_config.flags.FLAGS
-    print(vars(config)['__flags'])
     data_loader = TextLoader(config.data_dir,
                              config.data_file,
                              config.batch_size,
                              config.seq_length,
                              config.is_forced)
+    print(str(data_loader.vocab_size))
     config.vocab_size = data_loader.vocab_size
 
     if not os.path.isdir(config.save_dir):

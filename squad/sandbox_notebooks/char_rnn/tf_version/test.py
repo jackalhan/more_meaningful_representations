@@ -4,6 +4,8 @@ import os
 import tensorflow as tf
 import numpy as np
 from six.moves import cPickle
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
 from squad.sandbox_notebooks.char_rnn.tf_version.utils import TextLoader
 from squad.sandbox_notebooks.char_rnn.tf_version.model import Model
 import squad.sandbox_notebooks.char_rnn.tf_version.config as my_config

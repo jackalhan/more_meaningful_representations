@@ -25,11 +25,11 @@ import sys
 import numpy as np
 import tensorflow as tf
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
-from squad.sandbox_notebooks.tf.nmt import inference
-from squad.sandbox_notebooks.tf.nmt import train
-from squad.sandbox_notebooks.tf.nmt.utils import evaluation_utils
-from squad.sandbox_notebooks.tf.nmt.utils import misc_utils as utils
-from squad.sandbox_notebooks.tf.nmt.utils import vocab_utils
+from squad.sandbox_notebooks.tf_tutors.nmt import inference
+from squad.sandbox_notebooks.tf_tutors.nmt import train
+from squad.sandbox_notebooks.tf_tutors.nmt.utils import evaluation_utils
+from squad.sandbox_notebooks.tf_tutors.nmt.utils import misc_utils as utils
+from squad.sandbox_notebooks.tf_tutors.nmt.utils import vocab_utils
 
 utils.check_tensorflow_version()
 

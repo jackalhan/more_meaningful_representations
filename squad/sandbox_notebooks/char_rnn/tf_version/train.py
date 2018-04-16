@@ -12,6 +12,7 @@ import squad.sandbox_notebooks.char_rnn.tf_version.config as my_config
 
 def main(_):
     config = my_config.flags.FLAGS
+    print(vars(config)['__flags'])
     data_loader = TextLoader(config.data_dir,
                              config.data_file,
                              config.batch_size,

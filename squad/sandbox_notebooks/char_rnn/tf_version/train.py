@@ -18,7 +18,6 @@ def main(_):
                              config.batch_size,
                              config.seq_length,
                              config.is_forced)
-    print(str(data_loader.vocab_size))
     config.vocab_size = data_loader.vocab_size
 
     if not os.path.isdir(config.save_dir):

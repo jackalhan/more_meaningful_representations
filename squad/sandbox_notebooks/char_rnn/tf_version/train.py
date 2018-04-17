@@ -4,22 +4,23 @@ import os
 import tensorflow as tf
 from six.moves import cPickle
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../../..'))
-# from squad.sandbox_notebooks.char_rnn.tf_version.utils import TextLoader
-# from squad.sandbox_notebooks.char_rnn.tf_version.model import Model
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../..'))
+from squad.sandbox_notebooks.char_rnn.tf_version.utils import TextLoader
+from squad.sandbox_notebooks.char_rnn.tf_version.model import Model
 from squad.sandbox_notebooks.char_rnn.tf_version import config as my_config
 
 
 
 def main(_):
     config = my_config.flags.FLAGS
-    # data_loader = TextLoader(config.data_dir,
-    #                          config.data_file,
-    #                          config.batch_size,
-    #                          config.seq_length,
-    #                          config.is_forced)
-    # print(str(data_loader.vocab_size))
-    print(config.vocab_size)
+    remaining_args = config([sys.argv[0]] + [flag for flag in sys.argv if flag.startswith("--")])
+    print(remaining_args)
+    data_loader = TextLoader(config.data_dir,
+                             config.data_file,
+                             config.batch_size,
+                             config.seq_length,
+                             config.is_forced)
+    print(str(data_loader.vocab_size))
     config.vocab_size = data_loader.vocab_size
 
     if not os.path.isdir(config.save_dir):

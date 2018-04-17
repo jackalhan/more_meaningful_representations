@@ -44,3 +44,4 @@ flags.DEFINE_string('init_from', None, """continue training from saved model at 
                             """)
 flags.DEFINE_string('start_string', 'The', 'use this string to start generating')
 flags.DEFINE_integer("max_gen_length", 1000, 'the length of the max character generation')
+FLAGS = tf.app.flags.FLAGS

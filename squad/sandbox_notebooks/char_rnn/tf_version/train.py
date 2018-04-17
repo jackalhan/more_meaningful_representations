@@ -69,6 +69,6 @@ def main(_):
                         checkpoint_path,
                         global_step=current_step)
                     print("model saved to {}".format(checkpoint_path))
-
+    print('Done!!!!')
 if __name__ == '__main__':
     tf.app.run()

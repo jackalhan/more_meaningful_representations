@@ -12,7 +12,7 @@ from squad.sandbox_notebooks.char_rnn.tf_version import config as my_config
 
 
 def main(_):
-    config = my_config.flags.FLAGS
+    config = my_config.app.flags.FLAGS
     remaining_args = config([sys.argv[0]] + [flag for flag in sys.argv if flag.startswith("--")])
     print(sys.argv)
     data_loader = TextLoader(config.data_dir,

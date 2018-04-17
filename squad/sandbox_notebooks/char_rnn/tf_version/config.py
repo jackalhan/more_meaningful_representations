@@ -1,10 +1,7 @@
 import os
 import tensorflow as tf
-
-
 flags = tf.app.flags
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 
 flags.DEFINE_string("data_dir", 'data/tinyshakespare', 'data directory containing data file')
 flags.DEFINE_string("data_file", 'input.txt', 'data file name in the folder specified in data_dir')

@@ -8,3 +8,5 @@ typing==3.6.4
 matplotlib
 scikit-learn
 scipy
+glove-python
+scapy

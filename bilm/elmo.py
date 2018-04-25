@@ -148,6 +148,11 @@ class ElmoEmbedder():
         weight_file : ``str``, optional
             A path or URL to an ELMo weights file.
         """
+        if options_file is None:
+            options_file = DEFAULT_OPTIONS_FILE
+        if weight_file is None:
+            weight_file = DEFAULT_WEIGHT_FILE
+
         self.options_file_path = cached_path(options_file)
         self.weight_file_path = cached_path(weight_file)
         with open(self.options_file_path, 'r') as fin:

@@ -351,7 +351,7 @@ def sort_and_deduplicate(l):
     return list(uniq(sorted(l, reverse=True)))
 
 def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddings_guideline_file,
-                        token_embeddings_file, voc_file_name, partition=20):
+                        token_embeddings_file, voc_file_name, partition=20, weight_file = None, options_file = None):
     document_embedding_guideline = defaultdict()
     if not os.path.exists(token_embeddings_guideline_file):
         #########################
@@ -359,7 +359,7 @@ def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddi
         # ee = ElmoEmbedder(embedding_file=word_embeddings_file)
         ##########################
         ## use char encoding embedding ##
-        ee = ElmoEmbedder()
+        ee = ElmoEmbedder(options_file=options_file, weight_file=weight_file)
         ##########################
         voc_file = ee.batch_to_vocs(tokenized_questions + tokenized_paragraphs)
         copyfile(voc_file, voc_file_name)
@@ -487,19 +487,20 @@ dataset_type = TRAIN
 is_dump_during_execution = True
 is_inject_idf = True
 is_filtered_by_answers_from_rnet = True
+is_split_content_to_documents = False
 
 # ELMO EMBEDDINGS #
-is_elmo_document_embeddings_already_generated = True
+is_elmo_document_embeddings_already_generated = False
 partition_size = 1
-is_elmo_word_embeddings_already_generated = True
+is_elmo_word_embeddings_already_generated = False
 
 # GLOVE TRAINING #
-is_inject_local_weights = True
+is_inject_local_weights = False
 is_force_to_train_local_corpus = False
 glove_window = 10
 glove_dims = 1024
 glove_learning_rate = 0.05
-glove_epoch = 10
+glove_epoch = 300
 glove_threads = 10
 local_embedding_models = ['glove']
 ################ CONFIGURATIONS #################
@@ -548,6 +549,10 @@ file_pattern_for_local_model = os.path.join(datadir,"{}_local_{}.model")
 glove_local_question_embeddings_file= os.path.join(datadir, "{}_glove_local_question_embeddings.hdf5".format(dataset_type))
 glove_local_paragraph_embeddings_file= os.path.join(datadir, "{}_glove_local_paragraph_embeddings.hdf5".format(dataset_type))
 
+split_prefix = '{}_paragraphs'.format(dataset_type)
+
+elmo_weights_file = os.path.join(datadir, 'weights.hdf5')
+elmo_options_file = os.path.join(datadir, 'options.json')
 
 print('Squad Data: Processing Started')
 start = datetime.datetime.now()
@@ -617,7 +622,28 @@ end = datetime.datetime.now()
 print('Squad Data: Processing Ended in {} minutes'.format((end - start).seconds / 60))
 
 
-
+if is_split_content_to_documents:
+    print('Contents are getting splitted to documents')
+    start = datetime.datetime.now()
+    contexts_vocs = set()
+    total_tokens = 0
+    if not os.path.exists(os.path.join(datadir, split_prefix)):
+        os.makedirs(os.path.join(datadir, split_prefix))
+    for _, context in enumerate(tqdm(tokenized_paragraphs)):
+        [contexts_vocs.add(__) for __ in context if __.strip()]
+        total_tokens += len(context)
+        # with open(os.path.join(datadir, split_prefix, str(_)+'.txt'), 'w') as fout:
+        #    fout.write(' '.join(context))
+    mandatory_tokens_written = False
+    with open(os.path.join(datadir, '{}_contexts_voc.txt'.format(dataset_type)), 'w') as f_vout:
+        if not mandatory_tokens_written:
+            f_vout.write('\n'.join(['<S>', '</S>', '<UNK>']) + '\n')
+            mandatory_tokens_written = True
+        f_vout.write('\n'.join(contexts_vocs))
+    end = datetime.datetime.now()
+    print('Number of tokens in corpus: {}'.format(total_tokens))
+    print('Number of unique tokens in corpus: {}'.format(len(contexts_vocs)))
+    print('Splitting is completed in {} minutes'.format((end-start).seconds/60))
 
 if not is_elmo_document_embeddings_already_generated:
     if not is_elmo_word_embeddings_already_generated:
@@ -646,7 +672,9 @@ if not is_elmo_document_embeddings_already_generated:
                                                                            token_embeddings_guideline_file,
                                                                            token_embeddings_file,
                                                                            voc_file_name,
-                                                                           partition_size
+                                                                           partition_size,
+                                                                           weight_file=elmo_weights_file,
+                                                                           options_file=elmo_options_file
                                                                            )
         end = datetime.datetime.now()
         print('ELMO Token Embeddings is ended in {} minutes'.format((end-start).seconds/60))

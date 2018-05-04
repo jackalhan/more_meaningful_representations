@@ -3,6 +3,7 @@ import os
 import re
 import string
 from collections import defaultdict, Counter
+from itertools import chain
 import pickle
 import pandas as pd
 from tqdm import tqdm
@@ -10,6 +11,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import spacy
 import json
+import random
 import h5py
 from glove import Glove, Corpus
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -18,12 +20,15 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from bilm.elmo import ElmoEmbedder
 nlp = spacy.blank("en")
+nlp_s = spacy.load('en')
 encoding="utf-8"
 tokenize = lambda doc: [token.text for token in nlp(doc)]
 def word_tokenize(sent):
     doc = nlp(sent)
     return [token.text for token in doc]
-
+def sentence_segmenter(context):
+    _context = nlp_s(context)
+    return list(_context.sents)
 
 def convert_idx(text, tokens):
     current = 0
@@ -488,10 +493,12 @@ is_dump_during_execution = True
 is_inject_idf = True
 is_filtered_by_answers_from_rnet = True
 is_split_content_to_documents = False
+split_num_of_paragrahs_in_slices = 1000
+percent_of_slice_splits = .4
 
 # ELMO EMBEDDINGS #
 is_elmo_document_embeddings_already_generated = False
-partition_size = 1
+partition_size = 5
 is_elmo_word_embeddings_already_generated = False
 
 # GLOVE TRAINING #
@@ -629,11 +636,28 @@ if is_split_content_to_documents:
     total_tokens = 0
     if not os.path.exists(os.path.join(datadir, split_prefix)):
         os.makedirs(os.path.join(datadir, split_prefix))
-    for _, context in enumerate(tqdm(tokenized_paragraphs)):
-        [contexts_vocs.add(__) for __ in context if __.strip()]
-        total_tokens += len(context)
-        # with open(os.path.join(datadir, split_prefix, str(_)+'.txt'), 'w') as fout:
-        #    fout.write(' '.join(context))
+    if not os.path.exists(os.path.join(datadir, split_prefix, 'test')):
+        os.makedirs(os.path.join(datadir, split_prefix,'test'))
+
+    i, slice_start, num_of_paragrahs_in_slices = 0, 0, split_num_of_paragrahs_in_slices
+    num_of_all_slice = int(len(tokenized_paragraphs) / num_of_paragrahs_in_slices)
+    num_of_test_slices = int(num_of_all_slice * percent_of_slice_splits)
+    test_slices = random.sample(range(0, num_of_all_slice), num_of_test_slices)
+    while i <= num_of_all_slice:
+        slice_start = i * num_of_paragrahs_in_slices
+        context = list(chain.from_iterable(tokenized_paragraphs[slice_start:slice_start + num_of_paragrahs_in_slices]))
+        i+=1
+        segmented_context = sentence_segmenter(" ".join(context))
+        segmented_context = [span.text for span in segmented_context]
+        if i not in test_slices:
+            [contexts_vocs.add(__) for __ in context if __.strip()]
+            total_tokens += len(context)
+            with open(os.path.join(datadir, split_prefix, str(i)+'.txt'), 'w') as fout:
+               fout.write('\n'.join(segmented_context))
+        else:
+            with open(os.path.join(datadir, split_prefix, 'test', str(i)+'.txt'), 'w') as fout:
+               fout.write('\n'.join(segmented_context))
+
     mandatory_tokens_written = False
     with open(os.path.join(datadir, '{}_contexts_voc.txt'.format(dataset_type)), 'w') as f_vout:
         if not mandatory_tokens_written:
@@ -667,8 +691,8 @@ if not is_elmo_document_embeddings_already_generated:
         # partitioned_embs_files_end_indx = math.ceil(par_token_end_index/total_tokens_in_each_embedding_file)
         # is_first_record = True
         #for partition_index in range(partitioned_embs_files_start_indx, partitioned_embs_files_end_indx + 1):
-        token_embeddings, document_embedding_guideline = get_elmo_embeddings(questions,
-                                                                           paragraphs,
+        token_embeddings, document_embedding_guideline = get_elmo_embeddings(tokenized_questions,
+                                                                           tokenized_paragraphs,
                                                                            token_embeddings_guideline_file,
                                                                            token_embeddings_file,
                                                                            voc_file_name,

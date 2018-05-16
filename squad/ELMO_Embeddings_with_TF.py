@@ -483,6 +483,9 @@ def transorm_to_glove_embeddings(local_vector_model, token2idfweight, dims, toke
         dump_embeddings(mean_glove_with_idf_paragraph_embeddings, glove_paragraph_embeddings_file)
     return mean_glove_with_idf_question_embeddings, mean_glove_with_idf_paragraph_embeddings
 
+def dump_mapping_data(data, outfile_to_dump):
+    data_df = pd.DataFrame(np.array(data), columns=list("v"))
+    data_df.to_csv(outfile_to_dump)
 
 TRAIN = 'train'
 DEV = 'dev'
@@ -492,6 +495,8 @@ dataset_type = TRAIN
 is_dump_during_execution = True
 is_inject_idf = True
 is_filtered_by_answers_from_rnet = True
+
+# SPLIT DOCS
 is_split_content_to_documents = False
 split_num_of_paragrahs_in_slices = 1000
 percent_of_slice_splits = .4
@@ -499,7 +504,9 @@ percent_of_slice_splits = .4
 # ELMO EMBEDDINGS #
 is_elmo_document_embeddings_already_generated = False
 partition_size = 5
-is_elmo_word_embeddings_already_generated = False
+is_elmo_word_embeddings_already_generated = True
+# IMPROVE ELMEDDINGS
+is_improve_elmeddings=False
 
 # GLOVE TRAINING #
 is_inject_local_weights = False
@@ -530,6 +537,9 @@ token_embeddings_guideline_file = os.path.join(datadir, _token_embeddings_guidel
 
 _questions_file_name = '{}_questions.txt'
 questions_file = os.path.join(datadir, _questions_file_name)
+
+_mapping_file_name = '{}_q_to_p_mappings.csv'
+mapping_file = os.path.join(datadir, _mapping_file_name)
 
 _question_embeddings_file_name = '{}_question_embeddings.hdf5'.format(dataset_type)
 question_embeddings_file = os.path.join(datadir, _question_embeddings_file_name)
@@ -588,6 +598,7 @@ paragraphs_nontokenized = [" ".join(context) for context in tokenized_paragraphs
 if is_dump_during_execution:
     dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file.format(DEV))
     dump_tokenized_contexts(tokenized_questions, questions_file.format(DEV))
+    dump_mapping_data(dev_q_to_ps, mapping_file.format(DEV))
 
 examples = dev_examples
 eval = dev_eval
@@ -617,6 +628,7 @@ if dataset_type == TRAIN:
     if is_dump_during_execution:
         dump_tokenized_contexts(tokenized_train_paragraphs, paragraphs_file.format(TRAIN))
         dump_tokenized_contexts(tokenized_train_questions, questions_file.format(TRAIN))
+        dump_mapping_data(train_q_to_ps, mapping_file.format(TRAIN))
 
     tokenized_questions = tokenized_train_questions
     tokenized_paragraphs = tokenized_train_paragraphs
@@ -813,6 +825,12 @@ else:
     paragraphs_elmo_embeddings = load_embeddings(paragraph_embeddings_file)
     questions_elmo_embeddings = load_embeddings(question_embeddings_file)
     print('Document embeddings are loaded...')
+
+if is_improve_elmeddings:
+    #todo: feedforward net ile egitilecek bakalim daha iyi sonuc alabilecekmiyiz?
+    pass
+
+
 # TRAINING LOCAL WEIGHTS
 if is_inject_local_weights:
     for _lm in local_embedding_models:

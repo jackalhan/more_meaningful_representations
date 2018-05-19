@@ -3,7 +3,7 @@
 import tensorflow as tf
 
 
-def _pairwise_distances(embeddings, squared=False):
+def   _pairwise_distances(embeddings, squared=False):
     """Compute the 2D matrix of distances between all the embeddings.
 
     Args:
@@ -37,7 +37,7 @@ def _pairwise_distances(embeddings, squared=False):
         mask = tf.to_float(tf.equal(distances, 0.0))
         distances = distances + mask * 1e-16
 
-        distances = tf.sqrt(distances)
+        distances = tf.sqrt(distances),
 
         # Correct the epsilon added: set the distances on the mask to be exactly 0.0
         distances = distances * (1.0 - mask)
@@ -107,7 +107,7 @@ def _get_triplet_mask(labels):
 
 
     # Check if labels[i] == labels[j] and labels[i] != labels[k]
-    label_equal = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
+    label_equal = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels,  1))
     i_equal_j = tf.expand_dims(label_equal, 2)
     i_equal_k = tf.expand_dims(label_equal, 1)
 

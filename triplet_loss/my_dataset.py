@@ -28,7 +28,7 @@ class generator:
 def create_file_reader_ops(filename):
     reader = tf.data.TextLineDataset(filename).skip(1)
     record_defaults = [[0], [0]]
-    COLUMNS = ['k', 'v', 'i']
+    COLUMNS = ['k', 'v']
     def _parse_line(line):
         # Decode the line into its fields
         fields = tf.decode_csv(line, record_defaults)
@@ -49,8 +49,15 @@ def get_dataset(embeddings_file, labels_file, embedding_shape, including_label=T
         generator(embeddings_file),
         tf.float32,
         tf.TensorShape(embedding_shape))
+
+    def decode_label(label):
+        #label = tf.decode_raw(label, tf.uint16)  # tf.string -> [tf.uint8]
+        label = tf.reshape(label, [])  # label is a scalar
+        return tf.to_int32(label)
+
     if including_label:
         ps = create_file_reader_ops(labels_file)
+        #ps = ps.map(decode_label)
         final_result = tf.data.Dataset.zip((text_ds, ps))
     else:
         final_result = text_ds

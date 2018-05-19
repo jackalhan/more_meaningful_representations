@@ -51,37 +51,38 @@ def build_fully_connected_model(is_training, data, params):
     Returns:
         output: (tf.Tensor) output of the model
     """
+    # l2_data = tf.nn.l2_normalize(
+    #     data,
+    #     epsilon=1e-12,
+    #     name='l2',
+    #     axis=0
+    # )
 
-    out = tf.nn.l2_normalize(
+    h1 = tf.contrib.layers.fully_connected(
         data,
-        axis=None,
-        epsilon=1e-12,
-        name=None,
-        dim=None
+        params.n_hidden,
+        weights_initializer=tf.zeros_initializer(),
+        biases_initializer=tf.constant_initializer(0.1),
+        trainable=True,
+        scope='h1'
     )
+
     out = tf.contrib.layers.fully_connected(
-        out,
+        h1,
         int(data.shape[1]),
         activation_fn=None,
-        normalizer_fn=None,
-        normalizer_params=None,
-        weights_initializer=tf.glorot_uniform_initializer(),
-        weights_regularizer=None,
+        weights_initializer=tf.zeros_initializer(),
         biases_initializer=tf.constant_initializer(0.1),
-        biases_regularizer=None,
-        reuse=None,
-        variables_collections=None,
-        outputs_collections=None,
         trainable=True,
-        scope=None
+        scope='output'
     )
+
     return out
 
-def build_feed_forward_model(is_training, data, params):
+def build_fully_connected_model(data, params):
     """Compute outputs of the model (embeddings for triplet loss).
 
     Args:
-        is_training: (bool) whether we are training or not
         data: (dict) contains the inputs of the graph (features)
                 this can be `tf.placeholder` or outputs of `tf.data`
         params: (Params) hyperparameters
@@ -90,22 +91,26 @@ def build_feed_forward_model(is_training, data, params):
         output: (tf.Tensor) output of the model
     """
 
-    W_h = tf.get_variable("weights_hidden", shape=[data.shape[1],  params.embedding_size],
-                        initializer=tf.glorot_uniform_initializer())
+    W_h = tf.get_variable("weights_hidden", shape=[data.shape[1],  params.num_of_units],
+                        initializer=tf.zeros_initializer(), trainable=True)
 
-    W_o = tf.get_variable("weights_out", shape=[ params.embedding_size, data.shape[1]],
-                          initializer=tf.glorot_uniform_initializer())
+    b_h = tf.get_variable("bias_hidden", shape=[params.num_of_units],
+                          initializer=tf.zeros_initializer(), trainable=True)
 
-    b_h = tf.get_variable("bias_hidden", shape=[params.embedding_size],
-                        initializer=tf.constant_initializer(0.1))
+    W_o = tf.get_variable("weights_out", shape=[params.num_of_units, data.shape[1]],
+                          initializer=tf.constant_initializer(0.001), trainable=True)
 
     b_o = tf.get_variable("bias_output", shape=[data.shape[1]],
-                          initializer=tf.constant_initializer(0.1))
+                          initializer=tf.constant_initializer(0.001), trainable=True)
 
 
     hidden_layer = tf.add(tf.matmul(data, W_h),b_h)
     hidden_layer = tf.nn.relu(hidden_layer)
     out = tf.add(tf.matmul(hidden_layer, W_o), b_o)
+    # hidden_layer = tf.matmul(data, W_h)
+    # hidden_layer = tf.nn.relu(hidden_layer)
+    # out = tf.matmul(hidden_layer, W_o)
+
     return out
 
 def model_fn(features, labels, mode, params):
@@ -121,22 +126,16 @@ def model_fn(features, labels, mode, params):
         model_spec: tf.estimator.EstimatorSpec object
     """
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-    #features = tf.reshape(features, [-1, 64, 16, 1])
     # -----------------------------------------------------------
     # MODEL: define the layers of the model
     with tf.variable_scope('model'):
         # Compute the embeddings with the model
-        embeddings = build_fully_connected_model(is_training, features, params)
+        embeddings = build_fully_connected_model(features, params)
     embedding_mean_norm = tf.reduce_mean(tf.norm(embeddings, axis=1))
     tf.summary.scalar("embedding_mean_norm", embedding_mean_norm)
 
     if mode == tf.estimator.ModeKeys.PREDICT:
-        # # #normalize -- start:
-        # rows_sum = tf.reduce_sum(embeddings, axis=1)
-        # embeddings = embeddings / rows_sum[:, tf.newaxis]
-        # # # normalize -- end:
-        # #predictions = {'embeddings': embeddings}
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=embeddings)
+        return tf.estimator.EstimatorSpec(mode=mode, predictions=features + embeddings)
 
     labels = tf.cast(labels, tf.int64)
 
@@ -168,8 +167,6 @@ def model_fn(features, labels, mode, params):
     tf.summary.scalar('loss', loss)
     if params.triplet_strategy == "batch_all":
         tf.summary.scalar('fraction_positive_triplets', fraction)
-
-    #tf.summary.image('train_image', features, max_outputs=1)
 
     # Define training step that minimizes the loss with the Adam optimizer
     optimizer = tf.train.AdamOptimizer(params.learning_rate)

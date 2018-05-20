@@ -10,7 +10,7 @@ from triplet_loss.input_fn import train_input_fn
 from triplet_loss.input_fn import test_input_fn
 from triplet_loss.input_fn import live_input_fn
 from triplet_loss.model_fn import model_fn
-from triplet_loss.utils import Params, train_test_splitter, dump_embeddings, analyze_labes
+from triplet_loss.utils import Params, train_test_splitter, dump_embeddings, analyze_labes,train_test_splitter_2
 import numpy as np
 
 parser = argparse.ArgumentParser()
@@ -54,7 +54,7 @@ if __name__ == '__main__':
         analysis = analyze_labes(args.labels_file)
 
     if args.is_debug:
-        file_paths = train_test_splitter(args.embeddings_file, args.labels_file, args.train_splitter_rate, K=analysis['K'])
+        file_paths = train_test_splitter(args.embeddings_file, args.labels_file, K=analysis['K'])
         params.train_size = file_paths['train_size']
         params.eval_size = file_paths['eval_size']
         params.data_dim = file_paths['data_dim']
@@ -62,7 +62,7 @@ if __name__ == '__main__':
         params.save(json_path)
     else:
         if args.split_train_test:
-            file_paths = train_test_splitter(args.embeddings_file, args.labels_file, args.train_splitter_rate, False)
+            file_paths = train_test_splitter_2(args.embeddings_file, args.labels_file, args.train_splitter_rate, False)
             params.train_size = file_paths['train_size']
             params.eval_size = file_paths['eval_size']
             params.data_dim = file_paths['data_dim']

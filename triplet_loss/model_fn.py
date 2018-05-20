@@ -92,24 +92,20 @@ def build_fully_connected_model(data, params):
     """
 
     W_h = tf.get_variable("weights_hidden", shape=[data.shape[1],  params.num_of_units],
-                        initializer=tf.zeros_initializer(), trainable=True)
-
+                        initializer=tf.truncated_normal_initializer(mean=0, stddev=0.001), trainable=True)
     b_h = tf.get_variable("bias_hidden", shape=[params.num_of_units],
-                          initializer=tf.zeros_initializer(), trainable=True)
+                          initializer=tf.constant_initializer(0.0), trainable=True)
 
     W_o = tf.get_variable("weights_out", shape=[params.num_of_units, data.shape[1]],
-                          initializer=tf.constant_initializer(0.001), trainable=True)
+                          initializer=tf.truncated_normal_initializer(mean=0, stddev=0.001), trainable=True)
 
     b_o = tf.get_variable("bias_output", shape=[data.shape[1]],
-                          initializer=tf.constant_initializer(0.001), trainable=True)
+                          initializer=tf.constant_initializer(0.0), trainable=True)
 
 
     hidden_layer = tf.add(tf.matmul(data, W_h),b_h)
     hidden_layer = tf.nn.relu(hidden_layer)
     out = tf.add(tf.matmul(hidden_layer, W_o), b_o)
-    # hidden_layer = tf.matmul(data, W_h)
-    # hidden_layer = tf.nn.relu(hidden_layer)
-    # out = tf.matmul(hidden_layer, W_o)
 
     return out
 

@@ -8,6 +8,7 @@ import random
 import numpy as np
 import math
 import os
+from random import shuffle
 class Params():
     """Class that loads hyperparameters from a json file.
 
@@ -80,7 +81,7 @@ def save_dict_to_json(d, json_path):
         d = {k: float(v) for k, v in d.items()}
         json.dump(d, f, indent=4)
 
-def train_test_splitter(embeddings_file, labels_file, train_split_rate, debug=False):
+def train_test_splitter_2(embeddings_file, labels_file, train_split_rate, debug=False):
     """ Read the embedding file with its labels and split it train - test
         Args:
             embeddings_file: embeddings_file path
@@ -171,7 +172,7 @@ def train_test_splitter(embeddings_file, labels_file, train_split_rate, debug=Fa
     file_paths['num_labels'] = num_labels
     return file_paths
 
-def train_test_splitter(embeddings_file, labels_file, train_split_rate, K):
+def train_test_splitter(embeddings_file, labels_file, K):
     """ Read the embedding file with its labels and split it train - test
         Args:
             embeddings_file: embeddings_file path
@@ -196,20 +197,84 @@ def train_test_splitter(embeddings_file, labels_file, train_split_rate, K):
         return int(_count_of_labels[row['v']])
 
     _labels['K'] = _labels.apply(assign_counts_to_each_row, axis=1)
-    embeddings = load_embeddings(embeddings_file)
-    embeddings = np.concatenate((embeddings, _labels[['v', 'K']]), 1)
-    embeddings = embeddings[embeddings[:, embeddings.shape[1] - 1] == K]
+    _embeddings = load_embeddings(embeddings_file)
+    _embeddings = np.concatenate((_embeddings, _labels[['v', 'K']]), 1)
+    _embeddings = _embeddings[_embeddings[:, _embeddings.shape[1] - 1] == K]
 
-    random.shuffle(embeddings)
-    train_size = int(embeddings.shape[0] * train_split_rate)
-    train_embeddings_label = embeddings[:train_size]
-    test_embeddings_label = embeddings[train_size:]
-    train_embeddings, train_labels = train_embeddings_label[:,:embeddings.shape[1]-2], train_embeddings_label[:,embeddings.shape[1]-2:embeddings.shape[1]-1].astype(np.int32)
-    test_embeddings, test_labels = test_embeddings_label[:,:embeddings.shape[1]-2], train_embeddings_label[:,embeddings.shape[1]-2:embeddings.shape[1]-1].astype(np.int32)
+    embeddings, labels = _embeddings[:, :_embeddings.shape[1] - 2], _embeddings[:,_embeddings.shape[1] - 2:
+                                                                                  _embeddings.shape[
+                                                                               1] - 1].astype(np.int32)
 
+    # random.shuffle(embeddings)
+    # train_size = int(embeddings.shape[0] * train_split_rate)
+    # train_embeddings_label = embeddings[:train_size]
+    # test_embeddings_label = embeddings[train_size:]
+    # train_embeddings, train_labels = train_embeddings_label[:, :embeddings.shape[1] - 2], train_embeddings_label[:,
+    #                                                                                       embeddings.shape[1] - 2:
+    #                                                                                       embeddings.shape[
+    #                                                                                           1] - 1].astype(np.int32)
+    # test_embeddings, test_labels = test_embeddings_label[:, :embeddings.shape[1] - 2], train_embeddings_label[:,
+    #                                                                                    embeddings.shape[1] - 2:
+    #                                                                                    embeddings.shape[1] - 1].astype(
+    #     np.int32)
+    #
+    # dump_embeddings(train_embeddings, splitted_train_embed_file)
+    # dump_mapping_data(train_labels, splitted_train_label_file)
+    #
+    # dump_embeddings(test_embeddings, splitted_test_embed_file)
+    # dump_mapping_data(test_labels, splitted_test_label_file)
+
+    #
+    #labels = _labels['v'].tolist()
+    num_labels = np.unique(labels[:,:]).shape[0]
+    train_labels, test_labels = list(), list()
+    train_embeddings, test_embeddings = list(), list()
+    # counter = 0
+    for i in np.unique(labels[:,:]):
+        locations = [_ for _, x in enumerate(labels) if x == i]
+        shuffle(locations)
+        occur = len(locations)
+        print(10 * '*')
+        print('For p {}, we have -> {} qs ---> {}'.format(i, occur, locations))
+        for_local_train_size = K-1
+        for_local_train_locations = locations[0:for_local_train_size]
+        for_local_train_labels = list()
+        for_local_train_embeddings = list()
+
+        for _l in for_local_train_locations:
+            for_local_train_labels.append(i)
+            for_local_train_embeddings.append(embeddings[_l])
+            #counter += 1
+        train_labels.extend(for_local_train_labels)
+        train_embeddings.extend(for_local_train_embeddings)
+        print('Train Size {} ---> {}'.format(for_local_train_size, for_local_train_locations))
+
+
+        for_local_test_locations = locations[for_local_train_size:]
+        for_local_test_size = len(for_local_test_locations)
+        for_local_test_labels = list()
+        for_local_test_embeddings = list()
+        for _l in for_local_test_locations:
+            for_local_test_labels.append(i)
+            for_local_test_embeddings.append(embeddings[_l])
+            #counter += 1
+        test_labels.extend(for_local_test_labels)
+        test_embeddings.extend(for_local_test_embeddings)
+        print('Test Size {} ---> {}'.format(for_local_test_size, for_local_test_locations))
+
+    train_embeddings_label = list(zip(train_embeddings, train_labels))
+    test_embeddings_label = list(zip(test_embeddings, test_labels))
+
+    random.shuffle(train_embeddings_label)
+    random.shuffle(test_embeddings_label)
+    train_embeddings, train_labels = zip(*train_embeddings_label)
+    test_embeddings, test_labels = zip(*test_embeddings_label)
+
+    train_embeddings = np.asarray(train_embeddings)
     dump_embeddings(train_embeddings, splitted_train_embed_file)
     dump_mapping_data(train_labels, splitted_train_label_file)
 
+    test_embeddings = np.asarray(test_embeddings)
     dump_embeddings(test_embeddings, splitted_test_embed_file)
     dump_mapping_data(test_labels, splitted_test_label_file)
 
@@ -222,7 +287,7 @@ def train_test_splitter(embeddings_file, labels_file, train_split_rate, K):
     file_paths['test_labels'] = splitted_test_label_file
     file_paths['eval_size'] = test_embeddings.shape[0]
     file_paths['data_dim'] = test_embeddings.shape[1]
-    file_paths['num_labels'] = np.unique(embeddings[:,embeddings.shape[1]-2]).shape[0]
+    file_paths['num_labels'] = num_labels
     return file_paths
 
 

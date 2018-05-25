@@ -6,6 +6,39 @@ from triplet_loss.triplet_loss import batch_all_triplet_loss
 from triplet_loss.triplet_loss import batch_hard_triplet_loss, negative_triplet_loss
 import numpy as np
 
+def build_model(is_training, data, params):
+    """Compute outputs of the model (embeddings for triplet loss).
+
+    Args:
+        is_training: (bool) whether we are training or not
+        data: (dict) contains the inputs of the graph (features)
+                this can be `tf.placeholder` or outputs of `tf.data`
+        params: (Params) hyperparameters
+
+    Returns:
+        output: (tf.Tensor) output of the model
+    """
+    out = data
+    # Define the number of channels of each convolution
+    # For each block, we do: 3x3 conv -> batch norm -> relu -> 2x2 maxpool
+    num_channels = 32
+    bn_momentum = params.bn_momentum
+    channels = [32, 32 * 2]
+    for i, c in enumerate(channels):
+        with tf.variable_scope('block_{}'.format(i+1)):
+            out = tf.layers.conv2d(out, c, 3, padding='same')
+            if params.use_batch_norm:
+                out = tf.layers.batch_normalization(out, momentum=bn_momentum, training=is_training)
+            out = tf.nn.relu(out)
+            out = tf.layers.max_pooling2d(out, 2, 2)
+
+    assert out.shape[1:] == [16, 4, num_channels * 2]
+
+    out = tf.reshape(out, [-1, 16 * 4 * num_channels * 2])
+    with tf.variable_scope('fc_1'):
+        out = tf.layers.dense(out, params.embedding_size)
+
+    return out
 def build_fully_connected_model(data, params):
     """Compute outputs of the model (embeddings for triplet loss).
 
@@ -22,7 +55,7 @@ def build_fully_connected_model(data, params):
             data,
             int(data.shape[1]),
             activation_fn=None,
-            weights_initializer=tf.glorot_normal_initializer(seed=230), #,tf.truncated_normal_initializer(seed=230, stddev=0.1),
+            weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
             weights_regularizer=tf.contrib.layers.l2_regularizer(1e-5),
             biases_initializer=tf.constant_initializer(0),
             scope=scope,
@@ -30,10 +63,39 @@ def build_fully_connected_model(data, params):
 
         )
 
-        data_ = tf.add(out * 1, data, name='add')
+        data_ = tf.add(out * 1e-4, data, name='add')
         out = tf.nn.l2_normalize(data_, name='out', axis=1)
     return out
 
+# def build_fully_connected_model(data, params):
+#     """Compute outputs of the model (embeddings for triplet loss).
+#
+#     Args:
+#         data: (dict) contains the inputs of the graph (features)
+#                 this can be `tf.placeholder` or outputs of `tf.data`
+#         params: (Params) hyperparameters
+#
+#     Returns:
+#         output: (tf.Tensor) output of the model
+#     """
+#
+#     W_h = tf.get_variable("weights_hidden", shape=[data.shape[1],  params.num_of_units],
+#                         initializer=tf.glorot_normal_initializer(), trainable=True)
+#     b_h = tf.get_variable("bias_hidden", shape=[params.num_of_units],
+#                           initializer=tf.constant_initializer(0.0), trainable=True)
+#
+#     W_o = tf.get_variable("weights_out", shape=[params.num_of_units, data.shape[1]],
+#                           initializer=tf.glorot_normal_initializer(), trainable=True)
+#
+#     b_o = tf.get_variable("bias_output", shape=[data.shape[1]],
+#                           initializer=tf.constant_initializer(0.0), trainable=True)
+#
+#
+#     hidden_layer = tf.add(tf.matmul(data, W_h),b_h)
+#     hidden_layer = tf.nn.relu(hidden_layer)
+#     out = tf.add(tf.matmul(hidden_layer, W_o), b_o)
+#
+#     return out
 
 def model_fn(features, labels, mode, params):
     """Model function for tf.estimator
@@ -98,8 +160,7 @@ def model_fn(features, labels, mode, params):
     #     tf.summary.scalar('fraction_positive_triplets', fraction)
 
     # Define training step that minimizes the loss with the Adam optimizer
-    #optimizer = tf.train.GradientDescentOptimizer(params.learning_rate)
-    optimizer = tf.train.AdamOptimizer(params.learning_rate)
+    optimizer = tf.train.GradientDescentOptimizer(params.learning_rate)
     global_step = tf.train.get_global_step()
     if params.use_batch_norm:
         # Add a dependency to update the moving mean and variance for batch normalization

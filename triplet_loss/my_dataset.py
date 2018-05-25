@@ -43,22 +43,28 @@ def create_file_reader_ops(filename):
 
     return reader.map(_parse_line)
 
-def get_dataset(embeddings_file, labels_file, embedding_shape, including_label=True):
+def get_dataset(question_embeddings_file, paragraph_embeddings_file, label_file, embedding_shape, including_label=True):
 
-    text_ds = tf.data.Dataset.from_generator(
-        generator(embeddings_file),
+    ques_ds = tf.data.Dataset.from_generator(
+        generator(question_embeddings_file),
         tf.float32,
         tf.TensorShape(embedding_shape))
 
+    parag_ds = tf.data.Dataset.from_generator(
+        generator(paragraph_embeddings_file),
+        tf.float32,
+        tf.TensorShape(embedding_shape))
+
+    #ques_ds = ques_ds.concatenate(parag_ds)
     def decode_label(label):
         #label = tf.decode_raw(label, tf.uint16)  # tf.string -> [tf.uint8]
         label = tf.reshape(label, [])  # label is a scalar
         return tf.to_int32(label)
 
     if including_label:
-        ps = create_file_reader_ops(labels_file)
+        ps = create_file_reader_ops(label_file)
         #ps = ps.map(decode_label)
-        final_result = tf.data.Dataset.zip((text_ds, ps))
+        final_result = tf.data.Dataset.zip((ques_ds,parag_ds))
     else:
-        final_result = text_ds
+        final_result = ques_ds
     return final_result

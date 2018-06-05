@@ -15,6 +15,8 @@
 
 import h5py
 import tensorflow as tf
+import numpy as np
+import random
 
 class generator:
     def __init__(self, file, table_name='embeddings'):
@@ -43,17 +45,20 @@ def create_file_reader_ops(filename):
 
     return reader.map(_parse_line)
 
-def get_dataset(question_embeddings_file, paragraph_embeddings_file, label_file, embedding_shape, including_label=True):
+def get_dataset_from_cache(embeddings):
+    return tf.data.Dataset.from_tensor_slices(embeddings)
+
+def get_dataset(question_embeddings_file, paragraph_embeddings_file, label_file, q_embedding_shape, p_embedding_shape, including_label=True):
 
     ques_ds = tf.data.Dataset.from_generator(
         generator(question_embeddings_file),
         tf.float32,
-        tf.TensorShape(embedding_shape))
+        tf.TensorShape(q_embedding_shape))
 
     parag_ds = tf.data.Dataset.from_generator(
         generator(paragraph_embeddings_file),
         tf.float32,
-        tf.TensorShape(embedding_shape))
+        tf.TensorShape(p_embedding_shape))
 
     #ques_ds = ques_ds.concatenate(parag_ds)
     def decode_label(label):
@@ -68,3 +73,25 @@ def get_dataset(question_embeddings_file, paragraph_embeddings_file, label_file,
     else:
         final_result = ques_ds
     return final_result
+
+
+def _load_embeddings(infile_to_get):
+    with h5py.File(infile_to_get, 'r') as fin:
+        document_embeddings = fin['embeddings'][...]
+    return document_embeddings
+
+def get_question_embeddings(is_cached, question_embeddings, params):
+
+    if not is_cached:
+        _q = _load_embeddings(question_embeddings)
+    else:
+        _q = question_embeddings
+    random.seed(params.eval_seed)
+    qidx = random.sample(range(_q.shape[0]), params.eval_question_size_for_recall)
+    _q = _q[qidx]
+    #questions = tf.constant(_q)
+    return _q
+
+def get_embeddings(paragraph_embeddings_file):
+
+    return tf.constant(_load_embeddings(paragraph_embeddings_file))

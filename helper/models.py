@@ -18,4 +18,4 @@ def model_1(questions, params):
         )
         data_ = tf.add(fc1 * params.scaling_factor, questions, name='add')
         out = tf.nn.l2_normalize(data_, name='out', axis=1)
-    return out, fc1
+    return out

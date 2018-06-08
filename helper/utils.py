@@ -10,6 +10,8 @@ import math
 import os
 from random import shuffle
 import tensorflow as tf
+from helper.quadratic_loss import euclidean_distance_loss
+from sklearn.preprocessing import normalize
 
 class Params():
     """Class that loads hyperparameters from a json file.
@@ -290,6 +292,29 @@ def pairwise_cosine_sim(A, B):
     return dist_mat
 
 
+def pairwise_euclidean_distances(A, B):
+    """
+    Computes pairwise distances between each elements of A and each elements of B.
+    Args:
+      A,    [m,d] matrix
+      B,    [n,d] matrix
+    Returns:
+      D,    [m,n] matrix of pairwise distances
+    """
+    with tf.variable_scope('pairwise_euclidean_dist'):
+        # squared norms of each row in A and B
+        na = tf.reduce_sum(tf.square(A), 1)
+        nb = tf.reduce_sum(tf.square(B), 1)
+
+        # na as a row and nb as a co"lumn vectors
+        na = tf.reshape(na, [-1, 1])
+        nb = tf.reshape(nb, [1, -1])
+
+        # return pairwise euclidead difference matrix
+        D = tf.sqrt(tf.maximum(na - 2 * tf.matmul(A, B, False, True) + nb, 0.0))
+    return D
+
+
 def calculate_recalls(questions, paragraphs, labels, params, k=None, extract_type=1):
     """
      question [n x d] tensor of n rows with d dimensions
@@ -386,30 +411,101 @@ def get_embeddings(paragraph_embeddings_file):
 
     return tf.constant(load_embeddings(paragraph_embeddings_file))
 
-def define_closest_paragraphs(batch, paragraphs):
+def closest_distance(batch, paragraph_embeddings, input_type='p2p', score_type='cos'):
 
     sub_set_ = batch
-    sub_set_ = tf.expand_dims(sub_set_, axis=0)
-    actual_set = tf.expand_dims(paragraphs, axis=0)
 
-    dist = pairwise_cosine_sim(sub_set_, actual_set)
-    top_k = tf.nn.top_k(dist, k=2, name='top_k_{}'.format(1))
-    values = tf.reshape(tf.reduce_mean(top_k.values, axis=2),shape=[tf.shape(sub_set_)[1], 1])
-    indices = tf.to_float(tf.reshape(tf.squeeze(top_k.indices[:,:,1]), shape=[-1,1]))
-    values = tf.reshape(tf.squeeze(values), shape=[-1,1])
-    top_k = tf.concat((values, indices), axis=1)
-    return top_k
+    if score_type == 'euclidean':
+        dist = pairwise_euclidean_distances(sub_set_, paragraph_embeddings)
+        top_k = tf.nn.top_k(tf.negative(dist), k=1, name='top_k_{}'.format(1))
+        values = tf.reshape(tf.reduce_max(top_k.values, axis=1), shape=[tf.shape(sub_set_)[0], 1])
+        scores = tf.negative(values)
+        par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
 
-def define_closest_paragraphs_to_questions(batch, paragraphs):
+    else:
+        sub_set_ = tf.expand_dims(sub_set_, axis=0)
+        actual_set = tf.expand_dims(paragraph_embeddings, axis=0)
+        dist = pairwise_cosine_sim(sub_set_, actual_set)
+        if input_type == 'p2p':
+            k = 2
+        else: #type == 'q2p':
+            k = 1
+        top_k = tf.nn.top_k(dist, k=k, name='top_k_{}'.format(1))
+        values = tf.reshape(tf.reduce_max(top_k.values, axis=2),shape=[tf.shape(sub_set_)[1], 1])
+        if input_type == 'p2p':
+            par_indices = tf.reshape(tf.squeeze(top_k.indices[:, :, 1]), shape=[-1, 1])
+        else:  # type == 'q2p':
+            par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
+        scores = tf.reshape(tf.squeeze(values), shape=[-1,1])
 
-    sub_set_ = batch
-    sub_set_ = tf.expand_dims(sub_set_, axis=0)
-    actual_set = tf.expand_dims(paragraphs, axis=0)
+    return scores, par_indices
 
-    dist = pairwise_cosine_sim(sub_set_, actual_set)
-    top_k = tf.nn.top_k(dist, k=1, name='top_k_{}'.format(1))
-    values = tf.reshape(tf.reduce_mean(top_k.values, axis=2),shape=[tf.shape(sub_set_)[1], 1])
-    indices = tf.to_float(tf.reshape(tf.squeeze(top_k.indices), shape=[-1,1]))
-    values = tf.reshape(tf.squeeze(values), shape=[-1,1])
-    top_k = tf.concat((values, indices), axis=1)
-    return top_k
+
+def question_to_closest_distance(question_embeddings, paragraph_embeddings, batch_size, sess, closest_distance_op, question_tensor, paragraph_tensor):
+    iter_size = math.ceil(question_embeddings.shape[0] / batch_size)
+    distances = np.array([])
+    distances = distances.reshape(-1, 1)
+    for _ in range(0, iter_size):
+        start = _ * batch_size
+        end = start + batch_size
+        ques = question_embeddings[start:end]
+
+        batch_distances,par_indices = sess.run(closest_distance_op, feed_dict={
+            question_tensor: ques,
+            paragraph_tensor: paragraph_embeddings,
+        })
+        v1 = normalize(ques[1][:,np.newaxis], axis=0).ravel()
+        v2 = normalize(paragraph_embeddings[0][:, np.newaxis], axis=0).ravel()
+        x = np.sqrt(np.sum(np.square(np.subtract(v1, v2))))
+        # batch_distances[:,0] -> closest distances
+        # batch_distances[:,1] -> indices
+        distances = np.append(distances, batch_distances)
+    distances = distances.reshape(-1, 1)
+    return distances
+
+
+def question_to_ground_truth_distance(question_embeddings, paragraph_embeddings, batch_size,  sess, euclidean_distance_op, question_tensor,
+                        paragraph_tensor):
+    iter_size = math.ceil(question_embeddings.shape[0] / batch_size)
+    distances = np.array([])
+    distances = distances.reshape(-1, 1)
+    for _ in range(0, iter_size):
+        start = _ * batch_size
+        end = start + batch_size
+        ques = question_embeddings[start:end]
+        pars = paragraph_embeddings[start:end]
+
+        batch_distances= sess.run(euclidean_distance_op, feed_dict={
+            question_tensor: ques,
+            paragraph_tensor: pars,
+        })
+        distances = np.append(distances, batch_distances)
+    distances = distances.reshape(-1, 1)
+    return distances
+
+def list_slice(tensor, indices, axis):
+    """
+    Args
+    ----
+    tensor (Tensor) : input tensor to slice
+    indices ( [int] ) : list of indices of where to perform slices
+    axis (int) : the axis to perform the slice on
+    """
+
+    slices = []
+
+    ## Set the shape of the output tensor.
+    # Set any unknown dimensions to -1, so that reshape can infer it correctly.
+    # Set the dimension in the slice direction to be 1, so that overall dimensions are preserved during the operation
+    shape = tensor.get_shape().as_list()
+    shape[shape==None] = -1
+    shape[axis] = 1
+
+    nd = len(shape)
+
+    for i in indices:
+        _slice = [slice(None)]*nd
+        _slice[axis] = slice(i,i+1)
+        slices.append(tf.reshape(tensor[_slice], shape))
+
+    return tf.concat(slices, axis=axis)

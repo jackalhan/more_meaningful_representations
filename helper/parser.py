@@ -31,12 +31,17 @@ def get_parser():
                         default=True,
                         help="Recall comparision with baseline")
 
-    parser.add_argument('--is_prediction_for_live',
+    parser.add_argument('--is_prediction',
                         default=True,
                         help="Run live for the prediction")
-    parser.add_argument('--is_dump_predictions',
+
+    parser.add_argument('--is_run_metrics',
                         default=True,
-                        help="whether dump the prediction or not")
+                        help="Run live for the prediction")
+
+    # parser.add_argument('--is_dump_predictions',
+    #                     default=True,
+    #                     help="whether dump the prediction or not")
 
     # data train/eval split configrations
     parser.add_argument('--split_train_test',
@@ -90,8 +95,8 @@ def get_parser():
                         help="Train paragraph embeddings data")
 
     # DATA to be predicted (ALL QUESTIONS)
-    parser.add_argument('--pretrained_embedding_file',
-                        default='/home/jackalhan/Development/github/more_meaningful_representations/squad/train/triplet_loss_function/data/train_question_embeddings.hdf5',
-                        help="pretrained embeddings file")
+    # parser.add_argument('--pretrained_embedding_file',
+    #                     default='/home/jackalhan/Development/github/more_meaningful_representations/squad/train/triplet_loss_function/data/train_question_embeddings.hdf5',
+    #                     help="pretrained embeddings file")
 
     return parser

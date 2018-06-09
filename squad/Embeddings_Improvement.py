@@ -1,6 +1,6 @@
 """Train the model"""
 
-import helper.parser as parser
+
 import os
 import math
 import pandas as pd
@@ -15,7 +15,7 @@ from helper.utils import Params, train_test_splitter, analyze_labes, \
 from helper.quadratic_loss import euclidean_distance_loss
 import numpy as np
 from helper.models import model_1
-
+import helper.parser as parser
 
 def define_pre_executions(args, params):
     if args.analyze_labels:

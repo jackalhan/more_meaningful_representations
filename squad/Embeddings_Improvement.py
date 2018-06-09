@@ -353,6 +353,19 @@ if __name__ == '__main__':
                 params.l2_regularizer) + '.csv')
                        , trained_differences, delimiter=",")
 
+            print(50 * '-')
+            print('After Trained Model 2')
+            print(
+                '[question to ground truth paragraph distance] - [improved question to closest paragraph distance]')
+
+
+            non_and_trained_differences = non_trained_ground_truth_distances - trained_closest_distances
+
+            np.savetxt(os.path.join(path_e, 'non_and_trained_distances_epoch_' + str(params.num_epochs) + '_margin_' + str(
+                params.margin) + '_lr_' + str(params.learning_rate) +
+                                    '_scaling_factor_' + str(params.scaling_factor) + '_l2_reg_' + str(
+                params.l2_regularizer) + '.csv')
+                       , trained_differences, delimiter=",")
 
 
     #print("".format(len(all_metrics_for_plot)))

@@ -129,7 +129,7 @@ if __name__ == '__main__':
         tf.summary.scalar("avg_recall", avg_recall)
 
         ground_truth_euclidean_distances = euclidean_distance_loss(normalized_questions, normalized_paragraphs,
-                                                                   params=None, is_training=False, type='abs')
+                                                                   params=None, is_training=False, type='old_loss')
 
         closest_euclidean_distances = closest_distance(normalized_questions,
                                                        normalized_recall_paragraphs,
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     with tf.variable_scope('loss'):
         # Loss calculation
         if params.loss == 'abs_reg_loss':
-            _loss = euclidean_distance_loss(trained_question_embeddings, normalized_paragraphs, params,type='abs')
+            _loss = euclidean_distance_loss(trained_question_embeddings, normalized_paragraphs, params,type='new_loss')
 
         else:
             raise ValueError("Loss strategy not recognized: {}".format(params.loss))

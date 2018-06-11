@@ -12,6 +12,7 @@ from random import shuffle
 import tensorflow as tf
 from helper.quadratic_loss import euclidean_distance_loss
 from sklearn.preprocessing import normalize
+from sklearn.metrics.pairwise import euclidean_distances
 
 class Params():
     """Class that loads hyperparameters from a json file.
@@ -324,7 +325,7 @@ def calculate_recalls(questions, paragraphs, labels, params, k=None, extract_typ
      loss : scalar value
      """
 
-    with tf.name_scope('recall_loss') as scope:
+    with tf.name_scope('calculate_recalls') as scope:
         recalls = []  # tf.zeros([len(params.recall_top_k), 1], tf.float32)
 
         # in order to support batch_size feature, we expanded dims for 1
@@ -384,7 +385,10 @@ def next_batch(begin_indx, batch_size, questions, labels, paragraphs):
     '''
     Return a total of `num` random samples and labels.
     '''
-    idx = np.arange(begin_indx, begin_indx+batch_size)
+    if begin_indx+batch_size <= questions.shape[0]:
+        idx = np.arange(begin_indx, begin_indx+batch_size)
+    else:
+        idx = np.arange(begin_indx, questions.shape[0])
     np.random.shuffle(idx)
     questions = questions[idx]
     labels = labels[idx]
@@ -415,28 +419,29 @@ def closest_distance(batch, paragraph_embeddings, input_type='p2p', score_type='
 
     sub_set_ = batch
 
-    if score_type == 'euclidean':
-        dist = pairwise_euclidean_distances(sub_set_, paragraph_embeddings)
-        top_k = tf.nn.top_k(tf.negative(dist), k=1, name='top_k_{}'.format(1))
-        values = tf.reshape(tf.reduce_max(top_k.values, axis=1), shape=[tf.shape(sub_set_)[0], 1])
-        scores = tf.negative(values)
-        par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
-
-    else:
-        sub_set_ = tf.expand_dims(sub_set_, axis=0)
-        actual_set = tf.expand_dims(paragraph_embeddings, axis=0)
-        dist = pairwise_cosine_sim(sub_set_, actual_set)
-        if input_type == 'p2p':
-            k = 2
-        else: #type == 'q2p':
-            k = 1
-        top_k = tf.nn.top_k(dist, k=k, name='top_k_{}'.format(1))
-        values = tf.reshape(tf.reduce_max(top_k.values, axis=2),shape=[tf.shape(sub_set_)[1], 1])
-        if input_type == 'p2p':
-            par_indices = tf.reshape(tf.squeeze(top_k.indices[:, :, 1]), shape=[-1, 1])
-        else:  # type == 'q2p':
+    with tf.variable_scope('closest_distance'):
+        if score_type == 'euclidean':
+            dist = pairwise_euclidean_distances(sub_set_, paragraph_embeddings)
+            top_k = tf.nn.top_k(tf.negative(dist), k=1, name='top_k_{}'.format(1))
+            values = tf.reshape(tf.reduce_max(top_k.values, axis=1), shape=[tf.shape(sub_set_)[0], 1])
+            scores = tf.negative(values)
             par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
-        scores = tf.reshape(tf.squeeze(values), shape=[-1,1])
+
+        else:
+            sub_set_ = tf.expand_dims(sub_set_, axis=0)
+            actual_set = tf.expand_dims(paragraph_embeddings, axis=0)
+            dist = pairwise_cosine_sim(sub_set_, actual_set)
+            if input_type == 'p2p':
+                k = 2
+            else: #type == 'q2p':
+                k = 1
+            top_k = tf.nn.top_k(dist, k=k, name='top_k_{}'.format(1))
+            values = tf.reshape(tf.reduce_max(top_k.values, axis=2),shape=[tf.shape(sub_set_)[1], 1])
+            if input_type == 'p2p':
+                par_indices = tf.reshape(tf.squeeze(top_k.indices[:, :, 1]), shape=[-1, 1])
+            else:  # type == 'q2p':
+                par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
+            scores = tf.reshape(tf.squeeze(values), shape=[-1,1])
 
     return scores, par_indices
 
@@ -454,9 +459,6 @@ def question_to_closest_distance(question_embeddings, paragraph_embeddings, batc
             question_tensor: ques,
             paragraph_tensor: paragraph_embeddings,
         })
-        v1 = normalize(ques[1][:,np.newaxis], axis=0).ravel()
-        v2 = normalize(paragraph_embeddings[0][:, np.newaxis], axis=0).ravel()
-        x = np.sqrt(np.sum(np.square(np.subtract(v1, v2))))
         # batch_distances[:,0] -> closest distances
         # batch_distances[:,1] -> indices
         distances = np.append(distances, batch_distances)
@@ -475,6 +477,26 @@ def question_to_ground_truth_distance(question_embeddings, paragraph_embeddings,
         ques = question_embeddings[start:end]
         pars = paragraph_embeddings[start:end]
 
+        batch_distances= sess.run(euclidean_distance_op, feed_dict={
+            question_tensor: ques,
+            paragraph_tensor: pars,
+        })
+        distances = np.append(distances, batch_distances)
+    distances = distances.reshape(-1, 1)
+    return distances
+
+def question_to_random_paragraph_distance(question_embeddings, paragraph_embeddings, batch_size,  sess, euclidean_distance_op, question_tensor,
+                        paragraph_tensor):
+    iter_size = math.ceil(question_embeddings.shape[0] / batch_size)
+    np.random.shuffle(paragraph_embeddings)
+    distances = np.array([])
+    distances = distances.reshape(-1, 1)
+    for _ in range(0, iter_size):
+        start = _ * batch_size
+        end = start + batch_size
+        ques = question_embeddings[start:end]
+        pars = paragraph_embeddings[start:end]
+        np.random.shuffle(pars)
         batch_distances= sess.run(euclidean_distance_op, feed_dict={
             question_tensor: ques,
             paragraph_tensor: pars,

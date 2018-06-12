@@ -32,7 +32,7 @@ def get_parser():
                         help="Recall comparision with baseline")
 
     parser.add_argument('--is_prediction',
-                        default=True,
+                        default=False,
                         help="Run live for the prediction")
 
     parser.add_argument('--is_run_metrics',

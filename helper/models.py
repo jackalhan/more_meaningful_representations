@@ -9,7 +9,7 @@ def model_1(questions, params):
         questions,
         int(params.embedding_dim),
         activation_fn=None,
-        weights_initializer=tf.truncated_normal_initializer(stddev=0.1),
+        weights_initializer=tf.truncated_normal_initializer(seed=params.seed, stddev=0.1),
         weights_regularizer=tf.contrib.layers.l2_regularizer(params.l2_regularizer),
         biases_initializer=tf.zeros_initializer(),
         trainable=True,

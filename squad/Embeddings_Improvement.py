@@ -262,7 +262,14 @@ if __name__ == '__main__':
             optimizer = tf.train.GradientDescentOptimizer(params.learning_rate)
 
         global_step = tf.Variable(0, name='global_step', trainable=False)
-        train_op = optimizer.minimize(loss, global_step=global_step)
+        # Get the gradient pairs (Tensor, Variable)
+        grads = optimizer.compute_gradients(loss)
+        # Update the weights wrt to the gradient
+        train_op = optimizer.apply_gradients(grads, global_step=global_step)
+        #train_op = optimizer.minimize(loss, global_step=global_step)
+        # Save the grads with tf.summary.histogram:
+        for index, grad in enumerate(grads):
+            tf.summary.histogram("{}-grad".format(grads[index][1].name), grads[index])
         init_op = tf.global_variables_initializer()
 
     # Merge all summary inforation.
@@ -337,7 +344,7 @@ if __name__ == '__main__':
                                             })
                 train_writer.add_summary(summary, counter)
                 train_writer.flush()
-                #all_metrics_for_plot.append(trace_metrics(_emo, counter, True, True, False))
+                all_metrics_for_plot.append(trace_metrics(_emo, counter, True, True, False))
                 avg_loss_value += loss_value / total_batch
 
                 # We regularly check the loss in each 100 iterations
@@ -357,7 +364,7 @@ if __name__ == '__main__':
                         })
                     test_writer.add_summary(summary, counter)
                     train_writer.flush()
-                    _ = trace_metrics(_emo, counter, True, False, True)
+                    all_metrics_for_plot.append(trace_metrics(_emo,counter, True, False, True))
 
             # _emo = sess.run( eval_metric_ops, feed_dict={
             #         questions: testing_question_embeddings,
@@ -406,26 +413,26 @@ if __name__ == '__main__':
                                                                           'mode'])
             df_metrics.to_csv(file_name)
 
-            all_paragraphs = np.squeeze(load_embeddings(args.paragraph_embeddings_file))
-            all_labels = pd.read_csv(args.labels_file)
-            all_mapped_non_trained_qs_to_ps = all_paragraphs[all_labels['v'].values]
-
-            non_trained_differences = \
-                measure_distances(question_embeddings=non_trained_all_questions,
-                              paragraph_embeddings=all_mapped_non_trained_qs_to_ps,
-                              recall_paragraph_embeddings=all_paragraphs,
-                              sess=sess,
-                              closest_distance_op=closest_euclidean_distances,
-                              groundtruth_distance_op=ground_truth_euclidean_distances,
-                              question_tensor=questions,
-                              paragraph_tensor=paragraphs,
-                              paragraph_recall_tensor=recall_paragraphs,
-                              params=params,
-                              save_path=path_e,
-                              from_dist="Q_to_GroundTruth_P",
-                              to_dist="Q_to_Closest_P",
-                              log_step='Before_Trained_Model'
-                              )
+            # all_paragraphs = np.squeeze(load_embeddings(args.paragraph_embeddings_file))
+            # all_labels = pd.read_csv(args.labels_file)
+            # all_mapped_non_trained_qs_to_ps = all_paragraphs[all_labels['v'].values]
+            #
+            # non_trained_differences = \
+            #     measure_distances(question_embeddings=non_trained_all_questions,
+            #                   paragraph_embeddings=all_mapped_non_trained_qs_to_ps,
+            #                   recall_paragraph_embeddings=all_paragraphs,
+            #                   sess=sess,
+            #                   closest_distance_op=closest_euclidean_distances,
+            #                   groundtruth_distance_op=ground_truth_euclidean_distances,
+            #                   question_tensor=questions,
+            #                   paragraph_tensor=paragraphs,
+            #                   paragraph_recall_tensor=recall_paragraphs,
+            #                   params=params,
+            #                   save_path=path_e,
+            #                   from_dist="Q_to_GroundTruth_P",
+            #                   to_dist="Q_to_Closest_P",
+            #                   log_step='Before_Trained_Model'
+            #                   )
             # trained_differences = \
             #     measure_distances(question_embeddings=trained_all_question_embeddings,
             #                       paragraph_embeddings=all_mapped_non_trained_qs_to_ps,

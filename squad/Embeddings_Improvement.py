@@ -14,7 +14,7 @@ from helper.utils import Params, train_test_splitter, analyze_labes, \
     load_embeddings, next_batch,get_question_and_paragraph_embeddings
 from helper.quadratic_loss import euclidean_distance_loss
 import numpy as np
-from helper.models import model_1
+from helper.models import model_1, model_2
 import helper.parser as parser
 import random
 def define_pre_executions(args, params):
@@ -133,7 +133,8 @@ def measure_distances(question_embeddings,
     _distance_differences = _ground_truth_distances - _closest_distances
 
     if save_path is not None:
-        np.savetxt(os.path.join(save_path,"{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(from_dist,
+        np.savetxt(os.path.join(save_path,"{}_{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(params.model_name,
+                                                                                                                  from_dist,
                                                                                                             params.num_epochs,
                                                                                                             params.margin,
                                                                                                             params.learning_rate,
@@ -142,7 +143,8 @@ def measure_distances(question_embeddings,
                    , _ground_truth_distances, delimiter=",")
 
         np.savetxt(
-            os.path.join(save_path, "{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format('Q_to_random_P',
+            os.path.join(save_path, "{}_{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(params.model_name,
+                                                                                                            'Q_to_random_P',
                                                                                                             params.num_epochs,
                                                                                                             params.margin,
                                                                                                             params.learning_rate,
@@ -151,7 +153,8 @@ def measure_distances(question_embeddings,
             , _random_distances, delimiter=",")
 
         np.savetxt(
-            os.path.join(save_path, "{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(to_dist,
+            os.path.join(save_path, "{}_{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(params.model_name,
+                                                                                                            to_dist,
                                                                                                             params.num_epochs,
                                                                                                             params.margin,
                                                                                                             params.learning_rate,
@@ -159,7 +162,8 @@ def measure_distances(question_embeddings,
                                                                                                             params.l2_regularizer))
             , _closest_distances, delimiter=",")
         np.savetxt(
-            os.path.join(save_path, "{}_{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(from_dist,
+            os.path.join(save_path, "{}_{}_{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(params.model_name,
+                                                                                                               from_dist,
                                                                                                             to_dist,
                                                                                                             params.num_epochs,
                                                                                                             params.margin,
@@ -192,7 +196,7 @@ if __name__ == '__main__':
 
     # call the model
     with tf.variable_scope('model'):
-        trained_question_embeddings = model_1(questions, params)
+        trained_question_embeddings = eval(params.model_name)(questions, params)
 
     # normalize paragraphs and some metric calculation
     with tf.name_scope('normalization_metrics') as scope:
@@ -391,7 +395,8 @@ if __name__ == '__main__':
 
         if args.is_run_metrics:
             print('Metrics.....')
-            file_name = os.path.join(path_e,"epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(params.num_epochs,
+            file_name = os.path.join(path_e,"{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(params.model_name,
+                                                                                                                 params.num_epochs,
                                                                                                             params.margin,
                                                                                                             params.learning_rate,
                                                                                                             params.scaling_factor,

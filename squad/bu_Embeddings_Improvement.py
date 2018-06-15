@@ -413,6 +413,58 @@ if __name__ == '__main__':
                                                                           'mode'])
             df_metrics.to_csv(file_name)
 
+            # all_paragraphs = np.squeeze(load_embeddings(args.paragraph_embeddings_file))
+            # all_labels = pd.read_csv(args.labels_file)
+            # all_mapped_non_trained_qs_to_ps = all_paragraphs[all_labels['v'].values]
+            #
+            # non_trained_differences = \
+            #     measure_distances(question_embeddings=non_trained_all_questions,
+            #                   paragraph_embeddings=all_mapped_non_trained_qs_to_ps,
+            #                   recall_paragraph_embeddings=all_paragraphs,
+            #                   sess=sess,
+            #                   closest_distance_op=closest_euclidean_distances,
+            #                   groundtruth_distance_op=ground_truth_euclidean_distances,
+            #                   question_tensor=questions,
+            #                   paragraph_tensor=paragraphs,
+            #                   paragraph_recall_tensor=recall_paragraphs,
+            #                   params=params,
+            #                   save_path=path_e,
+            #                   from_dist="Q_to_GroundTruth_P",
+            #                   to_dist="Q_to_Closest_P",
+            #                   log_step='Before_Trained_Model'
+            #                   )
+            # trained_differences = \
+            #     measure_distances(question_embeddings=trained_all_question_embeddings,
+            #                       paragraph_embeddings=all_mapped_non_trained_qs_to_ps,
+            #                       recall_paragraph_embeddings=all_paragraphs,
+            #                       sess=sess,
+            #                       closest_distance_op=closest_euclidean_distances,
+            #                       groundtruth_distance_op=ground_truth_euclidean_distances,
+            #                       question_tensor=questions,
+            #                       paragraph_tensor=paragraphs,
+            #                       paragraph_recall_tensor=recall_paragraphs,
+            #                       params=params,
+            #                       save_path=path_e,
+            #                       from_dist="Improved_Q_to_GroundTruth_P",
+            #                       to_dist="Improved_Q_to_Closest_P",
+            #                       log_step='After_Trained_Model'
+            #                       )
+            # non_and_trained_differences = \
+            #     measure_distances(question_embeddings=trained_all_question_embeddings,
+            #                       paragraph_embeddings=all_mapped_non_trained_qs_to_ps,
+            #                       recall_paragraph_embeddings=all_paragraphs,
+            #                       sess=sess,
+            #                       closest_distance_op=closest_euclidean_distances,
+            #                       groundtruth_distance_op=ground_truth_euclidean_distances,
+            #                       question_tensor=questions,
+            #                       paragraph_tensor=paragraphs,
+            #                       paragraph_recall_tensor=recall_paragraphs,
+            #                       params=params,
+            #                       save_path=path_e,
+            #                       from_dist="Q_to_GroundTruth_P",
+            #                       to_dist="Improved_Q_to_Closest_P",
+            #                       log_step='After_Trained_Model'
+            #                       )
 
     print('Done')
 

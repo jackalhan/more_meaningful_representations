@@ -19,13 +19,13 @@ def get_parser():
 
     # run configrations
     parser.add_argument('--is_train',
-                        default=False,
+                        default=True,
                         help="Run for the training")
     parser.add_argument('--is_test',
-                        default=False,
+                        default=True,
                         help="Run for the testing")
-    parser.add_argument('--is_prediction_for_evaluation',
-                        default=False,
+    parser.add_argument('--is_test_for_recall',
+                        default=True,
                         help="Run eval for the prediction")
     parser.add_argument('--is_recall_comparision_with_baseline',
                         default=True,

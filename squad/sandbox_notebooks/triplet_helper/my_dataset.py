@@ -48,7 +48,12 @@ def create_file_reader_ops(filename):
 def get_dataset_from_cache(embeddings):
     return tf.data.Dataset.from_tensor_slices(embeddings)
 
-def get_dataset(question_embeddings_file, paragraph_embeddings_file, label_file, q_embedding_shape, p_embedding_shape, including_label=True):
+def get_dataset(question_embeddings_file,
+                paragraph_embeddings_file,
+                label_file,
+                q_embedding_shape,
+                p_embedding_shape,
+                including_label=True):
 
     ques_ds = tf.data.Dataset.from_generator(
         generator(question_embeddings_file),

@@ -13,7 +13,7 @@ import tensorflow as tf
 from helper.quadratic_loss import euclidean_distance_loss
 from sklearn.preprocessing import normalize
 from sklearn.metrics.pairwise import euclidean_distances
-
+import sys
 class Params():
     """Class that loads hyperparameters from a json file.
 
@@ -73,6 +73,37 @@ def set_logger(log_path):
         stream_handler.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(stream_handler)
 
+def define_pre_executions(args, params, json_path):
+    if args.analyze_labels:
+        analysis = analyze_labes(args.labels_file)
+
+    else:
+        if args.split_train_test:
+            file_paths = train_test_splitter(args.question_embeddings_file,
+                                             args.paragraph_embeddings_file,
+                                             args.labels_file,
+                                             params.train_splitter_rate,
+                                             params.eval_question_size_for_recall,
+                                             args.limit_data)
+            params.train_size = file_paths['train_question_size']
+            params.eval_size = file_paths['eval_question_size']
+            params.num_labels = file_paths['num_labels']
+            params.save(json_path)
+            print('Done with splitting')
+            sys.exit()
+        else:
+            file_paths = {}
+            file_paths['train_question_embeddings'] = args.train_question_embeddings_file
+            file_paths['train_paragraph_embeddings'] = args.train_paragraph_embeddings_file
+            file_paths['train_paragraph_labels'] = args.train_label_file
+
+            file_paths['test_question_embeddings'] = args.test_question_embeddings_file
+            file_paths['test_paragraph_embeddings'] = args.test_paragraph_embeddings_file
+            file_paths['test_paragraph_labels'] = args.test_label_file
+
+            file_paths['test_recall_question_embeddings'] = args.test_recall_question_embeddings
+            file_paths['paragraph_embeddings'] = args.paragraph_embeddings_file
+    return file_paths
 
 def save_dict_to_json(d, json_path):
     """Saves dict of floats in json file
@@ -325,57 +356,56 @@ def calculate_recalls(questions, paragraphs, labels, params, k=None, extract_typ
      loss : scalar value
      """
 
-    with tf.name_scope('calculate_recalls') as scope:
-        recalls = []  # tf.zeros([len(params.recall_top_k), 1], tf.float32)
+    recalls = []  # tf.zeros([len(params.recall_top_k), 1], tf.float32)
 
-        # in order to support batch_size feature, we expanded dims for 1
-        paragraphs = tf.expand_dims(paragraphs, axis=0)
-        labels = tf.expand_dims(labels, axis=0)
-        questions = tf.expand_dims(questions, axis=0)
-        number_of_questions = tf.to_int64(tf.shape(questions)[1])
-        # now question, paragraphs pairwise calculation
-        distances = pairwise_cosine_sim(questions, paragraphs)
-        for _k in [k] if k is not None else params.recall_top_k:
-            with tf.name_scope('top_k_{}'.format(_k)) as k_scope:
-                # find the top_k paragraphs for each question
-                top_k = tf.nn.top_k(distances, k=_k, name='top_k_top_k_{}'.format(_k))
+    # in order to support batch_size feature, we expanded dims for 1
+    paragraphs = tf.expand_dims(paragraphs, axis=0)
+    labels = tf.expand_dims(labels, axis=0)
+    questions = tf.expand_dims(questions, axis=0)
+    number_of_questions = tf.to_int64(tf.shape(questions)[1])
+    # now question, paragraphs pairwise calculation
+    distances = pairwise_cosine_sim(questions, paragraphs)
+    for _k in [k] if k is not None else params.recall_top_k:
+        with tf.name_scope('top_k_{}'.format(_k)) as k_scope:
+            # find the top_k paragraphs for each question
+            top_k = tf.nn.top_k(distances, k=_k, name='top_k_top_k_{}'.format(_k))
 
-                # is groundtruth label is in these top_k paragraph
-                equals = tf.equal(top_k.indices, labels, name='equal_top_k_{}'.format(_k))
+            # is groundtruth label is in these top_k paragraph
+            equals = tf.equal(top_k.indices, labels, name='equal_top_k_{}'.format(_k))
 
-                # cast the equals to int32 to count the non zero ones because if it is equal,
-                # there is only one 1 for each question among paragraphs,
-                # then label is in top k
-                casted_equal = tf.cast(equals, dtype=tf.int32, name='casted_equal_top_k_{}'.format(_k))
-                final_equals_non_zero = tf.squeeze(
-                    tf.count_nonzero(casted_equal, axis=2, name='sq_top_k_{}'.format(_k)))
+            # cast the equals to int32 to count the non zero ones because if it is equal,
+            # there is only one 1 for each question among paragraphs,
+            # then label is in top k
+            casted_equal = tf.cast(equals, dtype=tf.int32, name='casted_equal_top_k_{}'.format(_k))
+            final_equals_non_zero = tf.squeeze(
+                tf.count_nonzero(casted_equal, axis=2, name='sq_top_k_{}'.format(_k)))
 
-                # get the details of true question - paragraph
-                indx_of_questions_that_has_the_correct_paragraphs = tf.reshape(
-                    tf.squeeze(tf.where(tf.equal(final_equals_non_zero, extract_type))), shape=[-1, 1])
-                top_k_values = tf.reshape(tf.squeeze(top_k.values), shape=[-1, 1])
-                cos_values_of_that_has_the_correct_paragraphs = tf.reshape(tf.to_float(tf.gather(top_k_values,
-                                                                                                 indx_of_questions_that_has_the_correct_paragraphs)),
-                                                                           shape=[-1, 1])
-                label_values = tf.reshape(tf.squeeze(labels), shape=[-1, 1])
-                label_values_of_that_has_the_correct_paragraphs = tf.reshape(tf.to_float(tf.gather(label_values,
-                                                                                                   indx_of_questions_that_has_the_correct_paragraphs)),
-                                                                             shape=[-1, 1])
-                question_index_labels_and_scores_that_has_the_correct_paragraphs = tf.concat(
-                    [tf.reshape(tf.to_float(indx_of_questions_that_has_the_correct_paragraphs),shape=[-1,1]),
-                     label_values_of_that_has_the_correct_paragraphs,
-                     cos_values_of_that_has_the_correct_paragraphs
-                     ], axis=1)
-
+            # get the details of true question - paragraph
+            indx_of_questions_that_has_the_correct_paragraphs = tf.reshape(
+                tf.squeeze(tf.where(tf.equal(final_equals_non_zero, extract_type))), shape=[-1, 1])
+            top_k_values = tf.reshape(tf.squeeze(top_k.values), shape=[-1, 1])
+            cos_values_of_that_has_the_correct_paragraphs = tf.reshape(tf.to_float(tf.gather(top_k_values,
+                                                                                             indx_of_questions_that_has_the_correct_paragraphs)),
+                                                                       shape=[-1, 1])
+            label_values = tf.reshape(tf.squeeze(labels), shape=[-1, 1])
+            label_values_of_that_has_the_correct_paragraphs = tf.reshape(tf.to_float(tf.gather(label_values,
+                                                                                               indx_of_questions_that_has_the_correct_paragraphs)),
+                                                                         shape=[-1, 1])
+            question_index_labels_and_scores_that_has_the_correct_paragraphs = tf.concat(
+                [tf.reshape(tf.to_float(indx_of_questions_that_has_the_correct_paragraphs),shape=[-1,1]),
+                 label_values_of_that_has_the_correct_paragraphs,
+                 cos_values_of_that_has_the_correct_paragraphs
+                 ], axis=1)
 
 
-                total_founds_in_k = tf.reduce_sum(final_equals_non_zero)
-                recalls.append(total_founds_in_k)
 
-        recalls = tf.stack(recalls)
-        best_possible_score = len(params.recall_top_k) * number_of_questions
-        current_score = tf.reduce_sum(recalls)
-        loss = (current_score / best_possible_score)
+            total_founds_in_k = tf.reduce_sum(final_equals_non_zero)
+            recalls.append(total_founds_in_k)
+
+    recalls = tf.stack(recalls)
+    best_possible_score = len(params.recall_top_k) * number_of_questions
+    current_score = tf.reduce_sum(recalls)
+    loss = (current_score / best_possible_score)
 
     return loss, recalls, (
                 recalls / number_of_questions), number_of_questions, question_index_labels_and_scores_that_has_the_correct_paragraphs
@@ -396,14 +426,22 @@ def next_batch(begin_indx, batch_size, questions, labels, paragraphs):
 
     return questions, labels, paragraphs
 
-def get_question_and_paragraph_embeddings(is_cached, question_embeddings, paragraph_embeddings, params):
+def get_question_and_paragraph_embeddings(is_cached_question,
+                                          is_cached_paragraph,
+                                          question_embeddings,
+                                          paragraph_embeddings,
+                                          params):
 
-    if not is_cached:
+    if not is_cached_question:
         _q = load_embeddings(question_embeddings)
-        _p = load_embeddings(paragraph_embeddings)
     else:
         _q = question_embeddings
+
+    if not is_cached_paragraph:
+        _p = load_embeddings(paragraph_embeddings)
+    else:
         _p = paragraph_embeddings
+
     random.seed(params.eval_seed)
     qidx = random.sample(range(_q.shape[0]), params.eval_question_size_for_recall)
     _q = _q[qidx]
@@ -419,29 +457,28 @@ def closest_distance(batch, paragraph_embeddings, input_type='p2p', score_type='
 
     sub_set_ = batch
 
-    with tf.variable_scope('closest_distance'):
-        if score_type == 'euclidean':
-            dist = pairwise_euclidean_distances(sub_set_, paragraph_embeddings)
-            top_k = tf.nn.top_k(tf.negative(dist), k=1, name='top_k_{}'.format(1))
-            values = tf.reshape(tf.reduce_max(top_k.values, axis=1), shape=[tf.shape(sub_set_)[0], 1])
-            scores = tf.negative(values)
-            par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
+    if score_type == 'euclidean':
+        dist = pairwise_euclidean_distances(sub_set_, paragraph_embeddings)
+        top_k = tf.nn.top_k(tf.negative(dist), k=1, name='top_k_{}'.format(1))
+        values = tf.reshape(tf.reduce_max(top_k.values, axis=1), shape=[tf.shape(sub_set_)[0], 1])
+        scores = tf.negative(values)
+        par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
 
-        else:
-            sub_set_ = tf.expand_dims(sub_set_, axis=0)
-            actual_set = tf.expand_dims(paragraph_embeddings, axis=0)
-            dist = pairwise_cosine_sim(sub_set_, actual_set)
-            if input_type == 'p2p':
-                k = 2
-            else: #type == 'q2p':
-                k = 1
-            top_k = tf.nn.top_k(dist, k=k, name='top_k_{}'.format(1))
-            values = tf.reshape(tf.reduce_max(top_k.values, axis=2),shape=[tf.shape(sub_set_)[1], 1])
-            if input_type == 'p2p':
-                par_indices = tf.reshape(tf.squeeze(top_k.indices[:, :, 1]), shape=[-1, 1])
-            else:  # type == 'q2p':
-                par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
-            scores = tf.reshape(tf.squeeze(values), shape=[-1,1])
+    else:
+        sub_set_ = tf.expand_dims(sub_set_, axis=0)
+        actual_set = tf.expand_dims(paragraph_embeddings, axis=0)
+        dist = pairwise_cosine_sim(sub_set_, actual_set)
+        if input_type == 'p2p':
+            k = 2
+        else: #type == 'q2p':
+            k = 1
+        top_k = tf.nn.top_k(dist, k=k, name='top_k_{}'.format(1))
+        values = tf.reshape(tf.reduce_max(top_k.values, axis=2),shape=[tf.shape(sub_set_)[1], 1])
+        if input_type == 'p2p':
+            par_indices = tf.reshape(tf.squeeze(top_k.indices[:, :, 1]), shape=[-1, 1])
+        else:  # type == 'q2p':
+            par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
+        scores = tf.reshape(tf.squeeze(values), shape=[-1,1])
 
     return scores, par_indices
 
@@ -531,3 +568,6 @@ def list_slice(tensor, indices, axis):
         slices.append(tf.reshape(tensor[_slice], shape))
 
     return tf.concat(slices, axis=axis)
+
+def get_variable_name_as_str(variable):
+    return [k for k, v in locals().items() if v == variable][0]

@@ -8,11 +8,11 @@ import tensorflow as tf
 import sys
 import collections
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from helper.utils import Params, train_test_splitter, analyze_labes, \
+from helper.utils import Params,\
     closest_distance, question_to_closest_distance, dump_embeddings, \
     question_to_ground_truth_distance, question_to_random_paragraph_distance, calculate_recalls, \
     load_embeddings, next_batch,get_question_and_paragraph_embeddings, define_pre_executions
-from helper.quadratic_loss import euclidean_distance_loss
+from helper.loss import euclidean_distance_loss
 import numpy as np
 from helper.models import orchestrate_model
 import helper.parser as parser
@@ -149,19 +149,19 @@ if __name__ == '__main__':
     tf.reset_default_graph()
     tf.logging.set_verbosity(tf.logging.INFO)
 
-    # Load the parameters from json file
     args = parser.get_parser().parse_args()
-    json_path = os.path.join(args.model_dir, 'params.json')
-    assert os.path.isfile(json_path), "No json configuration file found at {}".format(json_path)
-    params = Params(json_path)
+    assert os.path.isfile(args.json_path), "No json configuration file found at {}".format(args.json_path)
+    params = Params(args.json_path)
 
     # split the files or use the provided files
-    file_paths = define_pre_executions(args, params,json_path)
+    params = define_pre_executions(params, args.json_path)
+    base_data_path = os.path.join(params.executor['model_dir'], params.executor['data_dir'])
 
-    questions = tf.placeholder(tf.float32, [None, params.embedding_dim], name='input_questions')
+    tf.logging.info("Creating the model...")
+    questions = tf.placeholder(tf.float32, [None, params.files['pre_trained_files']['embedding_dim']], name='input_questions')
     labels = tf.placeholder(tf.int32, [None, 1], name='input_labels')
-    paragraphs = tf.placeholder(tf.float32, [None, params.embedding_dim], name='input_paragraphs')
-    recall_paragraphs = tf.placeholder(tf.float32, [None, params.embedding_dim], name='input_recall_paragraphs')
+    paragraphs = tf.placeholder(tf.float32, [None, params.files['pre_trained_files']['embedding_dim']], name='input_paragraphs')
+    recall_paragraphs = tf.placeholder(tf.float32, [None, params.files['pre_trained_files']['embedding_dim']], name='input_recall_paragraphs')
 
     # call the model
     trained_question_embeddings = orchestrate_model(questions, params)
@@ -172,35 +172,32 @@ if __name__ == '__main__':
     mean_of_norm_pars = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(normalized_paragraphs), axis=1)))
     mean_of_norm_ques = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(trained_question_embeddings), axis=1)))
     mean_of_norm_recall_pars = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(normalized_recall_paragraphs), axis=1)))
-    tf.summary.scalar("length_of_norm_pars", mean_of_norm_pars)
-    tf.summary.scalar("length_of_norm_ques", mean_of_norm_ques)
-    tf.summary.scalar("length_of_norm_recall_pars", mean_of_norm_recall_pars)
+    tf.summary.scalar("question_embedding_mean_norm", mean_of_norm_pars)
+    tf.summary.scalar("paragraph_embedding_mean_norm", mean_of_norm_ques)
+    tf.summary.scalar("all_paragraphs_norm", mean_of_norm_recall_pars)
 
-    avg_recall, recalls, normalized_recalls, number_of_questions, q_index_and_cos = calculate_recalls(trained_question_embeddings,
-                                                                                                      normalized_recall_paragraphs,
-                                                                                                      labels,
-                                                                                                      params)
+    recalls, normalized_recalls = calculate_recalls(trained_question_embeddings,normalized_recall_paragraphs, labels, params)
+
+    avg_recall = tf.reduce_mean(normalized_recalls)
+
     tf.summary.scalar("avg_recall", avg_recall)
-    tf.summary.scalar("top_1_normalized_recall", normalized_recalls[0])
-    tf.summary.scalar("top_2_normalized_recall", normalized_recalls[1])
-    ground_truth_euclidean_distances = euclidean_distance_loss(normalized_questions, normalized_paragraphs,
-                                                               params=None,
-                                                               is_training=False,
-                                                               type='old_loss')
-
-    closest_euclidean_distances = closest_distance(normalized_questions,
-                                                   normalized_recall_paragraphs,
-                                                   input_type='q2p',
-                                                   score_type='euclidean')
+    tf.summary.scalar("recall_top_1", normalized_recalls[0])
+    tf.summary.scalar("recall_top_2", normalized_recalls[1])
+    # ground_truth_euclidean_distances = euclidean_distance_loss(normalized_questions, normalized_paragraphs, params, is_training=False)
+    #
+    # closest_euclidean_distances = closest_distance(normalized_questions,
+    #                                                normalized_recall_paragraphs,
+    #                                                input_type='q2p',
+    #                                                score_type='euclidean')
 
 
 
     # Loss calculation
-    if params.loss == 'abs_reg_loss':
-        _loss = euclidean_distance_loss(trained_question_embeddings, normalized_paragraphs, params,type=params.loss_type)
+    if params.loss['name'] == 'abs_reg_loss':
+        _loss = euclidean_distance_loss(trained_question_embeddings, normalized_paragraphs, params)
 
     else:
-        raise ValueError("Loss strategy not recognized: {}".format(params.loss))
+        raise ValueError("Loss strategy not recognized: {}".format(params.loss['name']))
 
     # Add Loss to Losses
 
@@ -215,20 +212,20 @@ if __name__ == '__main__':
     # -------------------------------------------------------
     tf.losses.add_loss(_loss)
     loss = tf.losses.get_total_loss()
-    tf.summary.scalar('final_loss', loss)
+    tf.summary.scalar('loss', loss)
 
 
-    eval_metric_ops = {"length_of_norm_pars": mean_of_norm_pars}
-    eval_metric_ops['length_of_norm_ques'] =  mean_of_norm_ques
-    eval_metric_ops['length_of_norm_recall_pars'] = mean_of_norm_recall_pars
+    eval_metric_ops = {"paragraph_embedding_mean_norm": mean_of_norm_pars}
+    eval_metric_ops['question_embedding_mean_norm'] =  mean_of_norm_ques
+    eval_metric_ops['all_paragraphs_norm'] = mean_of_norm_recall_pars
     eval_metric_ops['avg_recall'] = avg_recall
-    eval_metric_ops['recalls'] = recalls
-    eval_metric_ops['normalized_recalls'] = normalized_recalls
-    eval_metric_ops['question_set_size'] = tf.shape(trained_question_embeddings)[0]
-    eval_metric_ops['paragraph_set_size'] = tf.shape(normalized_paragraphs)[0]
-    eval_metric_ops['paragraph_recall_set_size'] = tf.shape(normalized_recall_paragraphs)[0]
-    eval_metric_ops["top_1_normalized_recall"]= normalized_recalls[0]
-    eval_metric_ops["top_2_normalized_recall"]= normalized_recalls[1]
+    # eval_metric_ops['recalls'] = recalls
+    # eval_metric_ops['normalized_recalls'] = normalized_recalls
+    # eval_metric_ops['question_set_size'] = tf.shape(trained_question_embeddings)[0]
+    # eval_metric_ops['paragraph_set_size'] = tf.shape(normalized_paragraphs)[0]
+    # eval_metric_ops['paragraph_recall_set_size'] = tf.shape(normalized_recall_paragraphs)[0]
+    eval_metric_ops["recall_top_1"]= normalized_recalls[0]
+    eval_metric_ops["recall_top_2"]= normalized_recalls[1]
     eval_metric_ops['loss'] = loss
 
     global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -258,10 +255,10 @@ if __name__ == '__main__':
 
     # ALTERNATIVE OPTIMIZATION 3
     # ---------------------------------------------
-    if params.optimizer == 'Adam':
-        optimizer = tf.train.AdamOptimizer(params.learning_rate)
+    if params.optimizer['name'] == 'Adam':
+        optimizer = tf.train.AdamOptimizer(params.optimizer['learning_rate'])
     else:
-        optimizer = tf.train.GradientDescentOptimizer(params.learning_rate)
+        optimizer = tf.train.GradientDescentOptimizer(params.optimizer['learning_rate'])
     train_op = optimizer.minimize(loss, global_step=global_step)
 
     # # Save the grads with tf.summary.histogram:
@@ -272,7 +269,7 @@ if __name__ == '__main__':
 
     # Merge all summary inforation.
     summary_op = tf.summary.merge_all()
-    summaries_dir = os.path.join(params.log_path, params.model_name, )
+    summaries_dir = os.path.join(params.executor["model_dir"], "low_level_log", params.model["active_model"])
     # start the session
     with tf.Session() as sess:
         sess.run(init_op)
@@ -280,48 +277,43 @@ if __name__ == '__main__':
         test_writer = tf.summary.FileWriter(summaries_dir + '/test')
 
         #TRAINING DATA
-        training_question_embeddings = load_embeddings(file_paths['train_question_embeddings'])
-        training_labels = training_question_embeddings[:, params.embedding_dim:params.embedding_dim+1]
-        training_question_embeddings = training_question_embeddings[:, :params.embedding_dim]
-        training_paragraph_embeddings = load_embeddings(file_paths['train_paragraph_embeddings'])
-
+        training_question_embeddings = load_embeddings(os.path.join(base_data_path, params.files['train_loss']['question_embeddings']))
+        training_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['train_loss']['paragraph_embeddings']))
+        training_labels = load_embeddings(
+            os.path.join(base_data_path, params.files['train_loss']['question_labels']))
+        training_labels = np.reshape(training_labels, [-1, 1])
         # TESTING DATA
-        testing_question_embeddings, testing_paragraph_embeddings = get_question_and_paragraph_embeddings(False, False, file_paths['test_question_embeddings'],file_paths['test_paragraph_embeddings'], params)
-        testing_labels = testing_question_embeddings[:, params.embedding_dim:params.embedding_dim + 1]
-        testing_question_embeddings = testing_question_embeddings[:, :params.embedding_dim]
-        all_paragraph_embeddings_for_recall = load_embeddings(args.paragraph_embeddings_file)
+        testing_question_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_loss']['question_embeddings']))
+        testing_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_loss']['paragraph_embeddings']))
+        all_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['pre_trained_files']['paragraph_embeddings']))
+        testing_labels = load_embeddings(os.path.join(base_data_path, params.files['test_subset_recall']['question_labels']))
+        testing_labels = np.reshape(testing_labels, [-1,1])
 
         # CREATING BATCHES
         all_metrics_for_plot = []
-        total_batch = math.ceil(training_labels.shape[0]/ params.batch_size)
+        total_batch = math.ceil(training_question_embeddings.shape[0]/ params.model['batch_size'])
 
         print("=" * 50)
-        print('::Testing values wthout training:')
+        print('::Testing values without training:')
         print("=" * 50)
-        # tqe = sess.run(trained_question_embeddings, feed_dict={
-        #     questions: testing_question_embeddings,
-        #     paragraphs: testing_paragraph_embeddings,
-        #     labels: testing_labels,
-        #     recall_paragraphs: all_paragraph_embeddings_for_recall,
-        # })
+
         _emo = sess.run(
             eval_metric_ops, feed_dict={
                 questions: testing_question_embeddings,
                 paragraphs: testing_paragraph_embeddings,
                 labels: testing_labels,
-                recall_paragraphs: all_paragraph_embeddings_for_recall,
+                recall_paragraphs: all_paragraph_embeddings,
             })
 
         all_metrics_for_plot.append(trace_metrics(_emo, 0, True, False, True))
-        tf.set_random_seed(params.seed)
+        tf.set_random_seed(params.model['seed'])
         counter = 0
-        for epoch in range(1, params.num_epochs+1):
+        for epoch in range(1, params.model['num_epochs']+1):
             print("*" * 50)
             print("Epoch:", (epoch), "is started with a total batch of {}".format(total_batch))
-            print("Each batch size is {}".format(params.batch_size))
+            print("Each batch size is {}".format(params.model['batch_size']))
 
-            training = list(zip(training_question_embeddings, training_labels, training_paragraph_embeddings))
-            #random.seed(params.seed)
+            training = list(zip(training_question_embeddings, training_labels,  training_paragraph_embeddings))
             random.shuffle(training)
             training_question_embeddings, training_labels, training_paragraph_embeddings = zip(*training)
             training_question_embeddings, training_labels, training_paragraph_embeddings = np.asarray(training_question_embeddings), np.asarray(training_labels), np.asarray(training_paragraph_embeddings)
@@ -330,89 +322,55 @@ if __name__ == '__main__':
                 counter += 1
                 #  ... without sampling from Python and without a feed_dict !
                 batch_training_question_embeddings, batch_training_labels, batch_training_paragraph_embeddings = \
-                    next_batch((i-1)*params.batch_size, params.batch_size,
+                    next_batch((i-1)*params.model['batch_size'], params.model['batch_size'],
                                  training_question_embeddings,
-                                 training_labels,
-                                 training_paragraph_embeddings)
+                                 training_paragraph_embeddings,
+                                 training_labels)
 
-                summary,_, loss_value, new_question_embeddings, _emo= sess.run([summary_op, train_op, loss, trained_question_embeddings, eval_metric_ops], feed_dict={
-                                                questions: batch_training_question_embeddings,
-                                                paragraphs: batch_training_paragraph_embeddings,
-                                                labels: batch_training_labels,
-                                                recall_paragraphs:all_paragraph_embeddings_for_recall,
-                                            })
+                summary,_, loss_value, new_question_embeddings, _emo= sess.run([summary_op,
+                                                                                train_op,
+                                                                                loss,
+                                                                                trained_question_embeddings,
+                                                                                eval_metric_ops],
+                                                                               feed_dict={
+                                                                                questions: batch_training_question_embeddings,
+                                                                                paragraphs: batch_training_paragraph_embeddings,
+                                                                                labels: batch_training_labels,
+                                                                                recall_paragraphs:all_paragraph_embeddings,
+                                                                            })
                 train_writer.add_summary(summary, counter)
                 train_writer.flush()
                 all_metrics_for_plot.append(trace_metrics(_emo, counter, True, True, False))
                 avg_loss_value += loss_value / total_batch
 
                 # We regularly check the loss in each 100 iterations
-                if i % params.eval_step == 0:
-                    print(25 * '-')
-                    # print('::Training values at iter {}::'.format((epoch * i)+1) )
-                    # _ = trace_metrics(_emo, epoch * i, False, True, False)
+                #if i % 100 == 0:
 
-                    # execute the training by feeding batches
+            print(25 * '-')
+            # execute the training by feeding batches
 
-                    print('::Testing values at iter {}::'.format(counter))
-                    summary, _emo = sess.run([summary_op, eval_metric_ops], feed_dict={
-                            questions: testing_question_embeddings,
-                            paragraphs: testing_paragraph_embeddings,
-                            labels: testing_labels,
-                            recall_paragraphs: all_paragraph_embeddings_for_recall,
-                        })
-                    test_writer.add_summary(summary, counter)
-                    train_writer.flush()
-                    all_metrics_for_plot.append(trace_metrics(_emo,counter, True, False, True))
+            print('::Testing values at iter {}::'.format(counter))
+            summary, _emo, new_question_embeddings = sess.run([summary_op, eval_metric_ops, trained_question_embeddings], feed_dict={
+                questions: testing_question_embeddings,
+                paragraphs: testing_paragraph_embeddings,
+                labels: testing_labels,
+                recall_paragraphs: all_paragraph_embeddings,
+            })
+            test_writer.add_summary(summary, counter)
+            train_writer.flush()
+            all_metrics_for_plot.append(trace_metrics(_emo, counter, True, False, True))
+            no, av = sess.run(
+                [normalized_recalls, avg_recall], feed_dict={
+                    questions: new_question_embeddings,
+                    paragraphs: testing_paragraph_embeddings,
+                    labels: testing_labels,
+                    recall_paragraphs: all_paragraph_embeddings,
+                })
 
-            # _emo = sess.run( eval_metric_ops, feed_dict={
-            #         questions: testing_question_embeddings,
-            #         paragraphs: testing_paragraph_embeddings,
-            #         labels: testing_labels,
-            #         recall_paragraphs: all_paragraph_embeddings_for_recall,
-            #     })
-            #
-            # all_metrics_for_plot.append(trace_metrics(_emo,counter, True, False, False))
-
+            print("norm_recall", no)
+            print("av", av)
             print("Epoch:", epoch, "avg loss =", "{:.3f}".format(avg_loss_value))
             print("*" * 50)
-
-        _e = args.question_embeddings_file.rpartition(os.path.sep)
-        path_e = _e[0]
-
-        if args.is_prediction:
-            print('Question embedding are getting prediceted')
-            non_trained_all_questions = load_embeddings(args.question_embeddings_file)
-            trained_all_question_embeddings = sess.run(trained_question_embeddings, feed_dict={
-                questions: non_trained_all_questions
-            })
-
-
-        if args.is_run_metrics:
-            print('Metrics.....')
-            file_name = os.path.join(path_e,"{}_epoch_{}_margin_{}_lr_{}_scaling_factor_{}_l2_reg_{}.csv".format(params.model_name,
-                                                                                                                 params.num_epochs,
-                                                                                                            params.margin,
-                                                                                                            params.learning_rate,
-                                                                                                            params.scaling_factor,
-                                                                                                            params.l2_regularizer))
-            df_metrics = pd.DataFrame(data=all_metrics_for_plot, columns=['indx',
-                                                                          'avg_recall',
-                                                                          'length_of_norm_pars',
-                                                                          'length_of_norm_ques',
-                                                                          'length_of_norm_recall_pars',
-                                                                          'loss',
-                                                                          'normalized_recalls',
-                                                                          'paragraph_recall_set_size',
-                                                                          'paragraph_set_size',
-                                                                          'question_set_size',
-                                                                          'recalls',
-                                                                          'top_1_normalized_recall',
-                                                                          'top_2_normalized_recall',
-                                                                          'mean_of_weights_in_trainable_variable',
-                                                                          'mode'])
-            df_metrics.to_csv(file_name)
-
 
     print('Done')
 

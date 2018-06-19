@@ -4,58 +4,54 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.estimator_dataset as ds
 
-def train_input_fn(question_embeddings_file, paragraph_embeddings_file, params):
+def train_input_fn(base_data_path, params):
     """Train input function for the dataset.
 
     Args:
-        question_embeddings_file: (string) path to the question_embeddings_file
-        paragraph_embeddings_file:  (string) path to the paragraph_embeddings_file
-        params: (Params) contains hyperparameters of the model (ex: `params.num_epochs`)
+        base_data_path: (string) base path for all data
+        params: (Params) contains all the details of the execution including names of the data
     """
-    dataset = ds.get_dataset(question_embeddings_file,
-                             paragraph_embeddings_file,
-                             params.embedding_dim,
+    dataset = ds.get_dataset(os.path.join(base_data_path, params.files['train_loss']['question_embeddings']),
+                             os.path.join(base_data_path, params.files['train_loss']['paragraph_embeddings']),
+                             params.files['pre_trained_files']['embedding_dim'],
                              including_target=True)
-    dataset = dataset.shuffle(params.train_size)  # whole dataset into the buffer
-    dataset = dataset.repeat(params.num_epochs)  # repeat for multiple epochs
-    dataset = dataset.batch(params.batch_size)
+    dataset = dataset.shuffle(params.files['splitter']["train_size"])  # whole dataset into the buffer
+    #dataset = dataset.repeat(1)  # repeat for multiple epochs
+    dataset = dataset.batch(params.model["batch_size"])
     dataset = dataset.prefetch(1)  # make sure you always have one batch ready to serve
     return dataset
 
 
-def test_input_fn(question_embeddings_file, paragraph_embeddings_file, params):
+def test_input_fn(base_data_path, params):
     """Test input function for the dataset.
 
     Args:
-        question_embeddings_file: (string) path to the question_embeddings_file
-        paragraph_embeddings_file:  (string) path to the paragraph_embeddings_file
-        params: (Params) contains hyperparameters of the model (ex: `params.num_epochs`)
+        base_data_path: (string) base path for all data
+        params: (Params) contains all the details of the execution including names of the data
     """
 
-    dataset = ds.get_dataset(question_embeddings_file,
-                             paragraph_embeddings_file,
-                             params.embedding_dim,
+    dataset = ds.get_dataset(os.path.join(base_data_path, params.files['test_subset_loss']['question_embeddings']),
+                             os.path.join(base_data_path, params.files['test_subset_loss']['paragraph_embeddings']),
+                             params.files['pre_trained_files']['embedding_dim'],
                              including_target=True)
-    dataset = dataset.batch(params.batch_size)
+    #dataset = dataset.batch(params.model["batch_size"])
+    dataset = dataset.batch(params.files["splitter"]["test_subset_size"])
     dataset = dataset.prefetch(1)  # make sure you always have one batch ready to serve
     return dataset
 
 
-def live_input_fn(is_cached, question_embeddings, params):
-    """Test input function for the dataset.
+def live_input_fn(base_data_path, params):
+    """Live input function for the dataset.
 
     Args:
-        question_embeddings_file: (string) path to the question_embeddings_file
-        params: (Params) contains hyperparameters of the model (ex: `params.num_epochs`)
+        base_data_path: (string) base path for all data
+        params: (Params) contains all the details of the execution including names of the data
     """
-    if is_cached:
-        dataset = ds.get_dataset_from_cache(question_embeddings)
-    else:
-        dataset = ds.get_dataset(question_embeddings,
-                                 None,
-                                 params.embedding_dim,
-                                 including_target=False)
+    dataset = ds.get_dataset(os.path.join(base_data_path, params.files['pre_trained_files']['question_embeddings']),
+                             None,
+                             params.files['pre_trained_files']['embedding_dim'],
+                             including_target=False)
 
-    dataset = dataset.batch(params.batch_size)
+    dataset = dataset.batch(params.model["batch_size"])
     dataset = dataset.prefetch(1)  # make sure you always have one batch ready to serve
     return dataset

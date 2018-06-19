@@ -25,9 +25,6 @@ class generator:
             for im in hf[self.table_name]:
                 yield im
 
-def get_dataset_from_cache(embeddings):
-    return tf.data.Dataset.from_tensor_slices(embeddings)
-
 def get_dataset(question_embeddings_file,
                 paragraph_embeddings_file,
                 embedding_dim,
@@ -36,7 +33,7 @@ def get_dataset(question_embeddings_file,
     ques_ds = tf.data.Dataset.from_generator(
         generator(question_embeddings_file),
         tf.float32,
-        tf.TensorShape([embedding_dim + 1,]))
+        tf.TensorShape([embedding_dim,]))
 
     if including_target:
         parag_ds = tf.data.Dataset.from_generator(

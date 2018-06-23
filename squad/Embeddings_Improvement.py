@@ -180,9 +180,13 @@ if __name__ == '__main__':
 
     avg_recall = tf.reduce_mean(normalized_recalls)
 
+
+
     tf.summary.scalar("avg_recall", avg_recall)
     tf.summary.scalar("recall_top_1", normalized_recalls[0])
     tf.summary.scalar("recall_top_2", normalized_recalls[1])
+
+
     # ground_truth_euclidean_distances = euclidean_distance_loss(normalized_questions, normalized_paragraphs, params, is_training=False)
     #
     # closest_euclidean_distances = closest_distance(normalized_questions,
@@ -212,8 +216,9 @@ if __name__ == '__main__':
     # -------------------------------------------------------
     tf.losses.add_loss(_loss)
     loss = tf.losses.get_total_loss()
+    loss_over_recall_top_1 = tf.cast(loss, dtype=tf.float64) + tf.keras.backend.epsilon() / normalized_recalls[0]
+    tf.summary.scalar("loss/recall_top_1", loss_over_recall_top_1)
     tf.summary.scalar('loss', loss)
-
 
     eval_metric_ops = {"paragraph_embedding_mean_norm": mean_of_norm_pars}
     eval_metric_ops['question_embedding_mean_norm'] =  mean_of_norm_ques
@@ -227,6 +232,7 @@ if __name__ == '__main__':
     eval_metric_ops["recall_top_1"]= normalized_recalls[0]
     eval_metric_ops["recall_top_2"]= normalized_recalls[1]
     eval_metric_ops['loss'] = loss
+    eval_metric_ops["loss/recall_top_1"] = loss_over_recall_top_1
 
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
@@ -269,7 +275,7 @@ if __name__ == '__main__':
 
     # Merge all summary inforation.
     summary_op = tf.summary.merge_all()
-    summaries_dir = os.path.join(params.executor["model_dir"], "low_level_log", params.model["active_model"])
+    summaries_dir = os.path.join(params.executor["model_dir"], "low_level_log", 'non_est_' + params.model["active_model"])
     # start the session
     with tf.Session() as sess:
         sess.run(init_op)
@@ -285,7 +291,7 @@ if __name__ == '__main__':
         # TESTING DATA
         testing_question_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_loss']['question_embeddings']))
         testing_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_loss']['paragraph_embeddings']))
-        all_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['pre_trained_files']['paragraph_embeddings']))
+        all_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_recall']['paragraph_embeddings']))
         testing_labels = load_embeddings(os.path.join(base_data_path, params.files['test_subset_recall']['question_labels']))
         testing_labels = np.reshape(testing_labels, [-1,1])
 
@@ -314,11 +320,11 @@ if __name__ == '__main__':
             print("Each batch size is {}".format(params.model['batch_size']))
 
             training = list(zip(training_question_embeddings, training_labels,  training_paragraph_embeddings))
-            random.shuffle(training)
+            #random.shuffle(training)
             training_question_embeddings, training_labels, training_paragraph_embeddings = zip(*training)
             training_question_embeddings, training_labels, training_paragraph_embeddings = np.asarray(training_question_embeddings), np.asarray(training_labels), np.asarray(training_paragraph_embeddings)
             avg_loss_value = 0
-            for i in range(1, total_batch):
+            for i in range(1, total_batch+1):
                 counter += 1
                 #  ... without sampling from Python and without a feed_dict !
                 batch_training_question_embeddings, batch_training_labels, batch_training_paragraph_embeddings = \

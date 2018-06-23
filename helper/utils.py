@@ -13,6 +13,8 @@ import tensorflow as tf
 from sklearn.preprocessing import normalize
 from sklearn.metrics.pairwise import euclidean_distances
 import sys
+
+
 class Params():
     """Class that loads hyperparameters from a json file.
 
@@ -72,6 +74,7 @@ def set_logger(log_path):
         stream_handler.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(stream_handler)
 
+
 def define_pre_executions(params, json_path):
     if params.executor['analyze_labels']:
         analysis = analyze_labels(params.files['pre_trained_files']['question_labels'])
@@ -86,6 +89,7 @@ def define_pre_executions(params, json_path):
 
     return params
 
+
 def save_dict_to_json(d, json_path):
     """Saves dict of floats in json file
 
@@ -98,6 +102,7 @@ def save_dict_to_json(d, json_path):
         d = {k: float(v) for k, v in d.items()}
         json.dump(d, f, indent=4)
 
+
 def train_test_splitter(params):
     """ Read the embedding file with its labels and split it train - test
         Args:
@@ -106,8 +111,10 @@ def train_test_splitter(params):
             train_split_rate: rate of the train dataset from whole records
     """
     base_path = os.path.join(params.executor['model_dir'], params.executor['data_dir'])
-    pre_trained_question_embeddings_file = os.path.join(base_path, params.files['pre_trained_files']['question_embeddings'])
-    pre_trained_paragraph_embeddings_file = os.path.join(base_path, params.files['pre_trained_files']['paragraph_embeddings'])
+    pre_trained_question_embeddings_file = os.path.join(base_path,
+                                                        params.files['pre_trained_files']['question_embeddings'])
+    pre_trained_paragraph_embeddings_file = os.path.join(base_path,
+                                                         params.files['pre_trained_files']['paragraph_embeddings'])
     pre_trained_question_labels_file = os.path.join(base_path, params.files['pre_trained_files']['question_labels'])
 
     pre_trained_question_labels = pd.read_csv(pre_trained_question_labels_file)
@@ -122,31 +129,31 @@ def train_test_splitter(params):
 
     labels_as_list = list(range(num_labels))
     shuffle(labels_as_list)
-    #in order to have all the labels in the training set, we need to split them accordingly:
-    train_labels, test_labels= list(), list()
+    # in order to have all the labels in the training set, we need to split them accordingly:
+    train_labels, test_labels = list(), list()
     train_ques_embeddings, train_par_embeddings = list(), list()
     test_ques_embeddings, test_par_embeddings = list(), list()
-    for i in labels_as_list:
-        locations = [_ for _, x in enumerate(pre_trained_question_labels) if x == i]
+    recall_paragraph_embeddings = list()
+    for par_order, par_indx in enumerate(labels_as_list):
+        locations = [_ for _, x in enumerate(pre_trained_question_labels) if x == par_indx]
         shuffle(locations)
         occur = len(locations)
         print(10 * '*')
-        print('For p: {}, we have -> {} qs ---> {}'.format(i, occur, locations))
+        print('For p: {}, we have -> {} qs ---> {}'.format(par_indx, occur, locations))
         for_local_train_size = math.ceil(occur * params.files['splitter']['train_split_rate'])
         for_local_train_locations = locations[0:for_local_train_size]
         for_local_train_labels = list()
         for_local_train_ques_embeddings = list()
         for_local_train_par_embeddings = list()
-
+        recall_paragraph_embeddings.append(paragraph_embeddings[par_indx])
         for _l in for_local_train_locations:
-            for_local_train_labels.append(i)
+            for_local_train_labels.append(par_order)
             for_local_train_ques_embeddings.append(question_embeddings[_l])
-            for_local_train_par_embeddings.append(paragraph_embeddings[i])
+            for_local_train_par_embeddings.append(paragraph_embeddings[par_indx])
         train_labels.extend(for_local_train_labels)
         train_ques_embeddings.extend(for_local_train_ques_embeddings)
         train_par_embeddings.extend(for_local_train_par_embeddings)
         print('Train Size {} ---> {}'.format(for_local_train_size, for_local_train_locations))
-
 
         for_local_test_locations = locations[for_local_train_size:]
         for_local_test_size = len(for_local_test_locations)
@@ -154,16 +161,16 @@ def train_test_splitter(params):
         for_local_test_ques_embeddings = list()
         for_local_test_par_embeddings = list()
         for _l in for_local_test_locations:
-            for_local_test_labels.append(i)
+            for_local_test_labels.append(par_order)
             for_local_test_ques_embeddings.append(question_embeddings[_l])
-            for_local_test_par_embeddings.append(paragraph_embeddings[i])
+            for_local_test_par_embeddings.append(paragraph_embeddings[par_indx])
 
         test_labels.extend(for_local_test_labels)
         test_ques_embeddings.extend(for_local_test_ques_embeddings)
         test_par_embeddings.extend(for_local_test_par_embeddings)
         print('Test Size {} ---> {}'.format(for_local_test_size, for_local_test_locations))
 
-    #assert num_labels == len(set(test_labels)), "Actual Num of Labels: {} vs Test Num of Labels {}".format(num_labels, len(set(test_labels)))
+    # assert num_labels == len(set(test_labels)), "Actual Num of Labels: {} vs Test Num of Labels {}".format(num_labels, len(set(test_labels)))
 
     train = list(zip(train_ques_embeddings, train_labels, train_par_embeddings))
     test = list(zip(test_ques_embeddings, test_labels, test_par_embeddings))
@@ -171,8 +178,15 @@ def train_test_splitter(params):
     random.shuffle(train)
     random.shuffle(test)
     train_ques_embeddings, train_labels, train_par_embeddings = zip(*train)
-    test_ques_embeddings, test_labels, test_par_embeddings= zip(*test)
+    test_ques_embeddings, test_labels, test_par_embeddings = zip(*test)
 
+    # Creating sample paragraphs:
+
+    recall_paragraph_embedding_file = 'recall_' + params.files['pre_trained_files']['paragraph_embeddings']
+    recall_paragraph_embeddings = np.asarray(recall_paragraph_embeddings)
+
+    dump_embeddings(recall_paragraph_embeddings,
+                    os.path.join(base_path, recall_paragraph_embedding_file))
     # Creating test/train datasets
     train_ques_embeddings = np.asarray(train_ques_embeddings)
     dump_embeddings(train_ques_embeddings, os.path.join(base_path, params.files['train_loss']['question_embeddings']))
@@ -190,27 +204,27 @@ def train_test_splitter(params):
 
     # Creating a subset test set from the test set
     random.shuffle(test)
-    subset_test = test[:params.files['splitter']['test_subset_size']]
-    subset_test_ques_embeddings, subset_test_labels, subset_test_par_embeddings = zip(*subset_test)
-    subset_test_ques_embeddings_file = params.files['subset_file_format']['question_embeddings'].format(params.files['splitter']['test_subset_size'])
-    subset_test_par_embeddings_file = params.files['subset_file_format']['paragraph_embeddings'].format(params.files[
-                                                                                                             'splitter'][
-                                                                                                             'test_subset_size'])
-    subset_test_ques_label_file = params.files['subset_file_format']['question_labels'].format(params.files[
-                                                                                                             'splitter'][
-                                                                                                             'test_subset_size'])
+    if params.executor['limit_paragraph_size'] is not None:
+        number_of_files_for_test = range(1, params.files['splitter']['test_subset_size'] + 1)
+    else:
+        number_of_files_for_test = [params.files['splitter']['test_subset_size']]
+    for _size in number_of_files_for_test:
+        subset_test = test[:_size]
+        subset_test_ques_embeddings, subset_test_labels, subset_test_par_embeddings = zip(*subset_test)
+        subset_test_ques_embeddings_file = params.files['subset_file_format']['question_embeddings'].format(_size)
+        subset_test_par_embeddings_file = params.files['subset_file_format']['paragraph_embeddings'].format(_size)
+        subset_test_ques_label_file = params.files['subset_file_format']['question_labels'].format(_size)
 
-    subset_test_ques_embeddings = np.asarray(subset_test_ques_embeddings)
-    dump_embeddings(subset_test_ques_embeddings, os.path.join(base_path, subset_test_ques_embeddings_file))
-    subset_test_labels = np.asarray(subset_test_labels)
-    dump_embeddings(subset_test_labels, os.path.join(base_path, subset_test_ques_label_file),dtype="int32")
-    subset_test_par_embeddings = np.asarray(subset_test_par_embeddings)
-    dump_embeddings(subset_test_par_embeddings, os.path.join(base_path, subset_test_par_embeddings_file))
-
+        subset_test_ques_embeddings = np.asarray(subset_test_ques_embeddings)
+        dump_embeddings(subset_test_ques_embeddings, os.path.join(base_path, subset_test_ques_embeddings_file))
+        subset_test_labels = np.asarray(subset_test_labels)
+        dump_embeddings(subset_test_labels, os.path.join(base_path, subset_test_ques_label_file), dtype="int32")
+        subset_test_par_embeddings = np.asarray(subset_test_par_embeddings)
+        dump_embeddings(subset_test_par_embeddings, os.path.join(base_path, subset_test_par_embeddings_file))
 
     # update params for new values
     params.files['test_subset_recall']['question_embeddings'] = subset_test_ques_embeddings_file
-    params.files['test_subset_recall']['paragraph_embeddings'] = params.files['pre_trained_files']['paragraph_embeddings']
+    params.files['test_subset_recall']['paragraph_embeddings'] = recall_paragraph_embedding_file
     params.files['test_subset_recall']['question_labels'] = subset_test_ques_label_file
 
     params.files['test_subset_loss']['question_embeddings'] = subset_test_ques_embeddings_file
@@ -228,6 +242,7 @@ def load_embeddings(infile_to_get):
         document_embeddings = fin['embeddings'][...]
     return document_embeddings
 
+
 def dump_embeddings(embeddings, outfile_to_dump, dtype="float32"):
     with h5py.File(outfile_to_dump, 'w') as fout:
         ds = fout.create_dataset(
@@ -235,6 +250,8 @@ def dump_embeddings(embeddings, outfile_to_dump, dtype="float32"):
             embeddings.shape, dtype=dtype,
             data=embeddings
         )
+
+
 def analyze_labels(labels_file):
     _labels = pd.read_csv(labels_file)
     analysis = dict()
@@ -245,36 +262,42 @@ def analyze_labels(labels_file):
 
     counts_lower_than = 'counts_lower_than_' + str(int(analysis['mean_of_count']))
     df_counts_lower_than = df_with_count_of_labels[df_with_count_of_labels['count'] < int(analysis['mean_of_count'])]
-    analysis[counts_lower_than] = (df_counts_lower_than.shape[0], 100 * (df_counts_lower_than .shape[0] /
+    analysis[counts_lower_than] = (df_counts_lower_than.shape[0], 100 * (df_counts_lower_than.shape[0] /
                                                                          df_with_count_of_labels.shape[0]))
 
-    counts_between= 'counts_between_' + str(int(analysis['mean_of_count'])) + '_' + str(math.ceil(analysis['mean_of_count']))
-    df_counts_between= df_with_count_of_labels[(df_with_count_of_labels['count'] >= int(analysis['mean_of_count'])) & (df_with_count_of_labels['count'] <= math.ceil(analysis['mean_of_count']))]
+    counts_between = 'counts_between_' + str(int(analysis['mean_of_count'])) + '_' + str(
+        math.ceil(analysis['mean_of_count']))
+    df_counts_between = df_with_count_of_labels[(df_with_count_of_labels['count'] >= int(analysis['mean_of_count'])) & (
+                df_with_count_of_labels['count'] <= math.ceil(analysis['mean_of_count']))]
 
     analysis[counts_between] = (df_counts_between.shape[0], 100 * (df_counts_between.shape[0] /
-                                                                         df_with_count_of_labels.shape[0]))
+                                                                   df_with_count_of_labels.shape[0]))
 
     counts_greater = 'counts_greater_than_' + str(math.ceil(analysis['mean_of_count']))
-    df_counts_greater_than = df_with_count_of_labels[df_with_count_of_labels['count'] > math.ceil(analysis['mean_of_count'])]
+    df_counts_greater_than = df_with_count_of_labels[
+        df_with_count_of_labels['count'] > math.ceil(analysis['mean_of_count'])]
 
-    analysis[counts_greater ] =(df_counts_greater_than.shape[0], 100 * (df_counts_greater_than.shape[0] /
-                                                                         df_with_count_of_labels.shape[0]))
+    analysis[counts_greater] = (df_counts_greater_than.shape[0], 100 * (df_counts_greater_than.shape[0] /
+                                                                        df_with_count_of_labels.shape[0]))
 
     counts_equal_to_lower = 'counts_equal_to_' + str(int(analysis['mean_of_count']))
     df_counts_equal_to_lower = df_with_count_of_labels[
         df_with_count_of_labels['count'] == int(analysis['mean_of_count'])]
     analysis[counts_equal_to_lower] = (df_counts_equal_to_lower.shape[0], 100 * (df_counts_equal_to_lower.shape[0] /
-                                                                          df_counts_between.shape[0]))
+                                                                                 df_counts_between.shape[0]))
 
     counts_equal_to_higher = 'counts_equal_to_' + str(math.ceil(analysis['mean_of_count']))
     df_counts_equal_to_higher = df_with_count_of_labels[
         df_with_count_of_labels['count'] == math.ceil(analysis['mean_of_count'])]
     analysis[counts_equal_to_higher] = (df_counts_equal_to_higher.shape[0], 100 * (df_counts_equal_to_higher.shape[0] /
-                                                                                 df_counts_between.shape[0]))
+                                                                                   df_counts_between.shape[0]))
 
-    #ideal_number_of_paragraphs_for_each_question_for_debug
-    analysis['K'] = int(analysis['mean_of_count']) if analysis[counts_equal_to_lower] > analysis[counts_equal_to_higher] else math.ceil(analysis['mean_of_count'])
+    # ideal_number_of_paragraphs_for_each_question_for_debug
+    analysis['K'] = int(analysis['mean_of_count']) if analysis[counts_equal_to_lower] > analysis[
+        counts_equal_to_higher] else math.ceil(analysis['mean_of_count'])
     return analysis
+
+
 def dump_mapping_data(data, outfile_to_dump):
     data_df = pd.DataFrame(np.array(data), columns=list("p"))
     data_df.to_csv(outfile_to_dump)
@@ -362,7 +385,6 @@ def calculate_recalls(questions, paragraphs, labels, params, k=None, extract_typ
             final_equals_non_zero = tf.squeeze(
                 tf.count_nonzero(casted_equal, axis=2, name='sq_top_k_{}'.format(_k)))
 
-
             total_founds_in_k = tf.reduce_sum(final_equals_non_zero)
             recalls.append(total_founds_in_k)
 
@@ -370,27 +392,28 @@ def calculate_recalls(questions, paragraphs, labels, params, k=None, extract_typ
 
     return recalls, (recalls / number_of_questions)
 
+
 def next_batch(begin_indx, batch_size, questions, paragraphs, labels):
     '''
     Return a total of `num` random samples and labels.
     '''
-    if begin_indx+batch_size <= questions.shape[0]:
-        idx = np.arange(begin_indx, begin_indx+batch_size)
+    if begin_indx + batch_size <= questions.shape[0]:
+        idx = np.arange(begin_indx, begin_indx + batch_size)
     else:
         idx = np.arange(begin_indx, questions.shape[0])
-    np.random.shuffle(idx)
+    # np.random.shuffle(idx)
     questions = questions[idx]
     labels = labels[idx]
     paragraphs = paragraphs[idx]
 
     return questions, labels, paragraphs
 
+
 def get_question_and_paragraph_embeddings(is_cached_question,
                                           is_cached_paragraph,
                                           question_embeddings,
                                           paragraph_embeddings,
                                           params):
-
     if not is_cached_question:
         _q = load_embeddings(question_embeddings)
     else:
@@ -405,11 +428,11 @@ def get_question_and_paragraph_embeddings(is_cached_question,
     qidx = random.sample(range(_q.shape[0]), params.eval_question_size_for_recall)
     _q = _q[qidx]
     _p = _p[qidx]
-    #questions = tf.constant(_q)
+    # questions = tf.constant(_q)
     return _q, _p
 
-def closest_distance(batch, paragraph_embeddings, input_type='p2p', score_type='cos'):
 
+def closest_distance(batch, paragraph_embeddings, input_type='p2p', score_type='cos'):
     sub_set_ = batch
 
     if score_type == 'euclidean':
@@ -425,20 +448,21 @@ def closest_distance(batch, paragraph_embeddings, input_type='p2p', score_type='
         dist = pairwise_cosine_sim(sub_set_, actual_set)
         if input_type == 'p2p':
             k = 2
-        else: #type == 'q2p':
+        else:  # type == 'q2p':
             k = 1
         top_k = tf.nn.top_k(dist, k=k, name='top_k_{}'.format(1))
-        values = tf.reshape(tf.reduce_max(top_k.values, axis=2),shape=[tf.shape(sub_set_)[1], 1])
+        values = tf.reshape(tf.reduce_max(top_k.values, axis=2), shape=[tf.shape(sub_set_)[1], 1])
         if input_type == 'p2p':
             par_indices = tf.reshape(tf.squeeze(top_k.indices[:, :, 1]), shape=[-1, 1])
         else:  # type == 'q2p':
             par_indices = tf.reshape(tf.squeeze(top_k.indices), shape=[-1, 1])
-        scores = tf.reshape(tf.squeeze(values), shape=[-1,1])
+        scores = tf.reshape(tf.squeeze(values), shape=[-1, 1])
 
     return scores, par_indices
 
 
-def question_to_closest_distance(question_embeddings, paragraph_embeddings, batch_size, sess, closest_distance_op, question_tensor, paragraph_tensor):
+def question_to_closest_distance(question_embeddings, paragraph_embeddings, batch_size, sess, closest_distance_op,
+                                 question_tensor, paragraph_tensor):
     iter_size = math.ceil(question_embeddings.shape[0] / batch_size)
     distances = np.array([])
     distances = distances.reshape(-1, 1)
@@ -447,7 +471,7 @@ def question_to_closest_distance(question_embeddings, paragraph_embeddings, batc
         end = start + batch_size
         ques = question_embeddings[start:end]
 
-        batch_distances,par_indices = sess.run(closest_distance_op, feed_dict={
+        batch_distances, par_indices = sess.run(closest_distance_op, feed_dict={
             question_tensor: ques,
             paragraph_tensor: paragraph_embeddings,
         })
@@ -458,8 +482,9 @@ def question_to_closest_distance(question_embeddings, paragraph_embeddings, batc
     return distances
 
 
-def question_to_ground_truth_distance(question_embeddings, paragraph_embeddings, batch_size,  sess, euclidean_distance_op, question_tensor,
-                        paragraph_tensor):
+def question_to_ground_truth_distance(question_embeddings, paragraph_embeddings, batch_size, sess,
+                                      euclidean_distance_op, question_tensor,
+                                      paragraph_tensor):
     iter_size = math.ceil(question_embeddings.shape[0] / batch_size)
     distances = np.array([])
     distances = distances.reshape(-1, 1)
@@ -469,7 +494,7 @@ def question_to_ground_truth_distance(question_embeddings, paragraph_embeddings,
         ques = question_embeddings[start:end]
         pars = paragraph_embeddings[start:end]
 
-        batch_distances= sess.run(euclidean_distance_op, feed_dict={
+        batch_distances = sess.run(euclidean_distance_op, feed_dict={
             question_tensor: ques,
             paragraph_tensor: pars,
         })
@@ -477,8 +502,10 @@ def question_to_ground_truth_distance(question_embeddings, paragraph_embeddings,
     distances = distances.reshape(-1, 1)
     return distances
 
-def question_to_random_paragraph_distance(question_embeddings, paragraph_embeddings, batch_size,  sess, euclidean_distance_op, question_tensor,
-                        paragraph_tensor):
+
+def question_to_random_paragraph_distance(question_embeddings, paragraph_embeddings, batch_size, sess,
+                                          euclidean_distance_op, question_tensor,
+                                          paragraph_tensor):
     iter_size = math.ceil(question_embeddings.shape[0] / batch_size)
     np.random.shuffle(paragraph_embeddings)
     distances = np.array([])
@@ -489,13 +516,14 @@ def question_to_random_paragraph_distance(question_embeddings, paragraph_embeddi
         ques = question_embeddings[start:end]
         pars = paragraph_embeddings[start:end]
         np.random.shuffle(pars)
-        batch_distances= sess.run(euclidean_distance_op, feed_dict={
+        batch_distances = sess.run(euclidean_distance_op, feed_dict={
             question_tensor: ques,
             paragraph_tensor: pars,
         })
         distances = np.append(distances, batch_distances)
     distances = distances.reshape(-1, 1)
     return distances
+
 
 def list_slice(tensor, indices, axis):
     """
@@ -512,17 +540,61 @@ def list_slice(tensor, indices, axis):
     # Set any unknown dimensions to -1, so that reshape can infer it correctly.
     # Set the dimension in the slice direction to be 1, so that overall dimensions are preserved during the operation
     shape = tensor.get_shape().as_list()
-    shape[shape==None] = -1
+    shape[shape == None] = -1
     shape[axis] = 1
 
     nd = len(shape)
 
     for i in indices:
-        _slice = [slice(None)]*nd
-        _slice[axis] = slice(i,i+1)
+        _slice = [slice(None)] * nd
+        _slice[axis] = slice(i, i + 1)
         slices.append(tf.reshape(tensor[_slice], shape))
 
     return tf.concat(slices, axis=axis)
 
+
 def get_variable_name_as_str(variable):
     return [k for k, v in locals().items() if v == variable][0]
+
+
+def create_execution_name(params):
+    model_name = params.model['active_model']
+    model_params = params.model[model_name]
+    num_epoch = "epoch_{}".format(params.model["num_epochs"])
+    learning_rate = "lr_{}".format(params.optimizer["learning_rate"])
+    margin = "mar_{}".format(params.loss['margin'])
+    keep_prob = "keep"
+    weight_decay = "wd"
+    embedding_dim = "dim"
+    scaling_factor = "sf"
+    init_seed = "seed"
+    if type(model_params) is dict:
+        model_params = [model_params]
+    for indx, layers in enumerate(model_params):
+        try:
+            embedding_dim = embedding_dim + "_" + str(layers["fc_relu_embedding_dim"])
+        except:
+            embedding_dim = embedding_dim + "_" + str(layers["embedding_dim"])
+
+        try:
+            keep_prob = keep_prob + "_" + str(layers['keep_prob'])
+        except:
+            keep_prob = keep_prob + "_no"
+
+        init_seed = init_seed + "_" + str(layers['initializer_seed']) if layers['initializer_seed'] is not None else "no"
+        weight_decay = weight_decay + "_" + str(layers['weight_decay'])
+        scaling_factor = scaling_factor + "_" + str(layers['scaling_factor'])
+
+    layers = "layers_{}".format(len(model_params))
+
+    execution_name = "{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(model_name,
+                                       layers,
+                                       num_epoch,
+                                       margin,
+                                       scaling_factor,
+                                       weight_decay,
+                                          learning_rate,
+                                          embedding_dim,
+                                          keep_prob,
+                                          init_seed)
+    return execution_name

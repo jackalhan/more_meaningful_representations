@@ -3,7 +3,7 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.estimator_dataset as ds
-
+import tensorflow as tf
 def train_input_fn(base_data_path, params):
     """Train input function for the dataset.
 
@@ -15,7 +15,8 @@ def train_input_fn(base_data_path, params):
                              os.path.join(base_data_path, params.files['train_loss']['paragraph_embeddings']),
                              params.files['pre_trained_files']['embedding_dim'],
                              including_target=True)
-    dataset = dataset.shuffle(params.files['splitter']["train_size"])  # whole dataset into the buffer
+    if params.model["shuffle"]:
+        dataset = dataset.shuffle(params.files['splitter']["train_size"])  # whole dataset into the buffer
     #dataset = dataset.repeat(1)  # repeat for multiple epochs
     dataset = dataset.batch(params.model["batch_size"])
     dataset = dataset.prefetch(1)  # make sure you always have one batch ready to serve
@@ -34,7 +35,6 @@ def test_input_fn(base_data_path, params):
                              os.path.join(base_data_path, params.files['test_subset_loss']['paragraph_embeddings']),
                              params.files['pre_trained_files']['embedding_dim'],
                              including_target=True)
-    #dataset = dataset.batch(params.model["batch_size"])
     dataset = dataset.batch(params.files["splitter"]["test_subset_size"])
     dataset = dataset.prefetch(1)  # make sure you always have one batch ready to serve
     return dataset

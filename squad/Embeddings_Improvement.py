@@ -291,7 +291,7 @@ if __name__ == '__main__':
         # TESTING DATA
         testing_question_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_loss']['question_embeddings']))
         testing_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_loss']['paragraph_embeddings']))
-        all_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_recall']['paragraph_embeddings']))
+        all_paragraph_embeddings = load_embeddings(os.path.join(base_data_path, params.files['test_subset_recall']['all_paragraph_embeddings']))
         testing_labels = load_embeddings(os.path.join(base_data_path, params.files['test_subset_recall']['question_labels']))
         testing_labels = np.reshape(testing_labels, [-1,1])
 

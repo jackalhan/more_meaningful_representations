@@ -47,7 +47,7 @@ def live_input_fn(base_data_path, params):
         base_data_path: (string) base path for all data
         params: (Params) contains all the details of the execution including names of the data
     """
-    dataset = ds.get_dataset(os.path.join(base_data_path, params.files['pre_trained_files']['question_embeddings']),
+    dataset = ds.get_dataset(os.path.join(base_data_path, params.files['prediction']['question_embeddings']),
                              None,
                              params.files['pre_trained_files']['embedding_dim'],
                              including_target=False)
@@ -55,3 +55,4 @@ def live_input_fn(base_data_path, params):
     dataset = dataset.batch(params.model["batch_size"])
     dataset = dataset.prefetch(1)  # make sure you always have one batch ready to serve
     return dataset
+

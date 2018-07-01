@@ -10,10 +10,15 @@ import math
 import os
 from random import shuffle
 import tensorflow as tf
+import shutil
 from sklearn.preprocessing import normalize
 from sklearn.metrics.pairwise import euclidean_distances
 import sys
-
+import pickle
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import shelve
 
 class Params():
     """Class that loads hyperparameters from a json file.
@@ -75,19 +80,28 @@ def set_logger(log_path):
         logger.addHandler(stream_handler)
 
 
-def define_pre_executions(params, json_path):
+def define_pre_executions(params, json_path, base_data_path):
+    model_save_path = os.path.join(params.executor['model_dir'], params.executor['save_dir'],
+                                   create_execution_name(params))
     if params.executor['analyze_labels']:
         analysis = analyze_labels(params.files['pre_trained_files']['question_labels'])
         print(analysis)
 
     else:
         if params.executor["split_train_set"]:
-            params = train_test_splitter(params)
+            params = train_test_splitter(params, base_data_path)
 
             params.save(json_path)
             print('Done with splitting')
-
-    return params
+        if not params.executor["is_prediction"]:
+            if not params.executor["is_training_resume"]:
+                try:
+                    shutil.rmtree(model_save_path)
+                except:
+                    pass
+        else:
+            model_save_path = os.path.join(params.executor['model_dir'], params.executor['save_dir'], params.executor['pre_trained_model_name'])
+    return params, model_save_path
 
 
 def save_dict_to_json(d, json_path):
@@ -103,14 +117,13 @@ def save_dict_to_json(d, json_path):
         json.dump(d, f, indent=4)
 
 
-def train_test_splitter(params):
+def train_test_splitter(params, base_path):
     """ Read the embedding file with its labels and split it train - test
         Args:
             embeddings_file: embeddings_file path
             label_file: labels file path
             train_split_rate: rate of the train dataset from whole records
     """
-    base_path = os.path.join(params.executor['model_dir'], params.executor['data_dir'])
     pre_trained_question_embeddings_file = os.path.join(base_path,
                                                         params.files['pre_trained_files']['question_embeddings'])
     pre_trained_paragraph_embeddings_file = os.path.join(base_path,
@@ -352,7 +365,7 @@ def pairwise_euclidean_distances(A, B):
     return D
 
 
-def calculate_recalls(questions, paragraphs, labels, params, k=None, extract_type=1):
+def calculate_recalls(questions, paragraphs, labels, params, k=None, distance_type='cosine'):
     """
      question [n x d] tensor of n rows with d dimensions
      paragraphs [m x d] tensor of n rows with d dimensions
@@ -362,36 +375,64 @@ def calculate_recalls(questions, paragraphs, labels, params, k=None, extract_typ
      """
 
     recalls = []  # tf.zeros([len(params.recall_top_k), 1], tf.float32)
-
-    # in order to support batch_size feature, we expanded dims for 1
-    paragraphs = tf.expand_dims(paragraphs, axis=0)
-    labels = tf.expand_dims(labels, axis=0)
-    questions = tf.expand_dims(questions, axis=0)
-    number_of_questions = tf.to_int64(tf.shape(questions)[1])
-    # now question, paragraphs pairwise calculation
-    distances = pairwise_cosine_sim(questions, paragraphs)
+    if distance_type == 'cosine':
+        questions, labels, paragraphs, scores = pairwise_expanded_cosine_similarities(questions, labels, paragraphs)
+        number_of_questions = tf.to_int64(tf.shape(questions)[1])
+    else:
+        scores= pairwise_euclidean_distances(questions, paragraphs)
+        number_of_questions = tf.to_int64(tf.shape(questions)[0])
     for _k in [k] if k is not None else params.recall:
         with tf.name_scope('top_k_{}'.format(_k)) as k_scope:
-            # find the top_k paragraphs for each question
-            top_k = tf.nn.top_k(distances, k=_k, name='top_k_top_k_{}'.format(_k))
-
-            # is groundtruth label is in these top_k paragraph
-            equals = tf.equal(top_k.indices, labels, name='equal_top_k_{}'.format(_k))
-
-            # cast the equals to int32 to count the non zero ones because if it is equal,
-            # there is only one 1 for each question among paragraphs,
-            # then label is in top k
-            casted_equal = tf.cast(equals, dtype=tf.int32, name='casted_equal_top_k_{}'.format(_k))
-            final_equals_non_zero = tf.squeeze(
-                tf.count_nonzero(casted_equal, axis=2, name='sq_top_k_{}'.format(_k)))
-
-            total_founds_in_k = tf.reduce_sum(final_equals_non_zero)
+            founds, _, __ = calculate_recall_top_k(scores, labels, _k, distance_type)
+            total_founds_in_k = tf.reduce_sum(founds, name='{}_reduce_sum'.format(_k))
             recalls.append(total_founds_in_k)
 
     recalls = tf.stack(recalls)
 
     return recalls, (recalls / number_of_questions)
 
+def pairwise_expanded_cosine_similarities(questions, labels, paragraphs):
+    # in order to support batch_size feature, we expanded dims for 1
+    paragraphs = tf.expand_dims(paragraphs, axis=0)
+    labels = tf.expand_dims(labels, axis=0)
+    questions = tf.expand_dims(questions, axis=0)
+    # now question, paragraphs pairwise calculation
+    cosine_similarities = pairwise_cosine_sim(questions, paragraphs)
+    return questions, labels, paragraphs, cosine_similarities
+
+def calculate_recall_top_k(scores, labels, k, distance_type = 'cosine'):
+
+
+    if distance_type == 'cosine':
+        axis = 2
+    else:
+        scores = tf.negative(scores)
+        axis = 1
+
+    # find the top_k paragraphs for each question
+    top_k = tf.nn.top_k(scores, k=k, name='top_k_top_k_{}'.format(k))
+
+    # is groundtruth label is in these top_k paragraph
+    equals = tf.equal(top_k.indices, labels, name='equal_top_k_{}'.format(k))
+
+    # cast the equals to int32 to count the non zero ones because if it is equal,
+    # there is only one 1 for each question among paragraphs,
+    # then label is in top k
+    casted_equal = tf.cast(equals, dtype=tf.int32, name='casted_equal_top_k_{}'.format(k))
+    founds = tf.squeeze(
+        tf.count_nonzero(casted_equal, axis=axis, name='sq_top_k_{}'.format(k)))
+
+    if distance_type == 'cosine':
+        closest_labels = tf.squeeze(top_k.indices, axis=0)
+        distances = tf.squeeze(top_k.values, axis=0)
+        labels = tf.squeeze(labels, axis=0)
+    else:
+        closest_labels = top_k.indices
+        distances = tf.negative(top_k.values)
+
+    tmp_indices = tf.where(tf.equal(closest_labels, labels))
+    found_orders = tf.segment_min(tmp_indices[:, 1], tmp_indices[:, 0])
+    return founds,closest_labels, distances
 
 def next_batch(begin_indx, batch_size, questions, paragraphs, labels):
     '''
@@ -598,3 +639,58 @@ def create_execution_name(params):
                                           keep_prob,
                                           init_seed)
     return execution_name
+
+
+def plot_tensorflow_log(path, metric_name):
+
+    # Loading too much data is slow...
+    tf_size_guidance = {
+        'compressedHistograms': 10,
+        'images': 0,
+        'scalars': 100,
+        'histograms': 1
+    }
+
+    event_acc = EventAccumulator(path, tf_size_guidance)
+    event_acc.Reload()
+
+    # Show all tags in the log file
+    #print(event_acc.Tags())
+
+    training_accuracies =   event_acc.Scalars(metric_name)
+    validation_accuracies = event_acc.Scalars(metric_name)
+
+    steps = 10
+    x = np.arange(steps)
+    y = np.zeros([steps, 2])
+
+    for i in range(steps):
+        y[i, 0] = training_accuracies[i][2] # value
+        y[i, 1] = validation_accuracies[i][2]
+
+    plt.plot(x, y[:,0], label=metric_name)
+    plt.plot(x, y[:,1], label=metric_name)
+
+    plt.xlabel("Steps")
+    plt.ylabel("Accuracy")
+    plt.title("Training Progress")
+    plt.legend(loc='upper right', frameon=True)
+    plt.show()
+
+def save_as_pickle(obj, path):
+    with open(path, 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+
+def load_from_pickle(path):
+    with open(path, 'rb') as f:
+        return pickle.load(f)
+
+def save_as_shelve(obj, path):
+    with shelve.open(path) as myShelve:
+        myShelve.update(obj)
+
+def load_from_shelve(path):
+    obj = None
+    with shelve.open(path) as myShelve:
+        obj = myShelve
+    return obj

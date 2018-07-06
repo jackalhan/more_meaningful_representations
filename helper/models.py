@@ -22,9 +22,6 @@ def model_1(input, params):
     conf = params.model["model_1"]
 
     with tf.variable_scope('fc'):
-
-        #conv_layer = tf.c
-
         fc_linear = tf.contrib.layers.fully_connected(
             input,
             conf['embedding_dim'],
@@ -48,10 +45,44 @@ def model_2(input, params):
 
     conf = params.model["model_2"]
     _in_out = input
+
     for i, block_conf in enumerate(conf):
         _in_out = residual_block(_in_out, block_conf, "res_block_{}".format(i))
     return _in_out
 
+def model_3(input, params):
+    # Define the model
+    tf.logging.info("Creating the {}...".format(model_3.__name__))
+
+    conf = params.model["model_3"]
+
+    with tf.variable_scope('fc'):
+        input_ = tf.reshape(input, (-1, 128, 8))
+        conv1 = tf.layers.conv1d(inputs=input_, filters=16, kernel_size=2, strides=1,
+                                 padding='same', activation=tf.nn.relu)
+        max_pool_1 = tf.layers.max_pooling1d(inputs=conv1, pool_size=2, strides=2, padding='same')
+
+        conv2 = tf.layers.conv1d(inputs=max_pool_1, filters=32, kernel_size=2, strides=1,
+                                 padding='same', activation=tf.nn.relu)
+        max_pool_2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2, padding='same')
+
+        flat = tf.reshape(max_pool_2, (-1, 32 * 32))
+
+        fc_linear = tf.contrib.layers.fully_connected(
+            flat,
+            conf['embedding_dim'],
+            activation_fn=None,
+            weights_initializer=tf.truncated_normal_initializer(seed=conf['initializer_seed'],
+                                                                stddev=0.1),
+            weights_regularizer=tf.contrib.layers.l2_regularizer(conf['weight_decay']),
+            biases_initializer=tf.zeros_initializer(),
+            trainable=True,
+            scope='linear'
+        )
+
+        output = tf.add(fc_linear * conf['scaling_factor'], input, name='linear_add')
+
+    return output
 
 def residual_block(input, conf, scope):
     with tf.variable_scope(scope):

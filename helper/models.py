@@ -66,7 +66,15 @@ def model_3(input, params):
                                  padding='same', activation=tf.nn.relu)
         max_pool_2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2, padding='same')
 
-        flat = tf.reshape(max_pool_2, (-1, 32 * 32))
+        conv3 = tf.layers.conv1d(inputs=max_pool_2, filters=64, kernel_size=2, strides=1,
+                                 padding='same', activation=tf.nn.relu)
+        max_pool_3 = tf.layers.max_pooling1d(inputs=conv3, pool_size=2, strides=2, padding='same')
+
+        conv4= tf.layers.conv1d(inputs=max_pool_3, filters=128, kernel_size=2, strides=1,
+                                 padding='same', activation=tf.nn.relu)
+        max_pool_4 = tf.layers.max_pooling1d(inputs=conv4, pool_size=2, strides=2, padding='same')
+
+        flat = tf.reshape(max_pool_4, (-1, 32 * 32))
 
         fc_linear = tf.contrib.layers.fully_connected(
             flat,

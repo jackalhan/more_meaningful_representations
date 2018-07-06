@@ -22,6 +22,9 @@ def model_1(input, params):
     conf = params.model["model_1"]
 
     with tf.variable_scope('fc'):
+
+        #conv_layer = tf.c
+
         fc_linear = tf.contrib.layers.fully_connected(
             input,
             conf['embedding_dim'],
@@ -48,6 +51,7 @@ def model_2(input, params):
     for i, block_conf in enumerate(conf):
         _in_out = residual_block(_in_out, block_conf, "res_block_{}".format(i))
     return _in_out
+
 
 def residual_block(input, conf, scope):
     with tf.variable_scope(scope):

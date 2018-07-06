@@ -15,31 +15,40 @@
 
 import h5py
 import tensorflow as tf
-
+import numpy as np
 class generator:
-    def __init__(self, file, table_name='embeddings'):
+    def __init__(self, file, additional_file, table_name='embeddings'):
         self.file = file
+        self.additional_file = additional_file
         self.table_name = table_name
     def __call__(self):
-        with h5py.File(self.file, 'r') as hf:
-            for im in hf[self.table_name]:
-                yield im
+        if self.additional_file is None:
+            with h5py.File(self.file, 'r') as hf:
+                for im in hf[self.table_name]:
+                    yield im
+        else:
+            with h5py.File(self.file, 'r') as hf, h5py.File(self.additional_file, 'r') as af:
+                af_ = np.reshape(af['embeddings'], [-1, 1])
+                x = np.hstack((hf['embeddings'], af_))
+                for im in x:
+                    yield im
 
 def get_dataset(question_embeddings_file,
+                question_labels_file,
                 paragraph_embeddings_file,
                 embedding_dim,
                 including_target=True):
 
     ques_ds = tf.data.Dataset.from_generator(
-        generator(question_embeddings_file),
+        generator(question_embeddings_file, additional_file=None),
         tf.float32,
         tf.TensorShape([embedding_dim,]))
 
     if including_target:
         parag_ds = tf.data.Dataset.from_generator(
-            generator(paragraph_embeddings_file),
+            generator(paragraph_embeddings_file, additional_file=question_labels_file),
             tf.float32,
-            tf.TensorShape([embedding_dim, ]))
+            tf.TensorShape([embedding_dim if question_labels_file is None else embedding_dim+1, ]))
 
         final_result = tf.data.Dataset.zip((ques_ds,parag_ds))
     else:

@@ -12,6 +12,7 @@ def train_input_fn(base_data_path, params):
         params: (Params) contains all the details of the execution including names of the data
     """
     dataset = ds.get_dataset(os.path.join(base_data_path, params.files['train_loss']['question_embeddings']),
+                             os.path.join(base_data_path, params.files['train_loss']['question_labels']),
                              os.path.join(base_data_path, params.files['train_loss']['paragraph_embeddings']),
                              params.files['pre_trained_files']['embedding_dim'],
                              including_target=True)
@@ -32,6 +33,7 @@ def test_input_fn(base_data_path, params):
     """
 
     dataset = ds.get_dataset(os.path.join(base_data_path, params.files['test_subset_loss']['question_embeddings']),
+                             None,
                              os.path.join(base_data_path, params.files['test_subset_loss']['paragraph_embeddings']),
                              params.files['pre_trained_files']['embedding_dim'],
                              including_target=True)
@@ -48,6 +50,7 @@ def live_input_fn(base_data_path, params):
         params: (Params) contains all the details of the execution including names of the data
     """
     dataset = ds.get_dataset(os.path.join(base_data_path, params.files['prediction']['question_embeddings']),
+                             None,
                              None,
                              params.files['pre_trained_files']['embedding_dim'],
                              including_target=False)

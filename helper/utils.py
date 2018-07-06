@@ -609,6 +609,7 @@ def create_execution_name(params):
     embedding_dim = "dim"
     scaling_factor = "sf"
     init_seed = "seed"
+    loss = 'loss_v{}'.format(params.loss['version'])
     if type(model_params) is dict:
         model_params = [model_params]
     for indx, layers in enumerate(model_params):
@@ -622,13 +623,13 @@ def create_execution_name(params):
         except:
             keep_prob = keep_prob + "_no"
 
-        init_seed = init_seed + "_" + str(layers['initializer_seed']) if layers['initializer_seed'] is not None else "no"
+        init_seed = init_seed + "_" + str(layers['initializer_seed']) if layers['initializer_seed'] is not None else "seed_no"
         weight_decay = weight_decay + "_" + str(layers['weight_decay'])
         scaling_factor = scaling_factor + "_" + str(layers['scaling_factor'])
 
     layers = "layers_{}".format(len(model_params))
 
-    execution_name = "{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(model_name,
+    execution_name = "{}_{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(model_name,
                                        layers,
                                        num_epoch,
                                        margin,
@@ -637,7 +638,7 @@ def create_execution_name(params):
                                           learning_rate,
                                           embedding_dim,
                                           keep_prob,
-                                          init_seed)
+                                          init_seed,loss)
     return execution_name
 
 

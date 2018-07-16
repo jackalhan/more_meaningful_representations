@@ -56,12 +56,13 @@ def model_3(input, params):
     conf_ = params.model["model_3"]
     with tf.variable_scope('fc'):
         scope = 'fc'
-        input_ = tf.reshape(input, (-1, 32, 32))
-        x_ = conv_and_res_block(input_, conf_, 32, stage=1)
-        x_ = conv_and_res_block(x_, conf_, 64, stage=2)
-        x_ = conv_and_res_block(x_, conf_, 128, stage=3)
-        x_ = conv_and_res_block(x_, conf_, 256, stage=4)
-        x_ = conv_and_res_block(x_, conf_, 512, stage=5)
+        input_ = tf.reshape(input, (-1, 32, 32)) #best 32 32 with a sf of 0.2
+        x_ = conv_and_res_block(input_, conf_, 4    , stage=1) #best 4
+        #x_ = conv_and_res_block(x_, conf_, 128, stage=3)
+        # # x_ = conv_and_res_block(x_, conf_, 256, stage=4)
+        # x_ = conv_and_res_block(x_, conf_, 512, stage=5)
+        #x_ = conv_and_res_block(x_, conf_, 1024, stage=6)
+
         # fc_relu = tf.contrib.layers.De(
         #     x_,
         #     conf_['fc_relu_embedding_dim'],
@@ -73,7 +74,7 @@ def model_3(input, params):
         #     trainable=True,
         #     scope="{}_{}".format(scope, 'relu')
         # )
-        flat = tf.reshape(x_, (-1, 16 * 32))
+        flat = tf.reshape(x_, (-1, 2 * 32)) #best 2,32
         output = tf.layers.dense(flat ,  conf_['fc_relu_embedding_dim'], name='affine')
 
 

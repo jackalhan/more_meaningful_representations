@@ -241,7 +241,7 @@ class  Triplet_Loss(object):
             # Combine biggest d(a, p) and smallest d(a, n) into final triplet loss
             triplet_loss = tf.nn.relu(hardest_positive_dist - hardest_negative_dist + margin)
         else:
-            triplet_loss = tf.nn.relu((hardest_positive_dist - hardest_negative_dist) + ((hardest_positive_dist - hardest_negative_dist) * tf.cast(hardest_positive_dist > 0, dtype=tf.float32)))
+            triplet_loss = tf.nn.relu((hardest_positive_dist - hardest_negative_dist) + ((hardest_positive_dist - hardest_negative_dist)))
 
         # Get final mean triplet loss
         triplet_loss = tf.reduce_mean(triplet_loss)

@@ -1,5 +1,4 @@
 requests==2.18.4
-glove==1.0.2
 h5py==2.7.1
 matplotlib==2.1.2
 numpy==1.14.2
@@ -11,3 +10,4 @@ tensorflow-gpu==1.8.0
 tensorflow-tensorboard==0.4.0
 tqdm==4.19.6
 typing==3.6.4
+scipy==1.1.0

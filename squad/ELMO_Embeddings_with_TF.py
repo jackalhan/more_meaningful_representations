@@ -13,7 +13,7 @@ import spacy
 import json
 import random
 import h5py
-from glove import Glove, Corpus
+#from glove import Glove, Corpus
 from sklearn.feature_extraction.text import TfidfVectorizer
 from shutil import copyfile
 import sys
@@ -102,23 +102,23 @@ def process_file(filename, data_type, word_counter, char_counter):
     return examples, eval_examples, questions, paragraphs, question_to_paragraph
 
 
-def create_glove_corpus_model(corpus, model_path, window = 10, case_sensitive=True):
-
-    corpus_model = Corpus()
-    if case_sensitive:
-        my_corpus = [[x.lower() for x in _ ]for _ in corpus]
-    corpus_model.fit(my_corpus, window=window)
-    corpus_model.save(model_path)
-    return corpus_model
-
-def create_glove_vector_model(corpus_model, model_path, dims = 100, learning_rate=0.05, epoch = 10,  threads = 10):
-
-    glove_model = Glove(no_components=dims, learning_rate=learning_rate)
-    glove_model.fit(corpus_model.matrix, epochs=epoch,
-              no_threads=threads, verbose=True)
-    glove_model.add_dictionary(corpus_model.dictionary)
-    glove_model.save(model_path)
-    return glove_model
+# def create_glove_corpus_model(corpus, model_path, window = 10, case_sensitive=True):
+#
+#     corpus_model = Corpus()
+#     if case_sensitive:
+#         my_corpus = [[x.lower() for x in _ ]for _ in corpus]
+#     corpus_model.fit(my_corpus, window=window)
+#     corpus_model.save(model_path)
+#     return corpus_model
+#
+# def create_glove_vector_model(corpus_model, model_path, dims = 100, learning_rate=0.05, epoch = 10,  threads = 10):
+#
+#     glove_model = Glove(no_components=dims, learning_rate=learning_rate)
+#     glove_model.fit(corpus_model.matrix, epochs=epoch,
+#               no_threads=threads, verbose=True)
+#     glove_model.add_dictionary(corpus_model.dictionary)
+#     glove_model.save(model_path)
+#     return glove_model
 
 def read_squad_data(squad_file_path):
 
@@ -186,35 +186,77 @@ def tokenize_contexts(contexts:list):
     tokenized_context = [word_tokenize(context.strip()) for context in contexts]
     return tokenized_context
 
-def calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, slice_type, q_to_p, outfile):
+def calculate_similarity_and_dump(paragraphs_embeddings,
+                                  questions_embeddings,
+                                  q_to_p,
+                                  number_of_questions,
+                                  outfile):
     neighbor_list = []
     for _id, _q_embedding in enumerate(tqdm(questions_embeddings, total=len(questions_embeddings))):
         _q_embedding = np.array([_q_embedding])
         sk_sim = cosine_similarity(_q_embedding, paragraphs_embeddings)[0]
         neighbors = np.argsort(-sk_sim)
         for _, neighbor_id in enumerate(neighbors):
-            neighbor_list.append((slice_type,
-                                  _id,
+            neighbor_list.append((_id,
                                   neighbor_id,
-                                  _ + 1,
+                                  (q_to_p[_id] == neighbor_id),
+                                  True,
                                   sk_sim[neighbor_id],
-                                  q_to_p[_id],
-                                  np.where(neighbors == q_to_p[_id])[0][0] + 1,
-                                  sk_sim[q_to_p[_id]]
+                                  _,
                                   ))
-    df_neighbors = pd.DataFrame(data=neighbor_list, columns=['slice_type',
-                                                             'question',
-                                                             'neighbor_paragraph',
-                                                             'neighbor_order',
-                                                             'neighbor_cos_similarity',
-                                                             'actual_paragraph',
-                                                             'actual_paragraph_order',
-                                                             'actual_paragrraph_cos_similarity'
-                                                             ])
-    df_neighbors.to_csv(outfile, index=False)
-    return df_neighbors
+
+    # -------------------------------------------------------------------------------------------------------
+    # version 1 -> the following version could be useful for the AP handled in jupyter file in backup folders
+    # this version needs to use that jupyter file to calculate recall@k as well.
+    # -------------------------------------------------------------------------------------------------------
+    # neighbor_list.append((_id,
+    #                                   neighbor_id,
+    #                                   _ + 1,
+    #                                   sk_sim[neighbor_id],
+    #                                   q_to_p[_id],
+    #                                   np.where(neighbors == q_to_p[_id])[0][0] + 1,
+    #                                   sk_sim[q_to_p[_id]]
+    #                                   ))
+    # df_neighbors = pd.DataFrame(data=neighbor_list, columns=['question',
+    #                                                          'neighbor_paragraph',
+    #                                                          'neighbor_order',
+    #                                                          'neighbor_cos_similarity',
+    #                                                          'actual_paragraph',
+    #                                                          'actual_paragraph_order',
+    #                                                          'actual_paragrraph_cos_similarity'
+    #                                                          ])
+    # df_neighbors.to_csv(outfile, index=False)
+    # -------------------------------------------------------------------------------------------------------
+
+    # -------------------------------------------------------------------------------------------------------
+    # verion 2 -> it is calculating recall@k on the fly, it still requires jupyter file to calculate AP,
+    # -------------------------------------------------------------------------------------------------------
+    columns = ['question', 'paragraph', 'ground_truth', 'is_model_answered_correctly',
+               'cosine_score', 'nearest_neighbor_order']
+    df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
+    df_neighbor_within_paragraph = df_neighbor_within_paragraph[
+        df_neighbor_within_paragraph['is_model_answered_correctly'] == True]
+
+    df_neighbor_within_paragraph.to_csv(outfile.replace('###', ''), index=False)
+    recall_ns = [1, 2, 5, 10, 20, 50]
+    recall_columns = ['n', 'number_of_true', 'normalized_recalls']
+    df_neighbor_within_paragraph_recalls = pd.DataFrame(data=calculate_recall_at_n(recall_ns,
+                                                                                   df_neighbor_within_paragraph,
+                                                                                   number_of_questions)
+                                                        , columns=recall_columns
+                                                        )
+
+    df_neighbor_within_paragraph_recalls.to_csv(outfile.replace('###', 'recalls'),
+                                                index=False)
+
 #for each question, paragraph index is added to question to paragraph
-def filter_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, paragraphs, data_eval, slice_type, q_to_p, outfile):
+def filter_and_calculate_similarity_and_dump(paragraphs_embeddings,
+                                             questions_embeddings,
+                                             paragraphs,
+                                             data_eval,
+                                             q_to_p,
+                                             number_of_questions,
+                                             outfile):
     neighbor_list = []
     questions_answers_not_found= dict()
     for _id, _q_embedding in enumerate(tqdm(questions_embeddings, total=len(questions_embeddings))):
@@ -226,32 +268,69 @@ def filter_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_em
         _fo = 0
         for _, neighbor_id in enumerate(neighbors):
             if any_match_for_paragraph_and_answer( paragraphs[neighbor_id], ques_answers):
-                neighbor_list.append((slice_type,
-                                      _id,
+                neighbor_list.append((_id,
                                       neighbor_id,
-                                      _fo + 1,
-                                      #_ + 1,
+                                      (q_to_p[_id] == neighbor_id),
+                                      True,
                                       sk_sim[neighbor_id],
-                                      q_to_p[_id],
-                                      np.where(neighbors == q_to_p[_id])[0][0] + 1,
-                                      sk_sim[q_to_p[_id]]
+                                      _fo + 1
                                       ))
                 _fo +=1
 
+    # -------------------------------------------------------------------------------------------------------
+    # version 1 -> the following version could be useful for the AP handled in jupyter file in backup folders
+    # this version needs to use that jupyter file to calculate recall@k as well.
+    # -------------------------------------------------------------------------------------------------------
+    #  neighbor_list.append((slice_type,
+    #                                       _id,
+    #                                       neighbor_id,
+    #                                       _fo + 1,
+    #                                       #_ + 1,
+    #                                       sk_sim[neighbor_id],
+    #                                       q_to_p[_id],
+    #                                       np.where(neighbors == q_to_p[_id])[0][0] + 1,
+    #                                       sk_sim[q_to_p[_id]]
+    #                                       ))
+    # df_neighbors = pd.DataFrame(data=neighbor_list, columns=['slice_type',
+    #                                                          'question',
+    #                                                          'neighbor_paragraph',
+    #                                                          'neighbor_order',
+    #                                                          'neighbor_cos_similarity',
+    #                                                          'actual_paragraph',
+    #                                                          'actual_paragraph_order',
+    #                                                          'actual_paragrraph_cos_similarity'
+    #                                                          ])
+    # df_neighbors.to_csv(outfile, index=False)
 
-    df_neighbors = pd.DataFrame(data=neighbor_list, columns=['slice_type',
-                                                             'question',
-                                                             'neighbor_paragraph',
-                                                             'neighbor_order',
-                                                             'neighbor_cos_similarity',
-                                                             'actual_paragraph',
-                                                             'actual_paragraph_order',
-                                                             'actual_paragrraph_cos_similarity'
-                                                             ])
-    df_neighbors.to_csv(outfile, index=False)
-    return df_neighbors
+        # -------------------------------------------------------------------------------------------------------
+        # verion 2 -> it is calculating recall@k on the fly, it still requires jupyter file to calculate AP,
+        # -------------------------------------------------------------------------------------------------------
+        columns = ['question', 'paragraph', 'ground_truth', 'is_model_answered_correctly',
+                   'cosine_score', 'nearest_neighbor_order']
+        df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
+        df_neighbor_within_paragraph = df_neighbor_within_paragraph[
+            df_neighbor_within_paragraph['is_model_answered_correctly'] == True]
 
-def filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, predictions, paragraphs, data_eval, q_to_p, number_of_questions, outfile):
+        df_neighbor_within_paragraph.to_csv(outfile.replace('###', ''), index=False)
+        recall_ns = [1, 2, 5, 10, 20, 50]
+        recall_columns = ['n', 'number_of_true', 'normalized_recalls']
+        df_neighbor_within_paragraph_recalls = pd.DataFrame(data=calculate_recall_at_n(recall_ns,
+                                                                                       df_neighbor_within_paragraph,
+                                                                                       number_of_questions)
+                                                            , columns=recall_columns
+                                                            )
+
+        df_neighbor_within_paragraph_recalls.to_csv(outfile.replace('###', 'recalls'),
+                                                    index=False)
+
+def filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings,
+                                                        questions_embeddings,
+                                                        predictions,
+                                                        paragraphs,
+                                                        data_eval,
+                                                        q_to_p,
+                                                        number_of_questions,
+                                                        outfile):
     neighbor_list_within_paragraph = []
     neighbor_list_match_answers = []
     paragraphs = [normalize_answer(p) for p in paragraphs]
@@ -317,7 +396,7 @@ def filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, q
     # df_neighbor_match_answers = df_neighbor_match_answers[
     #     df_neighbor_match_answers['is_model_answered_correctly'] == True]
 
-    df_neighbor_within_paragraph.to_csv(outfile.replace('###','paragraph_contains_answer'),index=False)
+    df_neighbor_within_paragraph.to_csv(outfile.replace('###',''),index=False)
     #df_neighbor_match_answers.to_csv(outfile.replace('###','answer_matches_answer'), index=False)
 
     recall_ns = [1,2,5,10,20,50]
@@ -334,7 +413,7 @@ def filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, q
     #                                                     , columns=recall_columns
     #                                                     )
 
-    df_neighbor_within_paragraph_recalls.to_csv(outfile.replace('###', 'paragraph_contains_answer_recalls'), index=False)
+    df_neighbor_within_paragraph_recalls.to_csv(outfile.replace('###', 'recalls'), index=False)
     # df_neighbor_match_answers_recalls.to_csv(outfile.replace('###', 'answer_matches_answer_recalls'), index=False)
 
 def calculate_recall_at_n(ns, data, number_of_questions):
@@ -493,8 +572,8 @@ DEV = 'dev'
 ################ CONFIGURATIONS #################
 dataset_type = TRAIN
 is_dump_during_execution = True
-is_inject_idf = True
-is_filtered_by_answers_from_rnet = True
+is_inject_idf = False
+is_filtered_by_answers_from_rnet = False
 
 # SPLIT DOCS
 is_split_content_to_documents = False
@@ -504,19 +583,19 @@ percent_of_slice_splits = .4
 # ELMO EMBEDDINGS #
 is_elmo_document_embeddings_already_generated = False
 partition_size = 5
-is_elmo_word_embeddings_already_generated = True
+is_elmo_word_embeddings_already_generated = False
 # IMPROVE ELMEDDINGS
 is_improve_elmeddings=False
 
-# GLOVE TRAINING #
-is_inject_local_weights = False
-is_force_to_train_local_corpus = False
-glove_window = 10
-glove_dims = 1024
-glove_learning_rate = 0.05
-glove_epoch = 300
-glove_threads = 10
-local_embedding_models = ['glove']
+# # GLOVE TRAINING #
+# is_inject_local_weights = False
+# is_force_to_train_local_corpus = False
+# glove_window = 10
+# glove_dims = 1024
+# glove_learning_rate = 0.05
+# glove_epoch = 300
+# glove_threads = 10
+# local_embedding_models = ['glove']
 ################ CONFIGURATIONS #################
 
 
@@ -687,7 +766,6 @@ if not is_elmo_document_embeddings_already_generated:
         print(20* '-')
         print('ELMO Token Embeddings is started')
         start = datetime.datetime.now()
-
         #########################
         # PARTITION AND MERGE THE FILES AND WORDS AS SENTECES
         #########################
@@ -723,6 +801,7 @@ if not is_elmo_document_embeddings_already_generated:
         print(20* '-')
         if is_inject_idf:
             print('IDF is going to be calculated')
+            _type = 'with_idf'
             start = datetime.datetime.now()
             token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions, tokenized_paragraphs, tokenize, questions_nontokenized, paragraphs_nontokenized)
             weighted_token_embeddings = np.multiply(idf_vec, token_embeddings)
@@ -730,6 +809,7 @@ if not is_elmo_document_embeddings_already_generated:
             print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
         else:
             print('IDF is skipped')
+            _type = 'only'
             weighted_token_embeddings = token_embeddings
 
 
@@ -758,7 +838,6 @@ if not is_elmo_document_embeddings_already_generated:
 
 
     _token_embed = weighted_token_embeddings if not is_elmo_word_embeddings_already_generated else None
-    _type = 'with_idf'
     for _a_b_c in _a_b_c_s:
         print('Weight {}'.format(_a_b_c))
 
@@ -781,27 +860,48 @@ if not is_elmo_document_embeddings_already_generated:
 
         print('Nearest Neighbors: Starting')
         sub_start = datetime.datetime.now()
-        # calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, s['slice_type'], dev_q_to_ps,
-        #                               os.path.join(datadir, 'elmo_{}_weights_a_{}_b_{}_c_{}_output_neighbors.csv'.format(_type, _a_b_c[0], _a_b_c[1], _a_b_c[2])))
 
-        # filter_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, dev_paragraphs, dev_eval, s['slice_type'],dev_q_to_ps,
-        #                               os.path.join(datadir,
-        #                                            'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_neighbors.csv'.format(_type,
-        #                                                                                                         _a_b_c[
-        #                                                                                                             0],
-        #                                                                                                         _a_b_c[
-        #                                                                                                             1],
-        #                                                                                                         _a_b_c[
-        #                                                                                                             2])))
+        # -------------------------------------------#
+        # option 1 [WITH ALL PARAGRAPHS] depends on your scenerio           #
+        # -------------------------------------------#
+        calculate_similarity_and_dump(paragraphs_embeddings,
+                                      questions_embeddings,
+                                      q_to_ps,
+                                      len(questions),
+                                      os.path.join(datadir,
+                                                   'elmo_{}_weights_a_{}_b_{}_c_{}_output_neighbors_###.csv'.format(_type, _a_b_c[0], _a_b_c[1], _a_b_c[2])))
+
+        # -------------------------------------------#
+        # option 2 [FILTERED PARAGRAPHS BY COMMON KEYWORDS IN QUESTION] depends on your scenerio          #
+        # -------------------------------------------#
+        filter_and_calculate_similarity_and_dump(paragraphs_embeddings,
+                                                 questions_embeddings,
+                                                 paragraphs,
+                                                 eval,
+                                                 q_to_ps,
+                                                 len(questions),
+                                      os.path.join(datadir,
+                                                   'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_by_paragraphs_neighbors_###.csv'.format(_type,
+                                                                                                                _a_b_c[
+                                                                                                                    0],
+                                                                                                                _a_b_c[
+                                                                                                                    1],
+                                                                                                                _a_b_c[
+                                                                                                                    2])))
+
+        # -------------------------------------------#
+        # option 3 [FILTERED PARAGRAPHS BY ANSWERS FROM RNET MODEL] depends on your scenerio          #
+        # -------------------------------------------#
         if is_filtered_by_answers_from_rnet:
             with open(answers_file) as prediction_file:
                 answers = json.load(prediction_file)
+
 
             filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, answers,
                                                                 paragraphs, eval,
                                                                 q_to_ps, len(questions),
                                                                 os.path.join(datadir,
-                                                                             'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_answers_neighbors_###.csv'.format(
+                                                                             'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_rnet_answers_neighbors_###.csv'.format(
                                                                                  _type,
                                                                                  _a_b_c[
                                                                                      0],
@@ -826,112 +926,108 @@ else:
     questions_elmo_embeddings = load_embeddings(question_embeddings_file)
     print('Document embeddings are loaded...')
 
-if is_improve_elmeddings:
-    #todo: feedforward net ile egitilecek bakalim daha iyi sonuc alabilecekmiyiz?
-    pass
 
-
-# TRAINING LOCAL WEIGHTS
-if is_inject_local_weights:
-    for _lm in local_embedding_models:
-        local_paragraph_embeddings = file_pattern_for_local_weights.format(_lm, 'paragraph')
-        local_question_embeddings = file_pattern_for_local_weights.format(_lm, 'question')
-        local_corpus_model_file = file_pattern_for_local_model.format(_lm,'corpus')
-        local_vector_model_file = file_pattern_for_local_model.format(_lm,'vector')
-        if os.path.exists(glove_local_question_embeddings_file):
-            if is_force_to_train_local_corpus:
-                local_corpus_model = create_glove_corpus_model(corpus=tokenized_questions + tokenized_paragraphs,
-                                       model_path=local_corpus_model_file,
-                                       window=glove_window,
-                                       case_sensitive=True)
-
-                local_vector_model = create_glove_vector_model(local_corpus_model,
-                                                                   local_vector_model_file,
-                                                                   dims=glove_dims,
-                                                                   learning_rate=glove_learning_rate,
-                                                                   epoch=glove_epoch,
-                                                                   threads=glove_threads)
-                if is_inject_idf:
-                    token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions,
-                                                                       tokenized_paragraphs,
-                                                                       tokenize,
-                                                                       questions_nontokenized,
-                                                                       paragraphs_nontokenized)
-                    glove_question_embeddings, glove_paragraph_embeddings = transorm_to_glove_embeddings(local_vector_model,
-                                                             token2idfweight,
-                                                             glove_dims,
-                                                             tokenized_questions,
-                                                             tokenized_paragraphs,
-                                                             is_dump_during_execution,
-                                                             glove_local_question_embeddings_file,
-                                                             glove_local_paragraph_embeddings_file)
-
-            else:
-                local_corpus_model = Corpus.load(local_corpus_model_file)
-                local_vector_model = Glove.load(local_vector_model_file)
-                glove_question_embeddings = load_embeddings(glove_local_question_embeddings_file)
-                glove_paragraph_embeddings = load_embeddings(glove_local_paragraph_embeddings_file)
-
-        else:
-            local_corpus_model = create_glove_corpus_model(corpus=tokenized_questions + tokenized_paragraphs,
-                                                           model_path=local_corpus_model_file,
-                                                           window=glove_window,
-                                                           case_sensitive=True)
-
-            local_vector_model = create_glove_vector_model(local_corpus_model,
-                                                           local_vector_model_file,
-                                                           dims=glove_dims,
-                                                           learning_rate=glove_learning_rate,
-                                                           epoch=glove_epoch,
-                                                           threads=glove_threads)
-            if is_inject_idf:
-                token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions,
-                                                                    tokenized_paragraphs,
-                                                                    tokenize,
-                                                                    questions_nontokenized,
-                                                                    paragraphs_nontokenized)
-                glove_question_embeddings, glove_paragraph_embeddings = transorm_to_glove_embeddings(local_vector_model,
-                                                                                                     token2idfweight,
-                                                                                                     glove_dims,
-                                                                                                     tokenized_questions,
-                                                                                                     tokenized_paragraphs,
-                                                                                                     is_dump_during_execution,
-                                                                                                     glove_local_question_embeddings_file,
-                                                                                                     glove_local_paragraph_embeddings_file)
-        if is_filtered_by_answers_from_rnet:
-            with open(answers_file) as prediction_file:
-                answers = json.load(prediction_file)
-
-        for _alpha in np.linspace(0.1, 0.9, 5):
-            print('Nearest Neighbors: Starting')
-            sub_start = datetime.datetime.now()
-
-            final_paragraph_embeddings = (_alpha * paragraphs_elmo_embeddings) + ((1 - _alpha) * glove_paragraph_embeddings)
-            final_question_embeddings = (_alpha * questions_elmo_embeddings) + ((1 - _alpha) * glove_question_embeddings)
-
-            filter_prediction_and_calculate_similarity_and_dump(final_paragraph_embeddings, final_question_embeddings,
-                                                                answers,
-                                                                paragraphs, eval,
-                                                                q_to_ps, len(questions),
-                                                                os.path.join(datadir,
-                                                                             'improved_elmo_with_glove_summed_weights_alpha_{}_output_filtered_answers_neighbors_###.csv'.format(
-                                                                                 _alpha)))
-
-            # final_paragraph_embeddings = (_alpha * paragraphs_elmo_embeddings) * (
-            #             (1 - _alpha) * glove_paragraph_embeddings)
-            # final_question_embeddings = (_alpha * questions_elmo_embeddings) * (
-            #             (1 - _alpha) * glove_question_embeddings)
-            #
-            # filter_prediction_and_calculate_similarity_and_dump(final_paragraph_embeddings, final_question_embeddings,
-            #                                                     answers,
-            #                                                     paragraphs, eval,
-            #                                                     q_to_ps, len(questions),
-            #                                                     os.path.join(datadir,
-            #                                                                  'improved_elmo_with_glove_multiplied_weights_alpha_{}_output_filtered_answers_neighbors_###.csv'.format(
-            #                                                                      _alpha)))
-
-            sub_end = datetime.datetime.now()
-            print('Nearest Neighbors: Completed is completed in {} minutes'.format((sub_end - sub_start).seconds / 60))
+# # TRAINING LOCAL WEIGHTS
+# if is_inject_local_weights:
+#     for _lm in local_embedding_models:
+#         local_paragraph_embeddings = file_pattern_for_local_weights.format(_lm, 'paragraph')
+#         local_question_embeddings = file_pattern_for_local_weights.format(_lm, 'question')
+#         local_corpus_model_file = file_pattern_for_local_model.format(_lm,'corpus')
+#         local_vector_model_file = file_pattern_for_local_model.format(_lm,'vector')
+#         if os.path.exists(glove_local_question_embeddings_file):
+#             if is_force_to_train_local_corpus:
+#                 local_corpus_model = create_glove_corpus_model(corpus=tokenized_questions + tokenized_paragraphs,
+#                                        model_path=local_corpus_model_file,
+#                                        window=glove_window,
+#                                        case_sensitive=True)
+#
+#                 local_vector_model = create_glove_vector_model(local_corpus_model,
+#                                                                    local_vector_model_file,
+#                                                                    dims=glove_dims,
+#                                                                    learning_rate=glove_learning_rate,
+#                                                                    epoch=glove_epoch,
+#                                                                    threads=glove_threads)
+#                 if is_inject_idf:
+#                     token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions,
+#                                                                        tokenized_paragraphs,
+#                                                                        tokenize,
+#                                                                        questions_nontokenized,
+#                                                                        paragraphs_nontokenized)
+#                     glove_question_embeddings, glove_paragraph_embeddings = transorm_to_glove_embeddings(local_vector_model,
+#                                                              token2idfweight,
+#                                                              glove_dims,
+#                                                              tokenized_questions,
+#                                                              tokenized_paragraphs,
+#                                                              is_dump_during_execution,
+#                                                              glove_local_question_embeddings_file,
+#                                                              glove_local_paragraph_embeddings_file)
+#
+#             else:
+#                 local_corpus_model = Corpus.load(local_corpus_model_file)
+#                 local_vector_model = Glove.load(local_vector_model_file)
+#                 glove_question_embeddings = load_embeddings(glove_local_question_embeddings_file)
+#                 glove_paragraph_embeddings = load_embeddings(glove_local_paragraph_embeddings_file)
+#
+#         else:
+#             local_corpus_model = create_glove_corpus_model(corpus=tokenized_questions + tokenized_paragraphs,
+#                                                            model_path=local_corpus_model_file,
+#                                                            window=glove_window,
+#                                                            case_sensitive=True)
+#
+#             local_vector_model = create_glove_vector_model(local_corpus_model,
+#                                                            local_vector_model_file,
+#                                                            dims=glove_dims,
+#                                                            learning_rate=glove_learning_rate,
+#                                                            epoch=glove_epoch,
+#                                                            threads=glove_threads)
+#             if is_inject_idf:
+#                 token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions,
+#                                                                     tokenized_paragraphs,
+#                                                                     tokenize,
+#                                                                     questions_nontokenized,
+#                                                                     paragraphs_nontokenized)
+#                 glove_question_embeddings, glove_paragraph_embeddings = transorm_to_glove_embeddings(local_vector_model,
+#                                                                                                      token2idfweight,
+#                                                                                                      glove_dims,
+#                                                                                                      tokenized_questions,
+#                                                                                                      tokenized_paragraphs,
+#                                                                                                      is_dump_during_execution,
+#                                                                                                      glove_local_question_embeddings_file,
+#                                                                                                      glove_local_paragraph_embeddings_file)
+#         if is_filtered_by_answers_from_rnet:
+#             with open(answers_file) as prediction_file:
+#                 answers = json.load(prediction_file)
+#
+#         for _alpha in np.linspace(0.1, 0.9, 5):
+#             print('Nearest Neighbors: Starting')
+#             sub_start = datetime.datetime.now()
+#
+#             final_paragraph_embeddings = (_alpha * paragraphs_elmo_embeddings) + ((1 - _alpha) * glove_paragraph_embeddings)
+#             final_question_embeddings = (_alpha * questions_elmo_embeddings) + ((1 - _alpha) * glove_question_embeddings)
+#
+#             filter_prediction_and_calculate_similarity_and_dump(final_paragraph_embeddings, final_question_embeddings,
+#                                                                 answers,
+#                                                                 paragraphs, eval,
+#                                                                 q_to_ps, len(questions),
+#                                                                 os.path.join(datadir,
+#                                                                              'improved_elmo_with_glove_summed_weights_alpha_{}_output_filtered_answers_neighbors_###.csv'.format(
+#                                                                                  _alpha)))
+#
+#             # final_paragraph_embeddings = (_alpha * paragraphs_elmo_embeddings) * (
+#             #             (1 - _alpha) * glove_paragraph_embeddings)
+#             # final_question_embeddings = (_alpha * questions_elmo_embeddings) * (
+#             #             (1 - _alpha) * glove_question_embeddings)
+#             #
+#             # filter_prediction_and_calculate_similarity_and_dump(final_paragraph_embeddings, final_question_embeddings,
+#             #                                                     answers,
+#             #                                                     paragraphs, eval,
+#             #                                                     q_to_ps, len(questions),
+#             #                                                     os.path.join(datadir,
+#             #                                                                  'improved_elmo_with_glove_multiplied_weights_alpha_{}_output_filtered_answers_neighbors_###.csv'.format(
+#             #                                                                      _alpha)))
+#
+#             sub_end = datetime.datetime.now()
+#             print('Nearest Neighbors: Completed is completed in {} minutes'.format((sub_end - sub_start).seconds / 60))
 
 
 end = datetime.datetime.now()

@@ -13,12 +13,15 @@ import spacy
 import json
 import random
 import h5py
+import tensorflow as tf
+import tensorflow_hub as hub
 #from glove import Glove, Corpus
 from sklearn.feature_extraction.text import TfidfVectorizer
 from shutil import copyfile
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from bilm.elmo import ElmoEmbedder
+
 nlp = spacy.blank("en")
 nlp_s = spacy.load('en')
 encoding="utf-8"
@@ -566,6 +569,10 @@ def dump_mapping_data(data, outfile_to_dump):
     data_df = pd.DataFrame(np.array(data), columns=list("v"))
     data_df.to_csv(outfile_to_dump)
 
+def load_module(module_url = "https://tfhub.dev/google/universal-sentence-encoder/2"):
+    embed = hub.Module(module_url)
+    return embed
+
 TRAIN = 'train'
 DEV = 'dev'
 
@@ -582,8 +589,12 @@ percent_of_slice_splits = .4
 
 # ELMO EMBEDDINGS #
 is_elmo_document_embeddings_already_generated = False
-partition_size = 5
+partition_size = 1
 is_elmo_word_embeddings_already_generated = False
+is_calculate_recalls = False
+
+# USE EMBEDDINGS #
+is_use_embedding = True
 # IMPROVE ELMEDDINGS
 is_improve_elmeddings=False
 
@@ -760,277 +771,193 @@ if is_split_content_to_documents:
     print('Number of unique tokens in corpus: {}'.format(len(contexts_vocs)))
     print('Splitting is completed in {} minutes'.format((end-start).seconds/60))
 
-if not is_elmo_document_embeddings_already_generated:
-    if not is_elmo_word_embeddings_already_generated:
-        print('\n')
-        print(20* '-')
-        print('ELMO Token Embeddings is started')
-        start = datetime.datetime.now()
-        #########################
-        # PARTITION AND MERGE THE FILES AND WORDS AS SENTECES
-        #########################
-        # total_tokens_in_each_embedding_file = 715372
-        #
-        # par_str_doc_first_index = len(tokenized_train_questions)
-        # par_str_doc_last_index = len(tokenized_train_questions + tokenized_train_paragraphs) - 1
-        #
-        # par_token_str_index = document_embedding_guideline[par_str_doc_first_index]['start_index']
-        # par_token_end_index = document_embedding_guideline[par_str_doc_last_index]['end_index']
-        #
-        # partitioned_embs_files_start_indx = math.ceil(par_token_str_index/total_tokens_in_each_embedding_file)
-        # partitioned_embs_files_end_indx = math.ceil(par_token_end_index/total_tokens_in_each_embedding_file)
-        # is_first_record = True
-        #for partition_index in range(partitioned_embs_files_start_indx, partitioned_embs_files_end_indx + 1):
-        token_embeddings, document_embedding_guideline = get_elmo_embeddings(tokenized_questions,
-                                                                           tokenized_paragraphs,
-                                                                           token_embeddings_guideline_file,
-                                                                           token_embeddings_file,
-                                                                           voc_file_name,
-                                                                           partition_size,
-                                                                           weight_file=elmo_weights_file,
-                                                                           options_file=elmo_options_file
-                                                                           )
-        end = datetime.datetime.now()
-        print('ELMO Token Embeddings is ended in {} minutes'.format((end-start).seconds/60))
-
-
-
-
-
-        print('\n')
-        print(20* '-')
-        if is_inject_idf:
-            print('IDF is going to be calculated')
-            _type = 'with_idf'
-            start = datetime.datetime.now()
-            token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions, tokenized_paragraphs, tokenize, questions_nontokenized, paragraphs_nontokenized)
-            weighted_token_embeddings = np.multiply(idf_vec, token_embeddings)
-            end = datetime.datetime.now()
-            print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
-        else:
-            print('IDF is skipped')
-            _type = 'only'
-            weighted_token_embeddings = token_embeddings
-
-
-
-
-
-
-
-    print('\n')
-    print(20 * '-')
-    print('ELMO Embeddings is started')
-    start = datetime.datetime.now()
-    _a_b_c_s = []
-    # _a_b_c_s.append([0,0,1])
-    # _a_b_c_s.append([0, 1, 0])
-    _a_b_c_s.append([1, 0, 0])
-    # while len(_a_b_c_s) < 10:
-    #     x = np.random.dirichlet(np.ones(3), size=1).tolist()
-    #     x_ = [float("{:1.2f}".format(_x)) for _x in x[0]]
-    #     total_x_ = sum(x_)
-    #     if total_x_ == 1:
-    #         _a_b_c_s.append(x_)
-    #         _a_b_c_s = sort_and_deduplicate(_a_b_c_s)
-
-    # for _token_embed_pack in [(weighted_token_embeddings, 'with_idf'), (token_embeddings, 'only')]:
-
-
-    _token_embed = weighted_token_embeddings if not is_elmo_word_embeddings_already_generated else None
-    for _a_b_c in _a_b_c_s:
-        print('Weight {}'.format(_a_b_c))
-
+if not is_use_embedding:
+    if not is_elmo_document_embeddings_already_generated:
         if not is_elmo_word_embeddings_already_generated:
-            questions_embeddings, paragraphs_embeddings = token_to_document_embeddings(tokenized_questions,
-                                                                                       tokenized_paragraphs,
-                                                                                       _token_embed,
-                                                                                       document_embedding_guideline)
-            # YES TUNE
-            WM = np.array([_a_b_c[0], _a_b_c[1], _a_b_c[2]]).reshape((1, 3, 1))
-            questions_embeddings = np.multiply(questions_embeddings, WM)
-            paragraphs_embeddings = np.multiply(paragraphs_embeddings, WM)
-
-            questions_embeddings = np.mean(questions_embeddings, axis=1)
-            paragraphs_embeddings = np.mean(paragraphs_embeddings, axis=1)
-        else:
-            with h5py.File(question_embeddings_file, 'r') as fq_in, h5py.File(paragraph_embeddings_file, 'r') as fp_in:
-                paragraphs_embeddings = fp_in['embeddings'][...]
-                questions_embeddings = fq_in['embeddings'][...]
-
-        print('Nearest Neighbors: Starting')
-        sub_start = datetime.datetime.now()
-
-        # -------------------------------------------#
-        # option 1 [WITH ALL PARAGRAPHS] depends on your scenerio           #
-        # -------------------------------------------#
-        calculate_similarity_and_dump(paragraphs_embeddings,
-                                      questions_embeddings,
-                                      q_to_ps,
-                                      len(questions),
-                                      os.path.join(datadir,
-                                                   'elmo_{}_weights_a_{}_b_{}_c_{}_output_neighbors_###.csv'.format(_type, _a_b_c[0], _a_b_c[1], _a_b_c[2])))
-
-        # -------------------------------------------#
-        # option 2 [FILTERED PARAGRAPHS BY COMMON KEYWORDS IN QUESTION] depends on your scenerio          #
-        # -------------------------------------------#
-        filter_and_calculate_similarity_and_dump(paragraphs_embeddings,
-                                                 questions_embeddings,
-                                                 paragraphs,
-                                                 eval,
-                                                 q_to_ps,
-                                                 len(questions),
-                                      os.path.join(datadir,
-                                                   'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_by_paragraphs_neighbors_###.csv'.format(_type,
-                                                                                                                _a_b_c[
-                                                                                                                    0],
-                                                                                                                _a_b_c[
-                                                                                                                    1],
-                                                                                                                _a_b_c[
-                                                                                                                    2])))
-
-        # -------------------------------------------#
-        # option 3 [FILTERED PARAGRAPHS BY ANSWERS FROM RNET MODEL] depends on your scenerio          #
-        # -------------------------------------------#
-        if is_filtered_by_answers_from_rnet:
-            with open(answers_file) as prediction_file:
-                answers = json.load(prediction_file)
+            print('\n')
+            print(20* '-')
+            print('ELMO Token Embeddings is started')
+            start = datetime.datetime.now()
+            #########################
+            # PARTITION AND MERGE THE FILES AND WORDS AS SENTECES
+            #########################
+            # total_tokens_in_each_embedding_file = 715372
+            #
+            # par_str_doc_first_index = len(tokenized_train_questions)
+            # par_str_doc_last_index = len(tokenized_train_questions + tokenized_train_paragraphs) - 1
+            #
+            # par_token_str_index = document_embedding_guideline[par_str_doc_first_index]['start_index']
+            # par_token_end_index = document_embedding_guideline[par_str_doc_last_index]['end_index']
+            #
+            # partitioned_embs_files_start_indx = math.ceil(par_token_str_index/total_tokens_in_each_embedding_file)
+            # partitioned_embs_files_end_indx = math.ceil(par_token_end_index/total_tokens_in_each_embedding_file)
+            # is_first_record = True
+            #for partition_index in range(partitioned_embs_files_start_indx, partitioned_embs_files_end_indx + 1):
+            token_embeddings, document_embedding_guideline = get_elmo_embeddings(tokenized_questions,
+                                                                               tokenized_paragraphs,
+                                                                               token_embeddings_guideline_file,
+                                                                               token_embeddings_file,
+                                                                               voc_file_name,
+                                                                               partition_size,
+                                                                               weight_file=elmo_weights_file,
+                                                                               options_file=elmo_options_file
+                                                                               )
+            end = datetime.datetime.now()
+            print('ELMO Token Embeddings is ended in {} minutes'.format((end-start).seconds/60))
 
 
-            filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, answers,
-                                                                paragraphs, eval,
-                                                                q_to_ps, len(questions),
-                                                                os.path.join(datadir,
-                                                                             'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_rnet_answers_neighbors_###.csv'.format(
-                                                                                 _type,
-                                                                                 _a_b_c[
-                                                                                     0],
-                                                                                 _a_b_c[
-                                                                                     1],
-                                                                                 _a_b_c[
-                                                                                     2])))
-        sub_end = datetime.datetime.now()
-        print('Nearest Neighbors: Completed is completed in {} minutes'.format((sub_end - sub_start).seconds / 60))
-
-    questions_elmo_embeddings = np.reshape(questions_embeddings, (questions_embeddings.shape[0], questions_embeddings.shape[1]))
-    dump_embeddings(questions_elmo_embeddings, question_embeddings_file)
-    paragraphs_elmo_embeddings = np.reshape(paragraphs_embeddings,
-                                       (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
-    dump_embeddings(paragraphs_elmo_embeddings, paragraph_embeddings_file)
-
-else:
-    ## document embeddings already generated
-    ## get these embeddings:
-    print('Document embeddings are getting loaded...')
-    paragraphs_elmo_embeddings = load_embeddings(paragraph_embeddings_file)
-    questions_elmo_embeddings = load_embeddings(question_embeddings_file)
-    print('Document embeddings are loaded...')
 
 
-# # TRAINING LOCAL WEIGHTS
-# if is_inject_local_weights:
-#     for _lm in local_embedding_models:
-#         local_paragraph_embeddings = file_pattern_for_local_weights.format(_lm, 'paragraph')
-#         local_question_embeddings = file_pattern_for_local_weights.format(_lm, 'question')
-#         local_corpus_model_file = file_pattern_for_local_model.format(_lm,'corpus')
-#         local_vector_model_file = file_pattern_for_local_model.format(_lm,'vector')
-#         if os.path.exists(glove_local_question_embeddings_file):
-#             if is_force_to_train_local_corpus:
-#                 local_corpus_model = create_glove_corpus_model(corpus=tokenized_questions + tokenized_paragraphs,
-#                                        model_path=local_corpus_model_file,
-#                                        window=glove_window,
-#                                        case_sensitive=True)
-#
-#                 local_vector_model = create_glove_vector_model(local_corpus_model,
-#                                                                    local_vector_model_file,
-#                                                                    dims=glove_dims,
-#                                                                    learning_rate=glove_learning_rate,
-#                                                                    epoch=glove_epoch,
-#                                                                    threads=glove_threads)
-#                 if is_inject_idf:
-#                     token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions,
-#                                                                        tokenized_paragraphs,
-#                                                                        tokenize,
-#                                                                        questions_nontokenized,
-#                                                                        paragraphs_nontokenized)
-#                     glove_question_embeddings, glove_paragraph_embeddings = transorm_to_glove_embeddings(local_vector_model,
-#                                                              token2idfweight,
-#                                                              glove_dims,
-#                                                              tokenized_questions,
-#                                                              tokenized_paragraphs,
-#                                                              is_dump_during_execution,
-#                                                              glove_local_question_embeddings_file,
-#                                                              glove_local_paragraph_embeddings_file)
-#
-#             else:
-#                 local_corpus_model = Corpus.load(local_corpus_model_file)
-#                 local_vector_model = Glove.load(local_vector_model_file)
-#                 glove_question_embeddings = load_embeddings(glove_local_question_embeddings_file)
-#                 glove_paragraph_embeddings = load_embeddings(glove_local_paragraph_embeddings_file)
-#
-#         else:
-#             local_corpus_model = create_glove_corpus_model(corpus=tokenized_questions + tokenized_paragraphs,
-#                                                            model_path=local_corpus_model_file,
-#                                                            window=glove_window,
-#                                                            case_sensitive=True)
-#
-#             local_vector_model = create_glove_vector_model(local_corpus_model,
-#                                                            local_vector_model_file,
-#                                                            dims=glove_dims,
-#                                                            learning_rate=glove_learning_rate,
-#                                                            epoch=glove_epoch,
-#                                                            threads=glove_threads)
-#             if is_inject_idf:
-#                 token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions,
-#                                                                     tokenized_paragraphs,
-#                                                                     tokenize,
-#                                                                     questions_nontokenized,
-#                                                                     paragraphs_nontokenized)
-#                 glove_question_embeddings, glove_paragraph_embeddings = transorm_to_glove_embeddings(local_vector_model,
-#                                                                                                      token2idfweight,
-#                                                                                                      glove_dims,
-#                                                                                                      tokenized_questions,
-#                                                                                                      tokenized_paragraphs,
-#                                                                                                      is_dump_during_execution,
-#                                                                                                      glove_local_question_embeddings_file,
-#                                                                                                      glove_local_paragraph_embeddings_file)
-#         if is_filtered_by_answers_from_rnet:
-#             with open(answers_file) as prediction_file:
-#                 answers = json.load(prediction_file)
-#
-#         for _alpha in np.linspace(0.1, 0.9, 5):
-#             print('Nearest Neighbors: Starting')
-#             sub_start = datetime.datetime.now()
-#
-#             final_paragraph_embeddings = (_alpha * paragraphs_elmo_embeddings) + ((1 - _alpha) * glove_paragraph_embeddings)
-#             final_question_embeddings = (_alpha * questions_elmo_embeddings) + ((1 - _alpha) * glove_question_embeddings)
-#
-#             filter_prediction_and_calculate_similarity_and_dump(final_paragraph_embeddings, final_question_embeddings,
-#                                                                 answers,
-#                                                                 paragraphs, eval,
-#                                                                 q_to_ps, len(questions),
-#                                                                 os.path.join(datadir,
-#                                                                              'improved_elmo_with_glove_summed_weights_alpha_{}_output_filtered_answers_neighbors_###.csv'.format(
-#                                                                                  _alpha)))
-#
-#             # final_paragraph_embeddings = (_alpha * paragraphs_elmo_embeddings) * (
-#             #             (1 - _alpha) * glove_paragraph_embeddings)
-#             # final_question_embeddings = (_alpha * questions_elmo_embeddings) * (
-#             #             (1 - _alpha) * glove_question_embeddings)
-#             #
-#             # filter_prediction_and_calculate_similarity_and_dump(final_paragraph_embeddings, final_question_embeddings,
-#             #                                                     answers,
-#             #                                                     paragraphs, eval,
-#             #                                                     q_to_ps, len(questions),
-#             #                                                     os.path.join(datadir,
-#             #                                                                  'improved_elmo_with_glove_multiplied_weights_alpha_{}_output_filtered_answers_neighbors_###.csv'.format(
-#             #                                                                      _alpha)))
-#
-#             sub_end = datetime.datetime.now()
-#             print('Nearest Neighbors: Completed is completed in {} minutes'.format((sub_end - sub_start).seconds / 60))
+
+            print('\n')
+            print(20* '-')
+            if is_inject_idf:
+                print('IDF is going to be calculated')
+                _type = 'with_idf'
+                start = datetime.datetime.now()
+                token2idfweight, idf_vec = transform_to_idf_weigths(tokenized_questions, tokenized_paragraphs, tokenize, questions_nontokenized, paragraphs_nontokenized)
+                weighted_token_embeddings = np.multiply(idf_vec, token_embeddings)
+                end = datetime.datetime.now()
+                print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
+            else:
+                print('IDF is skipped')
+                _type = 'only'
+                weighted_token_embeddings = token_embeddings
 
 
-end = datetime.datetime.now()
-print('ELMO Embeddings is completed in {} minutes'.format((end - start).seconds / 60))
-print(20 * '-')
+
+
+
+
+
+        print('\n')
+        print(20 * '-')
+        print('ELMO Embeddings is started')
+        start = datetime.datetime.now()
+        _a_b_c_s = []
+        # _a_b_c_s.append([0,0,1])
+        # _a_b_c_s.append([0, 1, 0])
+        _a_b_c_s.append([1, 0, 0])
+        # while len(_a_b_c_s) < 10:
+        #     x = np.random.dirichlet(np.ones(3), size=1).tolist()
+        #     x_ = [float("{:1.2f}".format(_x)) for _x in x[0]]
+        #     total_x_ = sum(x_)
+        #     if total_x_ == 1:
+        #         _a_b_c_s.append(x_)
+        #         _a_b_c_s = sort_and_deduplicate(_a_b_c_s)
+
+        # for _token_embed_pack in [(weighted_token_embeddings, 'with_idf'), (token_embeddings, 'only')]:
+
+
+        _token_embed = weighted_token_embeddings if not is_elmo_word_embeddings_already_generated else None
+        for _a_b_c in _a_b_c_s:
+            print('Weight {}'.format(_a_b_c))
+
+            if not is_elmo_word_embeddings_already_generated:
+                questions_embeddings, paragraphs_embeddings = token_to_document_embeddings(tokenized_questions,
+                                                                                           tokenized_paragraphs,
+                                                                                           _token_embed,
+                                                                                           document_embedding_guideline)
+                # YES TUNE
+                WM = np.array([_a_b_c[0], _a_b_c[1], _a_b_c[2]]).reshape((1, 3, 1))
+                questions_embeddings = np.multiply(questions_embeddings, WM)
+                paragraphs_embeddings = np.multiply(paragraphs_embeddings, WM)
+
+                questions_embeddings = np.mean(questions_embeddings, axis=1)
+                paragraphs_embeddings = np.mean(paragraphs_embeddings, axis=1)
+            else:
+                with h5py.File(question_embeddings_file, 'r') as fq_in, h5py.File(paragraph_embeddings_file, 'r') as fp_in:
+                    paragraphs_embeddings = fp_in['embeddings'][...]
+                    questions_embeddings = fq_in['embeddings'][...]
+
+            print('Nearest Neighbors: Starting')
+            sub_start = datetime.datetime.now()
+
+            if is_calculate_recalls:
+                # -------------------------------------------#
+                # option 1 [WITH ALL PARAGRAPHS] depends on your scenerio           #
+                # -------------------------------------------#
+                calculate_similarity_and_dump(paragraphs_embeddings,
+                                              questions_embeddings,
+                                              q_to_ps,
+                                              len(questions),
+                                              os.path.join(datadir,
+                                                           'elmo_{}_weights_a_{}_b_{}_c_{}_output_neighbors_###.csv'.format(_type, _a_b_c[0], _a_b_c[1], _a_b_c[2])))
+
+                # -------------------------------------------#
+                # option 2 [FILTERED PARAGRAPHS BY COMMON KEYWORDS IN QUESTION] depends on your scenerio          #
+                # -------------------------------------------#
+                filter_and_calculate_similarity_and_dump(paragraphs_embeddings,
+                                                         questions_embeddings,
+                                                         paragraphs,
+                                                         eval,
+                                                         q_to_ps,
+                                                         len(questions),
+                                              os.path.join(datadir,
+                                                           'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_by_paragraphs_neighbors_###.csv'.format(_type,
+                                                                                                                        _a_b_c[
+                                                                                                                            0],
+                                                                                                                        _a_b_c[
+                                                                                                                            1],
+                                                                                                                        _a_b_c[
+                                                                                                                            2])))
+
+                # -------------------------------------------#
+                # option 3 [FILTERED PARAGRAPHS BY ANSWERS FROM RNET MODEL] depends on your scenerio          #
+                # -------------------------------------------#
+                if is_filtered_by_answers_from_rnet:
+                    with open(answers_file) as prediction_file:
+                        answers = json.load(prediction_file)
+
+
+                    filter_prediction_and_calculate_similarity_and_dump(paragraphs_embeddings, questions_embeddings, answers,
+                                                                        paragraphs, eval,
+                                                                        q_to_ps, len(questions),
+                                                                        os.path.join(datadir,
+                                                                                     'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_rnet_answers_neighbors_###.csv'.format(
+                                                                                         _type,
+                                                                                         _a_b_c[
+                                                                                             0],
+                                                                                         _a_b_c[
+                                                                                             1],
+                                                                                         _a_b_c[
+                                                                                             2])))
+                sub_end = datetime.datetime.now()
+                print('Nearest Neighbors: Completed is completed in {} minutes'.format((sub_end - sub_start).seconds / 60))
+
+        questions_elmo_embeddings = np.reshape(questions_embeddings, (questions_embeddings.shape[0], questions_embeddings.shape[1]))
+        dump_embeddings(questions_elmo_embeddings, question_embeddings_file)
+        paragraphs_elmo_embeddings = np.reshape(paragraphs_embeddings,
+                                           (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
+        dump_embeddings(paragraphs_elmo_embeddings, paragraph_embeddings_file)
+
+    else:
+        ## document embeddings already generated
+        ## get these embeddings:
+        print('Document embeddings are getting loaded...')
+        paragraphs_elmo_embeddings = load_embeddings(paragraph_embeddings_file)
+        questions_elmo_embeddings = load_embeddings(question_embeddings_file)
+        print('Document embeddings are loaded...')
+    end = datetime.datetime.now()
+    print('ELMO Embeddings is completed in {} minutes'.format((end - start).seconds / 60))
+    print(20 * '-')
+else: # USE Embedding Process
+    use_embed = load_module()
+    print("Question Len", len(questions_nontokenized))
+    print("Paragraphs Len", len(paragraphs_nontokenized))
+    # Reduce logging output.
+    tf.logging.set_verbosity(tf.logging.ERROR)
+    with tf.Session() as session:
+        session.run([tf.global_variables_initializer(), tf.tables_initializer()])
+        question_embeddings = session.run(use_embed(questions_nontokenized))
+        paragraph_embeddings = session.run(use_embed(paragraphs_nontokenized))
+        dump_embeddings(question_embeddings, question_embeddings_file + "_USE")
+        dump_embeddings(paragraph_embeddings, paragraph_embeddings_file + "_USE")
+
+    end = datetime.datetime.now()
+    print('USE Embeddings is completed in {} minutes'.format((end - start).seconds / 60))
+    print(20 * '-')
+
+
+
 

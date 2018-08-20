@@ -58,9 +58,100 @@ def model_3(input, params):
     conf = params.model["model_3"]
     _in_out = input
     for i, block_conf in enumerate(conf):
-        _in_out = residual_block(_in_out, block_conf, "res_block_{}".format(i), 2)
+        _in_out = residual_block(_in_out, block_conf, "res_block_{}".format(i), 2) #TODO: (parameter = 2 = Number of activation layer) can be defined in params.json but this model was not very useful.
     return _in_out
 
+def model_4(input, params):
+
+    # Define the model
+    tf.logging.info("Creating the {}...".format(model_4.__name__))
+
+    conf = params.model["model_4"]
+
+    with tf.variable_scope('CNN_Layer_1_bigram'):
+        # Apply Convolution filtering on input sequence.
+        conv1_bigram = tf.layers.conv1d(
+            input,
+            filters=conf['embedding_dim'],
+            kernel_size=2,
+            padding='VALID',
+            # Add a ReLU for non linearity.
+            activation=tf.nn.relu)
+        # Max pooling across output of Convolution+Relu.
+        pool1_bigram = tf.layers.max_pooling1d(conv1_bigram)
+        # Transpose matrix so that n_filters from convolution becomes width.
+        #pool1 = tf.transpose(pool1, [0, 1, 3, 2])
+    with tf.variable_scope('CNN_Layer_1_trigram'):
+        # Apply Convolution filtering on input sequence.
+        conv1_trigram = tf.layers.conv1d(
+            input,
+            filters=conf['embedding_dim'],
+            kernel_size=2,
+            padding='VALID',
+            # Add a ReLU for non linearity.
+            activation=tf.nn.relu)
+        # Max pooling across output of Convolution+Relu.
+        pool1_trigram = tf.layers.max_pooling1d(conv1_trigram)
+    with tf.variable_scope('CNN_Layer_1_fourgram'):
+        # Apply Convolution filtering on input sequence.
+        conv1_fourgram = tf.layers.conv1d(
+            input,
+            filters=conf['embedding_dim'],
+            kernel_size=2,
+            padding='VALID',
+            # Add a ReLU for non linearity.
+            activation=tf.nn.relu)
+        # Max pooling across output of Convolution+Relu.
+        pool1_fourgram = tf.layers.max_pooling1d(conv1_fourgram)
+    #
+    # with tf.variable_scope('CNN_Layer2'):
+    #     # Second level of convolution filtering.
+    #     conv2 = tf.layers.conv2d(
+    #         pool1,
+    #         filters=N_FILTERS,
+    #         kernel_size=FILTER_SHAPE2,
+    #         padding='VALID')
+    #     # Max across each filter to get useful features for classification.
+    #     pool2 = tf.squeeze(tf.reduce_max(conv2, 1), axis=[1])
+    merged = tf.concat([pool1_bigram, pool1_trigram, pool1_fourgram], axis=1)
+    dense = tf.layers.Dense(merged, conf['embedding_dim'], activation=tf.nn.relu)
+
+    return dense
+
+
+def residual_block(input, conf, scope, num_of_activation_layer=1):
+    with tf.variable_scope(scope):
+        _input = input
+        for i in range(num_of_activation_layer):
+            fc_relu = tf.contrib.layers.fully_connected(
+                _input,
+                conf['fc_relu_embedding_dim'],
+                activation_fn=tf.nn.relu,
+                weights_initializer=tf.truncated_normal_initializer(seed=conf['initializer_seed'],
+                                                                    stddev=0.1),
+                weights_regularizer=tf.contrib.layers.l2_regularizer(conf['weight_decay']),
+                biases_initializer=tf.zeros_initializer(),
+                trainable=True,
+                scope="{}_{}_{}".format(scope,'relu', i)
+            )
+            dropout = tf.contrib.layers.dropout(fc_relu, conf['keep_prob'], scope="{}_{}".format(scope,'dropout'))
+            _input = dropout
+
+        fc_linear = tf.contrib.layers.fully_connected(
+            _input,
+            conf['fc_non_embedding_dim'],
+            activation_fn=None,
+            weights_initializer=tf.truncated_normal_initializer(seed=conf['initializer_seed'],
+                                                                stddev=0.1),
+            weights_regularizer=tf.contrib.layers.l2_regularizer(conf['weight_decay']),
+            biases_initializer=tf.zeros_initializer(),
+            trainable=True,
+            scope="{}_{}".format(scope,'linear')
+        )
+
+        output = tf.add(fc_linear * conf['scaling_factor'], input, name="{}_{}".format(scope,'add'))
+
+    return output
 # def model_3(input, params):
 #     # Define the model
 #     tf.logging.info("Creating the {}...".format(model_3.__name__))
@@ -146,36 +237,3 @@ def model_3(input, params):
 #     return x
 
 
-def residual_block(input, conf, scope, num_of_activation_layer=1):
-    with tf.variable_scope(scope):
-        _input = input
-        for i in range(num_of_activation_layer):
-            fc_relu = tf.contrib.layers.fully_connected(
-                _input,
-                conf['fc_relu_embedding_dim'],
-                activation_fn=tf.nn.relu,
-                weights_initializer=tf.truncated_normal_initializer(seed=conf['initializer_seed'],
-                                                                    stddev=0.1),
-                weights_regularizer=tf.contrib.layers.l2_regularizer(conf['weight_decay']),
-                biases_initializer=tf.zeros_initializer(),
-                trainable=True,
-                scope="{}_{}_{}".format(scope,'relu', i)
-            )
-            dropout = tf.contrib.layers.dropout(fc_relu, conf['keep_prob'], scope="{}_{}".format(scope,'dropout'))
-            _input = dropout
-
-        fc_linear = tf.contrib.layers.fully_connected(
-            _input,
-            conf['fc_non_embedding_dim'],
-            activation_fn=None,
-            weights_initializer=tf.truncated_normal_initializer(seed=conf['initializer_seed'],
-                                                                stddev=0.1),
-            weights_regularizer=tf.contrib.layers.l2_regularizer(conf['weight_decay']),
-            biases_initializer=tf.zeros_initializer(),
-            trainable=True,
-            scope="{}_{}".format(scope,'linear')
-        )
-
-        output = tf.add(fc_linear * conf['scaling_factor'], input, name="{}_{}".format(scope,'add'))
-
-    return output

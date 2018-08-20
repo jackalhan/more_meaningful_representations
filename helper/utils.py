@@ -8,7 +8,7 @@ import random
 import numpy as np
 import math
 import os
-from random import shuffle
+from random import shuffle, seed
 import tensorflow as tf
 import shutil
 from sklearn.preprocessing import normalize
@@ -141,6 +141,7 @@ def train_test_splitter(params, base_path):
         num_labels = params.executor['limit_paragraph_size']
 
     labels_as_list = list(range(num_labels))
+    seed(params.model['seed'])
     shuffle(labels_as_list)
     # in order to have all the labels in the training set, we need to split them accordingly:
     train_labels, test_labels = list(), list()
@@ -149,6 +150,7 @@ def train_test_splitter(params, base_path):
     recall_paragraph_embeddings = list()
     for par_order, par_indx in enumerate(labels_as_list):
         locations = [_ for _, x in enumerate(pre_trained_question_labels) if x == par_indx]
+        seed(params.model['seed'])
         shuffle(locations)
         occur = len(locations)
         print(10 * '*')
@@ -187,8 +189,9 @@ def train_test_splitter(params, base_path):
 
     train = list(zip(train_ques_embeddings, train_labels, train_par_embeddings))
     test = list(zip(test_ques_embeddings, test_labels, test_par_embeddings))
-
+    random.seed(params.model['seed'])
     random.shuffle(train)
+    random.seed(params.model['seed'])
     random.shuffle(test)
     train_ques_embeddings, train_labels, train_par_embeddings = zip(*train)
     test_ques_embeddings, test_labels, test_par_embeddings = zip(*test)
@@ -216,6 +219,7 @@ def train_test_splitter(params, base_path):
     dump_embeddings(test_par_embeddings, os.path.join(base_path, params.files['test_loss']['paragraph_embeddings']))
 
     # Creating a subset test set from the test set
+    random.seed(params.model['seed'])
     random.shuffle(test)
     if params.executor['limit_paragraph_size'] is not None:
         number_of_files_for_test = range(1, params.files['splitter']['test_subset_size'] + 1)
@@ -548,6 +552,7 @@ def question_to_random_paragraph_distance(question_embeddings, paragraph_embeddi
                                           euclidean_distance_op, question_tensor,
                                           paragraph_tensor):
     iter_size = math.ceil(question_embeddings.shape[0] / batch_size)
+    #random.seed(params.eval_seed)
     np.random.shuffle(paragraph_embeddings)
     distances = np.array([])
     distances = distances.reshape(-1, 1)
@@ -556,6 +561,7 @@ def question_to_random_paragraph_distance(question_embeddings, paragraph_embeddi
         end = start + batch_size
         ques = question_embeddings[start:end]
         pars = paragraph_embeddings[start:end]
+        #random.seed(params.eval_seed)
         np.random.shuffle(pars)
         batch_distances = sess.run(euclidean_distance_op, feed_dict={
             question_tensor: ques,

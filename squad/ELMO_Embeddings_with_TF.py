@@ -13,6 +13,7 @@ import spacy
 import json
 import random
 import h5py
+import math
 import tensorflow as tf
 import tensorflow_hub as hub
 #from glove import Glove, Corpus
@@ -32,6 +33,9 @@ def word_tokenize(sent):
 def sentence_segmenter(context):
     _context = nlp_s(context)
     return list(_context.sents)
+
+def pad_list(l, max_num, padding_key):
+    return l[:max_num] + [padding_key] * (max_num - len(l))
 
 def convert_idx(text, tokens):
     current = 0
@@ -569,8 +573,11 @@ def dump_mapping_data(data, outfile_to_dump):
     data_df = pd.DataFrame(np.array(data), columns=list("v"))
     data_df.to_csv(outfile_to_dump)
 
-def load_module(module_url = "https://tfhub.dev/google/universal-sentence-encoder/2"):
-    embed = hub.Module(module_url)
+def load_module(module_url = "https://tfhub.dev/google/universal-sentence-encoder/2", trainable=False):
+    if trainable:
+        embed = hub.Module(module_url, trainable)
+    else:
+        embed = hub.Module(module_url)
     return embed
 
 TRAIN = 'train'
@@ -588,13 +595,19 @@ split_num_of_paragrahs_in_slices = 1000
 percent_of_slice_splits = .4
 
 # ELMO EMBEDDINGS #
+is_elmo_embeddings= False
 is_elmo_document_embeddings_already_generated = False
 partition_size = 1
 is_elmo_word_embeddings_already_generated = False
 is_calculate_recalls = False
 
 # USE EMBEDDINGS #
-is_use_embedding = True
+is_use_embedding = False
+
+# GOOGLE ELMO EMBEDDINGS #
+is_google_elmo_embedding = True
+
+
 # IMPROVE ELMEDDINGS
 is_improve_elmeddings=False
 
@@ -771,7 +784,7 @@ if is_split_content_to_documents:
     print('Number of unique tokens in corpus: {}'.format(len(contexts_vocs)))
     print('Splitting is completed in {} minutes'.format((end-start).seconds/60))
 
-if not is_use_embedding:
+if is_elmo_embeddings:
     if not is_elmo_document_embeddings_already_generated:
         if not is_elmo_word_embeddings_already_generated:
             print('\n')
@@ -941,8 +954,8 @@ if not is_use_embedding:
     end = datetime.datetime.now()
     print('ELMO Embeddings is completed in {} minutes'.format((end - start).seconds / 60))
     print(20 * '-')
-else: # USE Embedding Process
-    use_embed = load_module()
+elif is_use_embedding : # USE Embedding Process
+    use_embed = load_module("https://tfhub.dev/google/universal-sentence-encoder/2")
     print("Question Len", len(questions_nontokenized))
     print("Paragraphs Len", len(paragraphs_nontokenized))
     # Reduce logging output.
@@ -958,6 +971,68 @@ else: # USE Embedding Process
     print('USE Embeddings is completed in {} minutes'.format((end - start).seconds / 60))
     print(20 * '-')
 
+elif is_google_elmo_embedding:
+    elmo_embed = load_module("https://tfhub.dev/google/elmo/2", trainable=True)
+    print("Question Len", len(questions_nontokenized))
+    print("Paragraphs Len", len(paragraphs_nontokenized))
+    question_len = [len(q) for q in tokenized_questions]
+    max_question_len = max(question_len)
+    padded_tokenized_question = [pad_list(q, max_question_len, '') for q in tokenized_questions]
+    loop = 1000
+
+    paragraph_len = [len(p) for p in tokenized_paragraphs]
+    max_paragraph_len = max(paragraph_len)
+    padded_tokenized_paragraph = [pad_list(p, max_paragraph_len, '') for p in tokenized_paragraphs]
+
+    # Reduce logging output.
+    tf.logging.set_verbosity(tf.logging.ERROR)
+    with tf.Session() as session:
+        session.run([tf.global_variables_initializer(), tf.tables_initializer()])
+        slice_num_for_q = math.ceil(len(questions_nontokenized) / loop)
+        slice_num_for_p = math.ceil(len(paragraphs_nontokenized) / loop)
+        question_embeddings = []
+        print('Questions are getting computed....')
+        for i in range(loop):
+            print('Loop: {}'.format(i))
+            _begin_index = i * slice_num_for_q
+            _end_index = _begin_index + slice_num_for_q
+            print('Begin Index: {}'.format(_begin_index))
+            print('End Index: {}'.format(_end_index ))
+            q_e = session.run(elmo_embed(
+                inputs={
+                    "tokens": padded_tokenized_question[_begin_index:_end_index],
+                    "sequence_len": question_len[_begin_index:_end_index]
+                },
+                signature="tokens",
+                as_dict=True)["elmo"])
+            question_embeddings.append(np.mean(q_e, axis=1))
+        question_embeddings = np.asarray(question_embeddings)
+        dump_embeddings(question_embeddings, question_embeddings_file + "_google_elmo")
+        del question_embeddings
+
+        print('Paragraphs are getting computed....')
+        paragraph_embeddings = []
+        for i in range(loop):
+            print('Loop: {}'.format(i))
+            _begin_index = i * slice_num_for_p
+            _end_index = _begin_index + slice_num_for_p
+            print('Begin Index: {}'.format(_begin_index))
+            print('End Index: {}'.format(_end_index))
+            p_e = session.run(elmo_embed(
+                inputs={
+                    "tokens": padded_tokenized_paragraph,
+                    "sequence_len": paragraph_len
+                },
+                signature="tokens",
+                as_dict=True)["elmo"])
+            paragraph_embeddings.append(np.mean(p_e, axis=1))
+        paragraph_embeddings = np.asarray(paragraph_embeddings)
+        dump_embeddings(paragraph_embeddings, paragraph_embeddings_file + "_google_elmo")
+        del paragraph_embeddings
+
+    end = datetime.datetime.now()
+    print('Google ELMO Embeddings is completed in {} minutes'.format((end - start).seconds / 60))
+    print(20 * '-')
 
 
 

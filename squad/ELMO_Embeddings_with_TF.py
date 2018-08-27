@@ -973,31 +973,31 @@ elif is_use_embedding : # USE Embedding Process
 
 elif is_google_elmo_embedding:
     elmo_embed = load_module("https://tfhub.dev/google/elmo/2", trainable=True)
+    tf.logging.set_verbosity(tf.logging.ERROR)
     print("Question Len", len(questions_nontokenized))
     print("Paragraphs Len", len(paragraphs_nontokenized))
     question_len = [len(q) for q in tokenized_questions]
     max_question_len = max(question_len)
     padded_tokenized_question = [pad_list(q, max_question_len, '') for q in tokenized_questions]
-    loop = 1000
+    loop = 700
 
     paragraph_len = [len(p) for p in tokenized_paragraphs]
     max_paragraph_len = max(paragraph_len)
     padded_tokenized_paragraph = [pad_list(p, max_paragraph_len, '') for p in tokenized_paragraphs]
 
-    # Reduce logging output.
-    tf.logging.set_verbosity(tf.logging.ERROR)
-    with tf.Session() as session:
-        session.run([tf.global_variables_initializer(), tf.tables_initializer()])
-        slice_num_for_q = math.ceil(len(questions_nontokenized) / loop)
-        slice_num_for_p = math.ceil(len(paragraphs_nontokenized) / loop)
-        question_embeddings = []
-        print('Questions are getting computed....')
-        for i in range(loop):
-            print('Loop: {}'.format(i))
-            _begin_index = i * slice_num_for_q
-            _end_index = _begin_index + slice_num_for_q
-            print('Begin Index: {}'.format(_begin_index))
-            print('End Index: {}'.format(_end_index ))
+    slice_num_for_q = math.ceil(len(questions_nontokenized) / loop)
+    slice_num_for_p = math.ceil(len(paragraphs_nontokenized) / loop)
+
+    question_embeddings = []
+    print('Questions are getting computed....')
+    for i in range(loop):
+        print('Loop: {}'.format(i))
+        _begin_index = i * slice_num_for_q
+        _end_index = _begin_index + slice_num_for_q
+        print('Begin Index: {}'.format(_begin_index))
+        print('End Index: {}'.format(_end_index))
+        with tf.Session() as session:
+            session.run([tf.global_variables_initializer(), tf.tables_initializer()])
             q_e = session.run(elmo_embed(
                 inputs={
                     "tokens": padded_tokenized_question[_begin_index:_end_index],
@@ -1006,18 +1006,20 @@ elif is_google_elmo_embedding:
                 signature="tokens",
                 as_dict=True)["elmo"])
             question_embeddings.append(np.mean(q_e, axis=1))
-        question_embeddings = np.asarray(question_embeddings)
-        dump_embeddings(question_embeddings, question_embeddings_file + "_google_elmo")
-        del question_embeddings
+    question_embeddings = np.asarray(question_embeddings)
+    dump_embeddings(question_embeddings, question_embeddings_file + "_google_elmo")
+    del question_embeddings
 
-        print('Paragraphs are getting computed....')
-        paragraph_embeddings = []
-        for i in range(loop):
-            print('Loop: {}'.format(i))
-            _begin_index = i * slice_num_for_p
-            _end_index = _begin_index + slice_num_for_p
-            print('Begin Index: {}'.format(_begin_index))
-            print('End Index: {}'.format(_end_index))
+    print('Paragraphs are getting computed....')
+    paragraph_embeddings = []
+    for i in range(loop):
+        print('Loop: {}'.format(i))
+        _begin_index = i * slice_num_for_p
+        _end_index = _begin_index + slice_num_for_p
+        print('Begin Index: {}'.format(_begin_index))
+        print('End Index: {}'.format(_end_index))
+        with tf.Session() as session:
+            session.run([tf.global_variables_initializer(), tf.tables_initializer()])
             p_e = session.run(elmo_embed(
                 inputs={
                     "tokens": padded_tokenized_paragraph,
@@ -1026,13 +1028,10 @@ elif is_google_elmo_embedding:
                 signature="tokens",
                 as_dict=True)["elmo"])
             paragraph_embeddings.append(np.mean(p_e, axis=1))
-        paragraph_embeddings = np.asarray(paragraph_embeddings)
-        dump_embeddings(paragraph_embeddings, paragraph_embeddings_file + "_google_elmo")
-        del paragraph_embeddings
+    paragraph_embeddings = np.asarray(paragraph_embeddings)
+    dump_embeddings(paragraph_embeddings, paragraph_embeddings_file + "_google_elmo")
+    del paragraph_embeddings
 
     end = datetime.datetime.now()
     print('Google ELMO Embeddings is completed in {} minutes'.format((end - start).seconds / 60))
     print(20 * '-')
-
-
-

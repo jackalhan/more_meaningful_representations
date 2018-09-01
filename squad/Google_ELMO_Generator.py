@@ -10,7 +10,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = DEV
+dataset_type = TRAIN
 is_dump_during_execution = True
 is_inject_idf = True
 is_filtered_by_answers_from_rnet = False

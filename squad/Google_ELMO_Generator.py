@@ -10,7 +10,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 is_dump_during_execution = True
 is_inject_idf = True
 is_filtered_by_answers_from_rnet = False
@@ -153,62 +153,68 @@ if is_elmo_embeddings:
     print('Generating ELMO Embeddings from Google just started....')
     start = datetime.datetime.now()
     for document_type in ['question','paragraph']:
-        index = 0
+        counter = 0
         if document_type == 'question':
-            tokenized = tokenized_questions
-            reset_every_iter = 25
+            begin_index = 0
+            documents = questions_nontokenized
+            tokenized_documents = tokenized_questions
+            reset_every_iter = 3
+            batch = 25
             embedding_file = question_embeddings_file
         else:
-            tokenized = tokenized_paragraphs
-            reset_every_iter = 20
+            begin_index = 0
+            documents = paragraphs_nontokenized
+            tokenized_documents = tokenized_paragraphs
+            reset_every_iter = 3
+            batch = 2
             embedding_file = paragraph_embedding_file
 
-        while True:
-            tf.reset_default_graph()
-            elmo_embed = UTIL.load_module("https://tfhub.dev/google/elmo/2", trainable=True)
-            tf.logging.set_verbosity(tf.logging.ERROR)
-            begin_index = index * reset_every_iter
-            end_index = begin_index + reset_every_iter
+        while begin_index <= len(documents):
+            if counter % reset_every_iter == 0:
+                print('Graph is resetted')
+                tf.reset_default_graph()
+                elmo_embed = UTIL.load_module("https://tfhub.dev/google/elmo/2", trainable=True)
+                tf.logging.set_verbosity(tf.logging.ERROR)
+
+            begin_index = begin_index
+            end_index = begin_index + batch
             print('Processing {} from {} to {}'.format(document_type, begin_index, end_index))
-            if begin_index <= len(tokenized):
-                with tf.Session() as session:
-                    session.run([tf.global_variables_initializer(), tf.tables_initializer()])
-                    for i, each_document in enumerate(tqdm(tokenized[begin_index:end_index],
-                                                           total=len(tokenized[begin_index:end_index])), begin_index):
+            with tf.Session() as session:
+                print('Session is opened')
+                session.run([tf.global_variables_initializer(), tf.tables_initializer()])
 
-                        d = session.run(elmo_embed(
-                            inputs={
-                                "tokens": [each_document],
-                                "sequence_len": [len(each_document)]
-                            },
-                            signature="tokens",
-                            as_dict=True)['lstm_outputs1'])
-                        d = d[0,:,:]
-                        UTIL.dump_embeddings(d, embedding_file.replace('@', 'LSTM1_' + str(i)))
+                d1 = session.run(elmo_embed( documents[begin_index:end_index],
+                    signature="default",
+                    as_dict=True)['lstm_outputs1'])
 
-                        d = session.run(elmo_embed(
-                            inputs={
-                                "tokens": [each_document],
-                                "sequence_len": [len(each_document)]
-                            },
-                            signature="tokens",
-                            as_dict=True)['lstm_outputs2'])
-                        d = d[0, :, :]
-                        UTIL.dump_embeddings(d, embedding_file.replace('@', 'LSTM2_' + str(i)))
+                d2 = session.run(elmo_embed( documents[begin_index:end_index],
+                    signature="default",
+                    as_dict=True)['lstm_outputs2'])
 
-                        d = session.run(elmo_embed(
-                            inputs={
-                                "tokens": [each_document],
-                                "sequence_len": [len(each_document)]
-                            },
-                            signature="tokens",
-                            as_dict=True)['elmo'])
-                        d = d[0, :, :]
-                        UTIL.dump_embeddings(d, embedding_file.replace('@', 'ELMO_' + str(i)))
+                delmo= session.run(elmo_embed( documents[begin_index:end_index],
+                    signature="default",
+                    as_dict=True)['elmo'])
+                # for i, each_document in enumerate(tqdm(tokenized[begin_index:end_index],
+                #                                        total=len(tokenized[begin_index:end_index])), begin_index):
 
-                index += 1
-            else:
-                break
+                for doc_index, embed_document in enumerate(enumerate(documents[begin_index:end_index]), begin_index):
+
+                    try:
+                        embed_index, each_document = embed_document
+                        _begining = 0
+                        _ending = len(tokenized_documents[doc_index])
+                        _d1 = d1[embed_index,_begining:_ending,:]
+                        UTIL.dump_embeddings(_d1, embedding_file.replace('@', 'LSTM1_' + str(doc_index)))
+                        _d2 = d2[embed_index, _begining:_ending,:]
+                        UTIL.dump_embeddings(_d2, embedding_file.replace('@', 'LSTM2_' + str(doc_index)))
+                        _delmo = delmo[embed_index, _begining:_ending, :]
+                        UTIL.dump_embeddings(_delmo, embedding_file.replace('@', 'ELMO_' + str(doc_index)))
+                    except Exception as ex:
+                        print(ex)
+                        print('End of documents')
+
+            counter += 1
+            begin_index += batch
     end = datetime.datetime.now()
     print('ELMO Embeddings from Google are generated in {} minutes'.format((end - start).seconds / 60))
     print(100 * '*')

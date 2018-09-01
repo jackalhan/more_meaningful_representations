@@ -152,21 +152,21 @@ if is_elmo_embeddings:
     print(100 * '*')
     print('Generating ELMO Embeddings from Google just started....')
     start = datetime.datetime.now()
-    for document_type in ['question','paragraph']:
+    for document_type in ['paragraph']:
         counter = 0
         if document_type == 'question':
             begin_index = 0
             documents = questions_nontokenized
             tokenized_documents = tokenized_questions
             reset_every_iter = 3
-            batch = 25
+            batch = 300
             embedding_file = question_embeddings_file
         else:
             begin_index = 0
             documents = paragraphs_nontokenized
             tokenized_documents = tokenized_paragraphs
             reset_every_iter = 3
-            batch = 2
+            batch = 25
             embedding_file = paragraph_embedding_file
 
         while begin_index <= len(documents):

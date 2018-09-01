@@ -521,24 +521,80 @@ def create_idf_matrix(tokenized_questions, tokenized_paragraphs, token2idfweight
     idf_matrix = idf_matrix.reshape(idf_matrix.shape[0], 1,1)
     return idf_matrix
 
-def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token_embeddings, token_embeddings_guideline):
+def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token_embeddings, token_embeddings_guideline, weight_matrix):
     questions_embeddings = []
     paragraphs_embeddings = []
-    for _ in tqdm(range(len(tokenized_questions + tokenized_paragraphs))):
+    documents = tokenized_questions + tokenized_paragraphs
+    for _ in tqdm(range(len(documents))):
         str_index = token_embeddings_guideline[_]['start_index']
         end_index = token_embeddings_guideline[_]['end_index']
         d_type = token_embeddings_guideline[_]['type']
-
         if d_type == 'q':
             questions_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
             # idf_question_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
         else:
             paragraphs_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
             # idf_paragraph_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
+
+        # -------------------------------------------------
+        #after validation, this is going to be deleted
+        # -------------------------------------------------
+        simplified_token_embeddings = {}
+        if is_inhouse_elmo_for_cnn:
+            # simplified token embeddings for CNN module
+            for token_index, token_name in enumerate(documents[_]):
+                _tok_str_index = str_index + token_index
+                _tok_end_index = _tok_str_index + 1
+                simplified_token_embedding = np.mean(np.multiply(np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :]), weight_matrix),axis=1)
+                saved_token_embeddings = simplified_token_embeddings.get(token_name)
+                if saved_token_embeddings is not None:
+                    if saved_token_embeddings == simplified_token_embedding:
+                        print('{} have always same embeddings'.format(token_name))
+                else:
+                    simplified_token_embeddings[token_name] = simplified_token_embedding
+
+        token_to_idx = {}
+        simplified_token_embeddings = []
+        if is_inhouse_elmo_for_cnn:
+            # simplified token embeddings for CNN module
+            glboal_token_index = 0
+            for token_index, token_name in enumerate(documents[_]):
+                _tok_str_index = str_index + token_index
+                _tok_end_index = _tok_str_index + 1
+                simplified_token_embedding_ = np.mean(
+                    np.multiply(np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :]), weight_matrix),
+                    axis=1)
+                simplified_token_embedding = np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :])
+                saved_token_embeddings = token_to_idx.get(token_name)
+                if saved_token_embeddings is None:
+                    token_to_idx[token_name] = glboal_token_index
+                    simplified_token_embeddings.append(simplified_token_embedding)
+                    glboal_token_index +=1
+            simplified_token_embeddings = np.asarray(simplified_token_embeddings)
+            simplified_token_embeddings = np.multiply(simplified_token_embeddings, weight_matrix)
+            simplified_token_embeddings = np.mean(simplified_token_embeddings, axis=1)
+
+            vocabulary_size = len(token_to_idx)
+            # Assume your embeddings variable
+            tok_embeddings = tf.Variable(simplified_token_embedding)
+            with tf.Session() as sess:
+                embeddings_val = sess.run(tok_embeddings)
+                with open(token_embeddings_file.replace('@@', 'CNN').replace('hdf5','txt'), 'w') as file_:
+                    for i in range(vocabulary_size):
+                        embed = embeddings_val[i, :]
+                        word = token_to_idx[i]
+                        file_.write('%s %s\n' % (word, ' '.join(map(str, embed))))
     del token_embeddings
+    del simplified_token_embeddings
 
     questions_embeddings = np.asarray(questions_embeddings)
     paragraphs_embeddings = np.asarray(paragraphs_embeddings)
+
+    questions_embeddings = np.multiply(questions_embeddings, weight_matrix)
+    paragraphs_embeddings = np.multiply(paragraphs_embeddings, weight_matrix)
+
+    questions_embeddings = np.mean(questions_embeddings, axis=1)
+    paragraphs_embeddings = np.mean(paragraphs_embeddings, axis=1)
 
     return questions_embeddings, paragraphs_embeddings
 
@@ -587,7 +643,7 @@ DEV = 'dev'
 ################ CONFIGURATIONS #################
 dataset_type = TRAIN
 is_dump_during_execution = True
-is_inject_idf = False
+is_inject_idf = True
 is_filtered_by_answers_from_rnet = False
 
 # SPLIT DOCS
@@ -608,6 +664,8 @@ is_use_embedding = False
 # GOOGLE ELMO EMBEDDINGS #
 is_google_elmo_embedding = True
 
+# CREATE 3D INHOUSE ELMO FOR CNN
+is_inhouse_elmo_for_cnn = True
 
 # IMPROVE ELMEDDINGS
 is_improve_elmeddings=False
@@ -868,17 +926,14 @@ if is_elmo_embeddings:
             print('Weight {}'.format(_a_b_c))
 
             if not is_elmo_word_embeddings_already_generated:
+                WM = np.array([_a_b_c[0], _a_b_c[1], _a_b_c[2]]).reshape((1, 3, 1))
                 questions_embeddings, paragraphs_embeddings = token_to_document_embeddings(tokenized_questions,
                                                                                            tokenized_paragraphs,
                                                                                            _token_embed,
-                                                                                           document_embedding_guideline)
-                # YES TUNE
-                WM = np.array([_a_b_c[0], _a_b_c[1], _a_b_c[2]]).reshape((1, 3, 1))
-                questions_embeddings = np.multiply(questions_embeddings, WM)
-                paragraphs_embeddings = np.multiply(paragraphs_embeddings, WM)
+                                                                                           document_embedding_guideline,
+                                                                                            WM)
 
-                questions_embeddings = np.mean(questions_embeddings, axis=1)
-                paragraphs_embeddings = np.mean(paragraphs_embeddings, axis=1)
+                # dump, embeddings
             else:
                 with h5py.File(question_embeddings_file, 'r') as fq_in, h5py.File(paragraph_embeddings_file, 'r') as fp_in:
                     paragraphs_embeddings = fp_in['embeddings'][...]
@@ -973,8 +1028,6 @@ elif is_use_embedding : # USE Embedding Process
     print(20 * '-')
 
 elif is_google_elmo_embedding:
-    elmo_embed = load_module("https://tfhub.dev/google/elmo/2", trainable=True)
-    tf.logging.set_verbosity(tf.logging.ERROR)
     print("Question Len", len(questions_nontokenized))
     print("Paragraphs Len", len(paragraphs_nontokenized))
     question_len = [len(q) for q in tokenized_questions]
@@ -989,10 +1042,20 @@ elif is_google_elmo_embedding:
     """
     embedding_type = 'elmo'
     batch_size_for_q = 1000
-    batch_size_for_p = 10 #math.ceil(len(paragraphs_nontokenized) / loop)
-    batch_index_to_be_resumed = -1
-    save_for_every_batch = 100
-    counter_for_saving = 1
+    batch_size_for_p = 1 #math.ceil(len(paragraphs_nontokenized) / loop)
+    save_for_every_batch = 50
+    # 0 - 100 : 1
+    # 100 - 200 : 2
+    # 200 - 300 : 3
+    # 300 - 400 : 4
+    # 400 - 500 : 5
+    # 500 - 600 : 6
+    # 600 - 700 : 7
+    # 700 - 800 : 8
+    # 800 - 900 : 9
+
+    batch_index_to_be_resumed = 1000
+    counter_for_saving = 11
 
     # is it for saving embeddings or reading embeddings to have one embedding file?
     is_generating_embeddings = True
@@ -1010,55 +1073,68 @@ elif is_google_elmo_embedding:
         print('Total Number of batches: {}'.format(batch_counter))
         print('Batch Size: {}'.format(batch_size_for_q))
         if is_generating_embeddings:
-            with tf.Session() as session:
-                question_embeddings = None
-                timer_for_saving= save_for_every_batch
-                for i in range(1, batch_counter + 1):
-                    if i * batch_size_for_q > total_number_of_questions:
-                        print('There is no more questions left, batch counter is out of range {}/{}'.format(i * batch_size_for_q, total_number_of_questions))
-                        if timer_for_saving != save_for_every_batch:
-                            dump_embeddings(question_embeddings,
-                                            question_embeddings_file + "_google_elmo_" + str(counter_for_saving))
-                            print(question_embeddings_file + "_google_elmo_" + str(counter_for_saving), ' is dumped')
-                            del question_embeddings
-                            question_embeddings = None
-                            counter_for_saving += 1
-                            timer_for_saving = save_for_every_batch
-                    else:
-                        if batch_index_to_be_resumed == -1 or (batch_index_to_be_resumed != -1 and i >= batch_index_to_be_resumed):
-                            # if there is still enough questions for batch:
-                            _begin_time = datetime.datetime.now()
-                            print('Batch Index: {}'.format(i))
-                            _begin_index = (i - 1) * batch_size_for_q
-                            _end_index = _begin_index + batch_size_for_q
-                            print('Question Begin Index: {}'.format(_begin_index))
-                            print('Question End Index: {}'.format(_end_index))
-
-                            session.run([tf.global_variables_initializer(), tf.tables_initializer()])
-                            q_e = session.run(elmo_embed(
-                                inputs={
-                                    "tokens": padded_tokenized_question[_begin_index:_end_index],
-                                    "sequence_len": question_len[_begin_index:_end_index]
-                                },
-                                signature="tokens",
-                                as_dict=True)[embedding_type])
-
-                            if question_embeddings is None:
-                                question_embeddings = np.mean(q_e, axis=1)
-                            else:
-                                question_embeddings = np.vstack((question_embeddings, np.mean(q_e, axis=1)))
-
-                            timer_for_saving -=1
-                            if timer_for_saving == 0:
-                                dump_embeddings(question_embeddings, question_embeddings_file + "_google_elmo_" + str(counter_for_saving))
+            execution_counter = 0
+            while True:
+                tf.reset_default_graph()
+                elmo_embed = load_module("https://tfhub.dev/google/elmo/2", trainable=True)
+                tf.logging.set_verbosity(tf.logging.ERROR)
+                execution_counter +=1
+                print(50 * '=')
+                print('Exceution {}'.format(execution_counter))
+                print(50 * '=')
+                with tf.Session() as session:
+                    question_embeddings = None
+                    timer_for_saving= save_for_every_batch
+                    for i in range(1, batch_counter + 1):
+                        if i * batch_size_for_q > total_number_of_questions:
+                            print('There is no more questions left, batch counter is out of range {}/{}'.format(i * batch_size_for_q, total_number_of_questions))
+                            if timer_for_saving != save_for_every_batch:
+                                dump_embeddings(question_embeddings,
+                                                question_embeddings_file + "_google_elmo_" + str(counter_for_saving))
                                 print(question_embeddings_file + "_google_elmo_" + str(counter_for_saving), ' is dumped')
                                 del question_embeddings
                                 question_embeddings = None
-                                counter_for_saving +=1
+                                counter_for_saving += 1
+                                batch_index_to_be_resumed += save_for_every_batch
                                 timer_for_saving = save_for_every_batch
-                            _end_time = datetime.datetime.now()
-                            print('Loop {} takes {} mins'.format(i, (_end_time - _begin_time).seconds/ 60))
-                            print(50 * '+')
+                                exit()
+                        else:
+                            if batch_index_to_be_resumed == -1 or (batch_index_to_be_resumed != -1 and i > batch_index_to_be_resumed):
+                                # if there is still enough questions for batch:
+                                _begin_time = datetime.datetime.now()
+                                print('Batch Index: {}'.format(i))
+                                _begin_index = (i - 1) * batch_size_for_q
+                                _end_index = _begin_index + batch_size_for_q
+                                print('Question Begin Index: {}'.format(_begin_index))
+                                print('Question End Index: {}'.format(_end_index))
+
+                                session.run([tf.global_variables_initializer(), tf.tables_initializer()])
+                                q_e = session.run(elmo_embed(
+                                    inputs={
+                                        "tokens": padded_tokenized_question[_begin_index:_end_index],
+                                        "sequence_len": question_len[_begin_index:_end_index]
+                                    },
+                                    signature="tokens",
+                                    as_dict=True)[embedding_type])
+
+                                if question_embeddings is None:
+                                    question_embeddings = np.mean(q_e, axis=1)
+                                else:
+                                    question_embeddings = np.vstack((question_embeddings, np.mean(q_e, axis=1)))
+
+                                timer_for_saving -=1
+                                if timer_for_saving == 0:
+                                    dump_embeddings(question_embeddings, question_embeddings_file + "_google_elmo_" + str(counter_for_saving))
+                                    print(question_embeddings_file + "_google_elmo_" + str(counter_for_saving), ' is dumped')
+                                    del question_embeddings
+                                    question_embeddings = None
+                                    counter_for_saving +=1
+                                    batch_index_to_be_resumed += save_for_every_batch
+                                    timer_for_saving = save_for_every_batch
+                                    break
+                                _end_time = datetime.datetime.now()
+                                print('Loop {} takes {} mins'.format(i, (_end_time - _begin_time).seconds/ 60))
+                                print(50 * '+')
         else:
             all_question_embeddings = None
             for i in range(1, counter_for_saving+1):
@@ -1079,59 +1155,72 @@ elif is_google_elmo_embedding:
         print('Total Number of batches: {}'.format(batch_counter))
         print('Batch Size: {}'.format(batch_size_for_p))
         if is_generating_embeddings:
-            with tf.Session() as session:
-                paragraph_embeddings = None
-                timer_for_saving = save_for_every_batch
-                for i in range(1, batch_counter + 1):
-                    if i * batch_size_for_p > total_number_of_paragraphs:
-                        print('There is no more paragraphs left, batch counter is out of range {}/{}'.format(
-                            i * batch_size_for_q, total_number_of_paragraphs))
-                        if timer_for_saving != save_for_every_batch:
-                            dump_embeddings(total_number_of_paragraphs,
-                                            paragraph_embeddings_file + "_google_elmo_" + str(counter_for_saving))
-                            print(paragraph_embeddings_file + "_google_elmo_" + str(counter_for_saving), ' is dumped')
-                            del paragraph_embeddings
-                            paragraph_embeddings = None
-                            counter_for_saving += 1
-                            timer_for_saving = save_for_every_batch
-                    else:
-                        if batch_index_to_be_resumed == -1 or (
-                                batch_index_to_be_resumed != -1 and i >= batch_index_to_be_resumed):
-                            # if there is still enough paragraphs for batch:
-                            _begin_time = datetime.datetime.now()
-                            print('Batch Index: {}'.format(i))
-                            _begin_index = (i - 1) * batch_size_for_q
-                            _end_index = _begin_index + batch_size_for_q
-                            print('Paragraph Begin Index: {}'.format(_begin_index))
-                            print('Paragraph End Index: {}'.format(_end_index))
-
-                            session.run([tf.global_variables_initializer(), tf.tables_initializer()])
-                            p_e = session.run(elmo_embed(
-                                inputs={
-                                    "tokens": padded_tokenized_paragraph[_begin_index:_end_index],
-                                    "sequence_len": paragraph_len[_begin_index:_end_index]
-                                },
-                                signature="tokens",
-                                as_dict=True)[embedding_type])
-
-                            if paragraph_embeddings is None:
-                                paragraph_embeddings = np.mean(p_e, axis=1)
-                            else:
-                                paragraph_embeddings = np.vstack((paragraph_embeddings, np.mean(p_e, axis=1)))
-
-                            timer_for_saving -= 1
-                            if timer_for_saving == 0:
-                                dump_embeddings(paragraph_embeddings,
+            execution_counter = 0
+            while True:
+                tf.reset_default_graph()
+                elmo_embed = load_module("https://tfhub.dev/google/elmo/2", trainable=True)
+                tf.logging.set_verbosity(tf.logging.ERROR)
+                execution_counter += 1
+                print(50 * '=')
+                print('Exceution {}'.format(execution_counter))
+                print(50 * '=')
+                with tf.Session() as session:
+                    paragraph_embeddings = None
+                    timer_for_saving = save_for_every_batch
+                    for i in range(1, batch_counter + 1):
+                        if i * batch_size_for_p > total_number_of_paragraphs:
+                            print('There is no more paragraphs left, batch counter is out of range {}/{}'.format(
+                                i * batch_size_for_q, total_number_of_paragraphs))
+                            if timer_for_saving != save_for_every_batch:
+                                dump_embeddings(total_number_of_paragraphs,
                                                 paragraph_embeddings_file + "_google_elmo_" + str(counter_for_saving))
-                                print(paragraph_embeddings_file + "_google_elmo_" + str(counter_for_saving),
-                                      ' is dumped')
+                                print(paragraph_embeddings_file + "_google_elmo_" + str(counter_for_saving), ' is dumped')
                                 del paragraph_embeddings
                                 paragraph_embeddings = None
                                 counter_for_saving += 1
+                                batch_index_to_be_resumed += save_for_every_batch
                                 timer_for_saving = save_for_every_batch
-                            _end_time = datetime.datetime.now()
-                            print('Loop {} takes {} mins'.format(i, (_end_time - _begin_time).seconds / 60))
-                            print(50 * '+')
+                                exit()
+                        else:
+                            if batch_index_to_be_resumed == -1 or (
+                                    batch_index_to_be_resumed != -1 and i > batch_index_to_be_resumed):
+                                # if there is still enough paragraphs for batch:
+                                _begin_time = datetime.datetime.now()
+                                print('Batch Index: {}'.format(i))
+                                _begin_index = (i - 1) * batch_size_for_p
+                                _end_index = _begin_index + batch_size_for_p
+                                print('Paragraph Begin Index: {}'.format(_begin_index))
+                                print('Paragraph End Index: {}'.format(_end_index))
+
+                                session.run([tf.global_variables_initializer(), tf.tables_initializer()])
+                                p_e = session.run(elmo_embed(
+                                    inputs={
+                                        "tokens": padded_tokenized_paragraph[_begin_index:_end_index],
+                                        "sequence_len": paragraph_len[_begin_index:_end_index]
+                                    },
+                                    signature="tokens",
+                                    as_dict=True)[embedding_type])
+
+                                if paragraph_embeddings is None:
+                                    paragraph_embeddings = np.mean(p_e, axis=1)
+                                else:
+                                    paragraph_embeddings = np.vstack((paragraph_embeddings, np.mean(p_e, axis=1)))
+
+                                timer_for_saving -= 1
+                                if timer_for_saving == 0:
+                                    dump_embeddings(paragraph_embeddings,
+                                                    paragraph_embeddings_file + "_google_elmo_" + str(counter_for_saving))
+                                    print(paragraph_embeddings_file + "_google_elmo_" + str(counter_for_saving),
+                                          ' is dumped')
+                                    del paragraph_embeddings
+                                    paragraph_embeddings = None
+                                    counter_for_saving += 1
+                                    batch_index_to_be_resumed += save_for_every_batch
+                                    timer_for_saving = save_for_every_batch
+                                    break
+                                _end_time = datetime.datetime.now()
+                                print('Loop {} takes {} mins'.format(i, (_end_time - _begin_time).seconds / 60))
+                                print(50 * '+')
         else:
             all_paragraph_embeddings = None
             for i in range(1, counter_for_saving + 1):

@@ -11,14 +11,33 @@ import os
 from random import shuffle, seed
 import tensorflow as tf
 import shutil
-from sklearn.preprocessing import normalize
-from sklearn.metrics.pairwise import euclidean_distances
-import sys
+from tqdm import tqdm
 import pickle
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-import matplotlib as mpl
+import tensorflow_hub as hub
 import matplotlib.pyplot as plt
+from sklearn.feature_extraction.text import TfidfVectorizer
 import shelve
+import spacy
+from collections import defaultdict, Counter
+nlp = spacy.blank("en")
+#nlp_s = spacy.load('en')
+encoding="utf-8"
+#tokenize = lambda doc: [token.text for token in nlp(doc)]
+def word_tokenize(sent):
+    doc = nlp(sent)
+    return [token.text for token in doc]
+def convert_idx(text, tokens):
+    current = 0
+    spans = []
+    for token in tokens:
+        current = text.find(token, current)
+        if current < 0:
+            print("Token {} cannot be found".format(token))
+            raise Exception()
+        spans.append((current, current + len(token)))
+        current += len(token)
+    return spans
 
 class Params():
     """Class that loads hyperparameters from a json file.
@@ -701,3 +720,102 @@ def load_from_shelve(path):
     with shelve.open(path) as myShelve:
         obj = myShelve
     return obj
+
+def process_squad_file(filename, data_type, word_counter, char_counter):
+    print("Generating {} examples...".format(data_type))
+    examples = []
+    eval_examples = {}
+    total,_i_para  = 0, 0
+    questions = []
+    paragraphs = []
+    question_to_paragraph = []
+    with open(filename, "r") as fh:
+        source = json.load(fh)
+        for article in tqdm(source["data"]):
+            title = article["title"]
+            for para in article["paragraphs"]:
+                context = para["context"].replace(
+                    "''", '" ').replace("``", '" ')
+                paragraphs.append(context)
+                context_tokens = word_tokenize(context)
+                context_chars = [list(token) for token in context_tokens]
+                spans = convert_idx(context, context_tokens)
+                for token in context_tokens:
+                    word_counter[token] += len(para["qas"])
+                    for char in token:
+                        char_counter[char] += len(para["qas"])
+                for qa in para["qas"]:
+                    total += 1
+                    ques = qa["question"].replace(
+                        "''", '" ').replace("``", '" ')
+                    questions.append(ques)
+                    question_to_paragraph.append(_i_para)
+                    ques_tokens = word_tokenize(ques)
+                    ques_chars = [list(token) for token in ques_tokens]
+                    for token in ques_tokens:
+                        word_counter[token] += 1
+                        for char in token:
+                            char_counter[char] += 1
+                    y1s, y2s = [], []
+                    answer_texts = []
+                    for answer in qa["answers"]:
+                        answer_text = answer["text"]
+                        answer_start = answer['answer_start']
+                        answer_end = answer_start + len(answer_text)
+                        answer_texts.append(answer_text)
+                        answer_span = []
+                        for idx, span in enumerate(spans):
+                            if not (answer_end <= span[0] or answer_start >= span[1]):
+                                answer_span.append(idx)
+                        y1, y2 = answer_span[0], answer_span[-1]
+                        y1s.append(y1)
+                        y2s.append(y2)
+                    example = {"context_tokens": context_tokens, "context_chars": context_chars, "ques_tokens": ques_tokens,
+                               "ques_chars": ques_chars, "y1s": y1s, "y2s": y2s, "id": total}
+                    examples.append(example)
+                    eval_examples[str(total)] = {
+                        "context": context, "spans": spans, 'ques': ques,"answers": answer_texts, "uuid": qa["id"], 'title': title}
+                _i_para += 1
+        print("{} questions in total".format(len(examples)))
+    return examples, eval_examples, questions, paragraphs, question_to_paragraph
+
+def load_module(module_url = "https://tfhub.dev/google/universal-sentence-encoder/2", trainable=False):
+    if trainable:
+        embed = hub.Module(module_url, trainable)
+    else:
+        embed = hub.Module(module_url)
+    return embed
+
+def create_idf_matrix(tokenized_questions, tokenized_paragraphs, token2idfweight):
+    idf_matrix = []
+    for sentence in tokenized_questions + tokenized_paragraphs:
+        for word in sentence:
+            idf_matrix.append(token2idfweight[word])
+
+    idf_matrix = np.asarray(idf_matrix)
+    idf_matrix = idf_matrix.reshape(idf_matrix.shape[0], 1,1)
+    return idf_matrix
+
+def transform_to_idf_weigths(tokenized_questions, tokenized_paragraphs, tokenizer, questions_nontokenized,paragraphs_nontokenized):
+    tfidf = TfidfVectorizer(analyzer=lambda x: x, smooth_idf=False, sublinear_tf=False, tokenizer=tokenizer)
+    tfidf.fit(questions_nontokenized + paragraphs_nontokenized)
+    max_idf = max(tfidf.idf_)
+    token2idfweight = defaultdict(
+        lambda: max_idf,
+        [(w, tfidf.idf_[i]) for w, i in tfidf.vocabulary_.items()])
+    idf_vec = create_idf_matrix(tokenized_questions, tokenized_paragraphs, token2idfweight)
+    return token2idfweight, idf_vec
+
+def create_dir(dir):
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    return dir
+
+def dump_tokenized_contexts(tokenized_contexts:list, file_path:str):
+    with open(file_path, 'w') as fout:
+        for context in tokenized_contexts:
+            fout.write(' '.join(context) + '\n')
+
+def tokenize_contexts(contexts:list):
+    tokenized_context = [word_tokenize(context.strip()) for context in contexts]
+    return tokenized_context

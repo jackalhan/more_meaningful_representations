@@ -1,8 +1,8 @@
 import datetime
 from collections import Counter, defaultdict
 import tensorflow as tf
-from tqdm import tqdm
-from glove import Glove, Corpus
+#from tqdm import tqdm
+#from glove import Glove, Corpus
 import chakin
 import numpy as np
 import os

@@ -13,3 +13,4 @@ typing==3.6.4
 scipy==1.1.0
 tensorflow-hub
 seaborn
+chakin

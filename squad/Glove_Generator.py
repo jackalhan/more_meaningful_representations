@@ -2,6 +2,9 @@ import datetime
 from collections import Counter, defaultdict
 import tensorflow as tf
 from tqdm import tqdm
+from glove import Glove, Corpus
+import chakin
+import numpy as np
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -11,18 +14,16 @@ DEV = 'dev'
 
 ################ CONFIGURATIONS #################
 dataset_type = DEV
-is_dump_during_execution = True
+is_dump_during_execution = False
 is_inject_idf = True
-is_filtered_by_answers_from_rnet = False
-
 ################ CONFIGURATIONS #################
-
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
 
-paragraphs_dir = UTIL.create_dir(os.path.join(datadir, 'ELMO', 'paragraphs'))
-questions_dir = UTIL.create_dir(os.path.join(datadir, 'ELMO','questions'))
+pre_trained_dir = UTIL.create_dir(os.path.join(_basepath, 'GLOVE', 'data'))
+paragraphs_dir = UTIL.create_dir(os.path.join(datadir, 'GLOVE', 'paragraphs'))
+questions_dir = UTIL.create_dir(os.path.join(datadir, 'GLOVE','questions'))
 
 _paragraphs_file_name = '{}_paragraphs.txt'
 paragraphs_file = os.path.join(paragraphs_dir, _paragraphs_file_name)
@@ -119,8 +120,9 @@ for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
     for token in sentence:
         corpus_as_tokens.append(token)
 
-UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
-UTIL.save_as_pickle(corpus_as_tokens, tokens_ordered_file)
+if is_dump_during_execution:
+    UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
+    UTIL.save_as_pickle(corpus_as_tokens, tokens_ordered_file)
 del document_embedding_guideline
 del corpus_as_tokens
 end = datetime.datetime.now()
@@ -137,83 +139,171 @@ END: DOCUMENT-TOKEN GUIDELINE
 """
 ******************************************************************************************************************
 ******************************************************************************************************************
-START: GOOGLE ELMO EMBEDDINGS
+START: GLOVE EMBEDDINGS DOWNLOAD
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
 print(100 * '*')
-print('Generating ELMO Embeddings from Google just started....')
+print('Downloading Glove Pre-Trained Embeddings....')
 start = datetime.datetime.now()
-for document_type in ['paragraph']:
-    counter = 0
-    if document_type == 'question':
-        begin_index = 0
-        documents = questions_nontokenized
-        tokenized_documents = tokenized_questions
-        reset_every_iter = 3
-        batch = 250
-        embedding_file = question_embeddings_file
-    else:
-        begin_index = 774
-        documents = paragraphs_nontokenized
-        tokenized_documents = tokenized_paragraphs
-        reset_every_iter = 3
-        batch = 1
-        embedding_file = paragraph_embedding_file
 
-    while begin_index <= len(documents):
-        if counter % reset_every_iter == 0:
-            print('Graph is resetted')
-            tf.reset_default_graph()
-            elmo_embed = UTIL.load_module("https://tfhub.dev/google/elmo/2", trainable=True)
-            tf.logging.set_verbosity(tf.logging.ERROR)
+CHAKIN_INDEX = 16
+NUMBER_OF_DIMENSIONS = 300
+SUBFOLDER_NAME = "GloVe.840B.300d"
 
-        begin_index = begin_index
-        end_index = begin_index + batch
-        print('Processing {} from {} to {}'.format(document_type, begin_index, end_index))
-        with tf.Session() as session:
-            print('Session is opened')
-            session.run([tf.global_variables_initializer(), tf.tables_initializer()])
+ZIP_FILE = os.path.join(pre_trained_dir, "{}.zip".format(SUBFOLDER_NAME))
+ZIP_FILE_ALT = "glove" + ZIP_FILE[5:]  # sometimes it's lowercase only...
+UNZIP_FOLDER = os.path.join(pre_trained_dir, SUBFOLDER_NAME)
+if SUBFOLDER_NAME[-1] == "d":
+    GLOVE_FILENAME = os.path.join(UNZIP_FOLDER, "{}.txt".format(SUBFOLDER_NAME))
+else:
+    GLOVE_FILENAME = os.path.join(UNZIP_FOLDER, "{}.{}d.txt".format(SUBFOLDER_NAME, NUMBER_OF_DIMENSIONS))
 
-            d1 = session.run(elmo_embed( documents[begin_index:end_index],
-                signature="default",
-                as_dict=True)['lstm_outputs1'])
+if not os.path.exists(ZIP_FILE) and not os.path.exists(UNZIP_FOLDER):
+    # GloVe by Stanford is licensed Apache 2.0:
+    #     https://github.com/stanfordnlp/GloVe/blob/master/LICENSE
+    #     http://nlp.stanford.edu/data/glove.twitter.27B.zip
+    #     Copyright 2014 The Board of Trustees of The Leland Stanford Junior University
+    print("Downloading embeddings to '{}'".format(ZIP_FILE))
+    chakin.download(number=CHAKIN_INDEX, save_dir='./{}'.format(pre_trained_dir))
+else:
+    print("Embeddings already downloaded.")
 
-            d2 = session.run(elmo_embed( documents[begin_index:end_index],
-                signature="default",
-                as_dict=True)['lstm_outputs2'])
+if not os.path.exists(UNZIP_FOLDER):
+    import zipfile
 
-            delmo= session.run(elmo_embed( documents[begin_index:end_index],
-                signature="default",
-                as_dict=True)['elmo'])
-            # for i, each_document in enumerate(tqdm(tokenized[begin_index:end_index],
-            #                                        total=len(tokenized[begin_index:end_index])), begin_index):
-
-            for doc_index, embed_document in enumerate(enumerate(documents[begin_index:end_index]), begin_index):
-
-                try:
-                    embed_index, each_document = embed_document
-                    _begining = 0
-                    _ending = len(tokenized_documents[doc_index])
-                    _d1 = d1[embed_index,_begining:_ending,:]
-                    UTIL.dump_embeddings(_d1, embedding_file.replace('@', 'LSTM1_' + str(doc_index)))
-                    _d2 = d2[embed_index, _begining:_ending,:]
-                    UTIL.dump_embeddings(_d2, embedding_file.replace('@', 'LSTM2_' + str(doc_index)))
-                    _delmo = delmo[embed_index, _begining:_ending, :]
-                    UTIL.dump_embeddings(_delmo, embedding_file.replace('@', 'ELMO_' + str(doc_index)))
-                except Exception as ex:
-                    print(ex)
-                    print('End of documents')
-
-        counter += 1
-        begin_index += batch
+    if not os.path.exists(ZIP_FILE) and os.path.exists(ZIP_FILE_ALT):
+        ZIP_FILE = ZIP_FILE_ALT
+    with zipfile.ZipFile(ZIP_FILE, "r") as zip_ref:
+        print("Extracting embeddings to '{}'".format(UNZIP_FOLDER))
+        zip_ref.extractall(UNZIP_FOLDER)
+else:
+    print("Embeddings already extracted.")
 end = datetime.datetime.now()
 print('ELMO Embeddings from Google are generated in {} minutes'.format((end - start).seconds / 60))
 print(100 * '*')
 """
 ******************************************************************************************************************
 ******************************************************************************************************************
-END : GOOGLE ELMO EMBEDDINGS
+END: GLOVE EMBEDDINGS DOWNLOAD
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
+
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+START: GLOVE EMBEDDINGS LOAD
+******************************************************************************************************************
+******************************************************************************************************************
+"""
+def load_embedding_from_disks(glove_filename, with_indexes=True):
+    """
+    Read a GloVe txt file. If `with_indexes=True`, we return a tuple of two dictionnaries
+    `(word_to_index_dict, index_to_embedding_array)`, otherwise we return only a direct
+    `word_to_embedding_dict` dictionnary mapping from a string to a numpy array.
+    """
+    if with_indexes:
+        word_to_index_dict = dict()
+        index_to_embedding_array = []
+    else:
+        word_to_embedding_dict = dict()
+
+    with open(glove_filename, 'r') as glove_file:
+        for (i, line) in enumerate(glove_file):
+
+            split = line.split(' ')
+
+            word = split[0]
+
+            representation = split[1:]
+            representation = np.array(
+                [float(val) for val in representation]
+            )
+
+            if with_indexes:
+                word_to_index_dict[word] = i
+                index_to_embedding_array.append(representation)
+            else:
+                word_to_embedding_dict[word] = representation
+
+    _WORD_NOT_FOUND = [0.0] * len(representation)  # Empty representation for unknown words.
+    if with_indexes:
+        _LAST_INDEX = i + 1
+        word_to_index_dict = defaultdict(lambda: _LAST_INDEX, word_to_index_dict)
+        index_to_embedding_array = np.array(index_to_embedding_array + [_WORD_NOT_FOUND])
+        return word_to_index_dict, index_to_embedding_array
+    else:
+        word_to_embedding_dict = defaultdict(lambda: _WORD_NOT_FOUND)
+        return word_to_embedding_dict
+
+print("Loading embedding from disks...")
+word_to_index, index_to_embedding = load_embedding_from_disks(GLOVE_FILENAME, with_indexes=True)
+print("Embedding loaded from disks.")
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+END: GLOVE EMBEDDINGS LOAD
+******************************************************************************************************************
+******************************************************************************************************************
+"""
+vocab_size, embedding_dim = index_to_embedding.shape
+print("Embedding is of shape: {}".format(index_to_embedding.shape))
+print("This means (number of words, number of dimensions per word)\n")
+print("The first words are words that tend occur more often.")
+
+print("Note: for unknown words, the representation is an empty vector,\n"
+      "and the index is the last one. The dictionnary has a limit:")
+print("    {} --> {} --> {}".format("A word", "Index in embedding", "Representation"))
+word = "worsdfkljsdf"
+idx = word_to_index[word]
+embd = list(np.array(index_to_embedding[idx], dtype=int))  # "int" for compact print only.
+print("    {} --> {} --> {}".format(word, idx, embd))
+word = "the"
+idx = word_to_index[word]
+embd = list(index_to_embedding[idx])  # "int" for compact print only.
+print("    {} --> {} --> {}".format(word, idx, embd))
+
+batch_size = None  # Any size is accepted
+
+tf.reset_default_graph()
+
+# Define the variable that will hold the embedding:
+tf_embedding = tf.Variable(
+    tf.constant(0.0, shape=index_to_embedding.shape),
+    trainable=False,
+    name="Embedding"
+)
+
+tf_word_ids = tf.placeholder(tf.int32, shape=[batch_size])
+
+tf_word_representation_layer = tf.nn.embedding_lookup(
+    params=tf_embedding,
+    ids=tf_word_ids
+)
+
+tf_embedding_placeholder = tf.placeholder(tf.float32, shape=index_to_embedding.shape)
+tf_embedding_init = tf_embedding.assign(tf_embedding_placeholder)
+
+batch_of_words = tokenized_questions[0]
+batch_indexes = [word_to_index[w] for w in batch_of_words]
+
+with tf.Session() as sess:#sess = tf.InteractiveSession()
+    _ = sess.run(
+        tf_embedding_init,
+        feed_dict={
+            tf_embedding_placeholder: index_to_embedding
+        }
+    )
+    print("Embedding now stored in TensorFlow. Can delete numpy array to clear some RAM.")
+    del index_to_embedding
+
+
+    embedding_from_batch_lookup = sess.run(
+        tf_word_representation_layer,
+        feed_dict={
+            tf_word_ids: batch_indexes
+        }
+    )
+    print("Representations for {}:".format(batch_of_words))
+    print(embedding_from_batch_lookup)

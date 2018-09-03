@@ -677,7 +677,7 @@ def dump_bilm_embeddings(vocab_file, dataset_file, options_file,
                 else:
                     document_embeddings = np.vstack((document_embeddings,new_embedding))
                 sentence_id += 1
-                print(document_embeddings.shape, '---->', sentence, '----->', str(sentence_id))
+                #print(document_embeddings.shape, '---->', sentence, '----->', str(sentence_id))
                 if sentence_id == size_of_each_partition:
                     partition += 1
                     sentence_id = 0

@@ -748,7 +748,7 @@ DEV = 'dev'
 ################ CONFIGURATIONS #################
 dataset_type = DEV
 is_dump_during_execution = True
-is_inject_idf = True
+is_inject_idf = False
 is_filtered_by_answers_from_rnet = False
 
 # SPLIT DOCS

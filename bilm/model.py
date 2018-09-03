@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 import h5py
 import json
+import math
 import re
 
 from .data import UnicodeCharsVocabulary, Batcher
@@ -641,7 +642,7 @@ def dump_token_embeddings(vocab_file, options_file, weight_file, outfile):
         )
 
 def dump_bilm_embeddings(vocab_file, dataset_file, options_file,
-                         weight_file, outfile):
+                         weight_file, outfile, size_of_each_partition):
     with open(options_file, 'r') as fin:
         options = json.load(fin)
     max_word_length = options['char_cnn']['max_characters_per_token']
@@ -654,38 +655,65 @@ def dump_bilm_embeddings(vocab_file, dataset_file, options_file,
     )
     model = BidirectionalLanguageModel(options_file, weight_file)
     ops = model(ids_placeholder)
-    document_embeddings = []
+    document_embeddings = None
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
         sentence_id = 0
-        with open(dataset_file, 'r') as fin, h5py.File(outfile, 'w') as fout:
+        partition = 0
+        with open(dataset_file, 'r') as fin:
             for line in fin:
                 sentence = line.strip().split()
+                if not sentence:
+                    sentence = [' ']
                 char_ids = batcher.batch_sentences([sentence])
                 embeddings = sess.run(
                     ops['lm_embeddings'], feed_dict={ids_placeholder: char_ids}
                 )
                 new_embedding = embeddings[0,:,:,:]
                 new_embedding = np.swapaxes(new_embedding, 0, 1)
-                document_embeddings.append(new_embedding)
-                # ds = fout.create_dataset(
-                #     '{}'.format(sentence_id),
-                #     embeddings.shape[1:], dtype='float32',
-                #     data=embeddings[0, :, :, :]
-                # )
+                if document_embeddings is None:
+                    document_embeddings = new_embedding
+                else:
+                    document_embeddings = np.vstack((document_embeddings,new_embedding))
                 sentence_id += 1
-            print('Len of document list is {}'.format(len(document_embeddings)))
-            document_embeddings = np.asarray(document_embeddings)
-            print('Shape of document is {}'.format(document_embeddings.shape))
-            document_embeddings = document_embeddings[:,0,0:1,:] # useful component 1 is extracted
-            print('Shape of document after useful component is extracted {}'.format(document_embeddings.shape))
-            document_embeddings = document_embeddings[:, 0, :]
-            print('Shape of document after useful component is extracted {}'.format(document_embeddings.shape))
-            ds = fout.create_dataset(
-                'embeddings',
-                document_embeddings.shape, dtype='float32',
-                data=document_embeddings
-            )
+                print(document_embeddings.shape, '---->', sentence, '----->', str(sentence_id))
+                if sentence_id == size_of_each_partition:
+                    partition += 1
+                    sentence_id = 0
+                    dump_embeddings(document_embeddings, outfile.replace('@@', str(partition)))
+                    document_embeddings = None
+                    print('Partition {} is completed'.format(partition))
+            if sentence_id > 0:
+                partition += 1
+                sentence_id = 0
+                dump_embeddings(document_embeddings, outfile.replace('@@', str(partition)))
+                document_embeddings = None
+                print('Partition {} is completed'.format(partition))
+    del document_embeddings
+    document_embeddings = None
+    for partition_index in range(1, partition + 1):
+        with h5py.File(outfile.replace('@@', str(partition_index)), 'r') as fin:
+            embeddings = fin['embeddings'][...]
+            if document_embeddings is None:
+                document_embeddings = embeddings
+            else:
+                document_embeddings = np.vstack((document_embeddings, embeddings))
 
     return document_embeddings
+
+def dump_embeddings(document_embeddings, outfile):
+    #print('Len of document list is {}'.format(len(document_embeddings)))
+    #document_embeddings = np.asarray(document_embeddings)
+    print('Shape of document is {}'.format(document_embeddings.shape))
+    document_embeddings = document_embeddings[:, 0:1, :]  # useful component 1 is extracted
+    print('Shape of document after useful component is extracted {}'.format(document_embeddings.shape))
+    document_embeddings = document_embeddings[:, 0, :]
+    print('Shape of document after useful component is extracted {}'.format(document_embeddings.shape))
+    with h5py.File(outfile, 'w') as fout:
+        ds = fout.create_dataset(
+            'embeddings',
+            document_embeddings.shape, dtype='float32',
+            data=document_embeddings
+        )
+    print('{} is dumped'.format(outfile))

@@ -825,7 +825,9 @@ def generate_and_dump_elmo_embeddings(documents,
                          dataset_file_path,
                          options_file_path,
                          weights_file_path,
-                         embedding_file_path):
+                         embedding_file_path,
+                         size_of_each_partition
+                                      ):
     '''
     ELMo usage example to write biLM embeddings for an entire dataset to
     a file.
@@ -846,7 +848,12 @@ def generate_and_dump_elmo_embeddings(documents,
 
     # Dump the embeddings to a file. Run this once for your dataset.
     embeddings = dump_bilm_embeddings(
-        vocab_file_path, dataset_file_path, options_file_path, weights_file_path, embedding_file_path
+        vocab_file_path,
+        dataset_file_path,
+        options_file_path,
+        weights_file_path,
+        embedding_file_path,
+        size_of_each_partition
     )
 
     #embeddings = load_embeddings(embedding_file_path)

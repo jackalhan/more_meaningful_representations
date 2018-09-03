@@ -759,7 +759,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 
 laptop={"batch": 500,
         "partition_size":1000,

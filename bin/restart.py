@@ -44,14 +44,14 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--save_dir', default='/home/jackalhan/Development/github/more_meaningful_representations/squad/train/output/restart_checkpoint', help='Location of checkpoint files')
-    parser.add_argument('--vocab_file', default='/home/jackalhan/Development/github/more_meaningful_representations/squad/train/output/restart_checkpoint/vocab-2016-09-10.txt', help='Vocabulary file')
-    parser.add_argument('--train_prefix', default='/home/jackalhan/Development/github/more_meaningful_representations/squad/train/train_paragraphs/*', help='Prefix for train files')
+    parser.add_argument('--save_dir', help='Location of checkpoint files')
+    parser.add_argument('--vocab_file', help='Vocabulary file')
+    parser.add_argument('--train_prefix', help='Prefix for train files')
     parser.add_argument('--n_gpus', type=int, default=1,
                         help='Number of GPUs to use')
-    parser.add_argument('--batch_size', type=int, default=128)
-    parser.add_argument('--n_train_tokens', type=int, default=1686591)
-    parser.add_argument('--n_epochs', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=0)
+    parser.add_argument('--n_train_tokens', type=int, default=0)
+    parser.add_argument('--n_epochs', type=int, default=0)
 
     args = parser.parse_args()
     main(args)

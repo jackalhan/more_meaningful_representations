@@ -22,8 +22,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from shutil import copyfile
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from bilm.elmo import ElmoEmbedder
-
+#from bilm.elmo import ElmoEmbedder
+import helper.utils as UTIL
 nlp = spacy.blank("en")
 nlp_s = spacy.load('en')
 encoding="utf-8"
@@ -443,34 +443,139 @@ def sort_and_deduplicate(l):
     return list(uniq(sorted(l, reverse=True)))
 
 def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddings_guideline_file,
-                        token_embeddings_file, voc_file_name, partition=20, weight_file = None, options_file = None):
+                        token_embeddings_file, voc_file_name, partition=20, weight_file = None, options_file = None,
+                        is_google_elmo = False):
     document_embedding_guideline = defaultdict()
     if not os.path.exists(token_embeddings_guideline_file):
-        #########################
-        ## use word embedding ##
-        # ee = ElmoEmbedder(embedding_file=word_embeddings_file)
-        ##########################
-        ## use char encoding embedding ##
-        ee = ElmoEmbedder(options_file=options_file, weight_file=weight_file)
-        ##########################
-        voc_file = ee.batch_to_vocs(tokenized_questions + tokenized_paragraphs)
-        copyfile(voc_file, voc_file_name)
-        corpus_as_tokens = []
-        for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
-            document_embedding_guideline[i] = defaultdict()
-            document_embedding_guideline[i]['start_index'] = len(corpus_as_tokens)
-            document_embedding_guideline[i]['end_index'] = len(corpus_as_tokens) + len(sentence)
-            if i >= len(tokenized_questions):
-                document_embedding_guideline[i]['type'] = 'p'
+            corpus_as_tokens = []
+            for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
+                document_embedding_guideline[i] = defaultdict()
+                document_embedding_guideline[i]['start_index'] = len(corpus_as_tokens)
+                document_embedding_guideline[i]['end_index'] = len(corpus_as_tokens) + len(sentence)
+                if i >= len(tokenized_questions):
+                    document_embedding_guideline[i]['type'] = 'p'
+                else:
+                    document_embedding_guideline[i]['type'] = 'q'
+                for token in sentence:
+                    corpus_as_tokens.append(token)
+
+            with open(token_embeddings_guideline_file, 'wb') as handle:
+                pickle.dump(document_embedding_guideline, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+            corpus_as_tokens = corpus_as_tokens[0:500]
+            if not is_google_elmo:
+                document_embeddings = UTIL.generate_and_dump_elmo_embeddings(corpus_as_tokens,
+                                                                voc_file_name,
+                                                                elmo_dataset_file,
+                                                                elmo_options_file,
+                                                                weight_file,
+                                                                token_embeddings_file.replace('@@', str(
+                                                                    'old_api'))
+                                                                )
+                #########################
+                ## use word embedding ##
+                # ee = ElmoEmbedder(embedding_file=word_embeddings_file)
+                ##########################
+                ## use char encoding embedding ##
+                # TEKRARDAN IMPLEMENTE EDILEBILIR.#
+                # ee = ElmoEmbedder(options_file=options_file, weight_file=weight_file)
+                # ##########################
+                # voc_file = ee.batch_to_vocs([corpus_as_tokens]) #BUNU KONTROL ET#
+                # copyfile(voc_file, voc_file_name)
+                # document_embeddings = ee.list_to_lazy_embeddings_with_dump(corpus_as_tokens, token_embeddings_file,partition) #BUNU KONTROL ET#
             else:
-                document_embedding_guideline[i]['type'] = 'q'
-            for token in sentence:
-                corpus_as_tokens.append(token)
+                """
+                ******************************************************************************************************************
+                ******************************************************************************************************************
+                START: GOOGLE ELMO EMBEDDINGS
+                ******************************************************************************************************************
+                ******************************************************************************************************************
+                """
+                document_embeddings = None
+                documents = corpus_as_tokens
+                begin_index = 0
+                reset_every_iter = 3
+                batch = 500
+                counter = 0
+                while begin_index <= len(documents)-1:
+                    if counter % reset_every_iter == 0:
+                        print('Graph is resetted')
+                        tf.reset_default_graph()
+                        elmo_embed = load_module("https://tfhub.dev/google/elmo/2", trainable=True)
+                        tf.logging.set_verbosity(tf.logging.ERROR)
 
-        with open(token_embeddings_guideline_file, 'wb') as handle:
-            pickle.dump(document_embedding_guideline, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                    begin_index = begin_index
+                    end_index = begin_index + batch
+                    if end_index > len(documents):
+                        end_index = len(documents)
+                    print('Processing {} from {} to {}'.format('all documents', begin_index, end_index))
+                    with tf.Session() as session:
+                        print('Session is opened')
+                        session.run([tf.global_variables_initializer(), tf.tables_initializer()])
 
-        document_embeddings = ee.list_to_lazy_embeddings_with_dump(corpus_as_tokens, token_embeddings_file,partition)
+                        d1 = session.run(elmo_embed(documents[begin_index:end_index],
+                                                    signature="default",
+                                                    as_dict=True)['lstm_outputs1'])
+
+                        d2 = session.run(elmo_embed(documents[begin_index:end_index],
+                                                    signature="default",
+                                                    as_dict=True)['lstm_outputs2'])
+
+                        delmo = session.run(elmo_embed(documents[begin_index:end_index],
+                                                       signature="default",
+                                                       as_dict=True)['elmo'])
+                        # for i, each_document in enumerate(tqdm(tokenized[begin_index:end_index],
+                        #                                        total=len(tokenized[begin_index:end_index])), begin_index):
+
+                        stacked_embeddings = []
+                        for doc_index, embed_document in enumerate(enumerate(documents[begin_index:end_index]),
+                                                                       begin_index):
+
+                            embed_index, each_document = embed_document
+                            _begining = 0
+                            _ending = 1
+                            _d1 = d1[embed_index, _begining:_ending, :]
+                            #UTIL.dump_embeddings(_d1, embedding_file.replace('@', 'LSTM1_' + str(doc_index)))
+                            _d2 = d2[embed_index, _begining:_ending, :]
+                            #UTIL.dump_embeddings(_d2, embedding_file.replace('@', 'LSTM2_' + str(doc_index)))
+                            _delmo = delmo[embed_index, _begining:_ending, :]
+                            #UTIL.dump_embeddings(_delmo, embedding_file.replace('@', 'ELMO_' + str(doc_index)))
+                            stacked_embedding = np.vstack([_delmo, _d1, _d2])
+                            stacked_embeddings.append(stacked_embedding)
+
+                        stacked_embeddings = np.asarray(stacked_embeddings)
+                        if document_embeddings is None:
+                            document_embeddings = stacked_embeddings
+                        else:
+                            document_embeddings = np.vstack((document_embeddings, stacked_embeddings))
+                        #document_embeddings.append(stacked_embeddings)
+                        counter += 1
+                        begin_index += batch
+                ####################################################################################
+                ### OLD API #######################################################################
+                ####################################################################################
+                document_embeddings_old = UTIL.generate_and_dump_elmo_embeddings(corpus_as_tokens,
+                                                                             voc_file_name,
+                                                                             elmo_dataset_file,
+                                                                             elmo_options_file,
+                                                                             weight_file,
+                                                                             token_embeddings_file.replace('@@',
+                                                                                                               str(
+                                                                                                                   'old_api'))
+                                                                             )
+                # INSERT OLD ONES BEST VALUES TO NEW ONES SO THAT WE HAVE MORE LAYERS
+                document_embeddings = np.insert(document_embeddings, 3, document_embeddings_old, axis=1)
+
+                UTIL.dump_embeddings(document_embeddings, token_embeddings_file.replace('@@', 'new_api_with_old'))
+
+                """
+                ******************************************************************************************************************
+                ******************************************************************************************************************
+                END: GOOGLE ELMO EMBEDDINGS
+                ******************************************************************************************************************
+                ******************************************************************************************************************
+                """
+
     else:
         with open(token_embeddings_guideline_file, 'rb') as handle:
             document_embedding_guideline = pickle.load(handle)
@@ -487,8 +592,7 @@ def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddi
                     else:
                         document_embeddings = np.vstack((document_embeddings, token_embedding))
         else:
-            with h5py.File(token_embeddings_file.replace('@@', str(1)), 'r') as fin:
-                document_embeddings = fin['embeddings'][...]
+            document_embeddings = UTIL.load_embeddings(token_embeddings_file.replace('@@', 'new_api_with_old'))
 
 
     return document_embeddings, document_embedding_guideline
@@ -536,56 +640,56 @@ def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token
             paragraphs_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
             # idf_paragraph_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
 
-        # -------------------------------------------------
-        #after validation, this is going to be deleted
-        # -------------------------------------------------
-        simplified_token_embeddings = {}
-        if is_inhouse_elmo_for_cnn:
-            # simplified token embeddings for CNN module
-            for token_index, token_name in enumerate(documents[_]):
-                _tok_str_index = str_index + token_index
-                _tok_end_index = _tok_str_index + 1
-                simplified_token_embedding = np.mean(np.multiply(np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :]), weight_matrix),axis=1)
-                saved_token_embeddings = simplified_token_embeddings.get(token_name)
-                if saved_token_embeddings is not None:
-                    if saved_token_embeddings == simplified_token_embedding:
-                        print('{} have always same embeddings'.format(token_name))
-                else:
-                    simplified_token_embeddings[token_name] = simplified_token_embedding
-
-        token_to_idx = {}
-        simplified_token_embeddings = []
-        if is_inhouse_elmo_for_cnn:
-            # simplified token embeddings for CNN module
-            glboal_token_index = 0
-            for token_index, token_name in enumerate(documents[_]):
-                _tok_str_index = str_index + token_index
-                _tok_end_index = _tok_str_index + 1
-                simplified_token_embedding_ = np.mean(
-                    np.multiply(np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :]), weight_matrix),
-                    axis=1)
-                simplified_token_embedding = np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :])
-                saved_token_embeddings = token_to_idx.get(token_name)
-                if saved_token_embeddings is None:
-                    token_to_idx[token_name] = glboal_token_index
-                    simplified_token_embeddings.append(simplified_token_embedding)
-                    glboal_token_index +=1
-            simplified_token_embeddings = np.asarray(simplified_token_embeddings)
-            simplified_token_embeddings = np.multiply(simplified_token_embeddings, weight_matrix)
-            simplified_token_embeddings = np.mean(simplified_token_embeddings, axis=1)
-
-            vocabulary_size = len(token_to_idx)
-            # Assume your embeddings variable
-            tok_embeddings = tf.Variable(simplified_token_embedding)
-            with tf.Session() as sess:
-                embeddings_val = sess.run(tok_embeddings)
-                with open(token_embeddings_file.replace('@@', 'CNN').replace('hdf5','txt'), 'w') as file_:
-                    for i in range(vocabulary_size):
-                        embed = embeddings_val[i, :]
-                        word = token_to_idx[i]
-                        file_.write('%s %s\n' % (word, ' '.join(map(str, embed))))
-    del token_embeddings
-    del simplified_token_embeddings
+    #     # -------------------------------------------------
+    #     #after validation, this is going to be deleted
+    #     # -------------------------------------------------
+    #     simplified_token_embeddings = {}
+    #     if is_inhouse_elmo_for_cnn:
+    #         # simplified token embeddings for CNN module
+    #         for token_index, token_name in enumerate(documents[_]):
+    #             _tok_str_index = str_index + token_index
+    #             _tok_end_index = _tok_str_index + 1
+    #             simplified_token_embedding = np.mean(np.multiply(np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :]), weight_matrix),axis=1)
+    #             saved_token_embeddings = simplified_token_embeddings.get(token_name)
+    #             if saved_token_embeddings is not None:
+    #                 if saved_token_embeddings == simplified_token_embedding:
+    #                     print('{} have always same embeddings'.format(token_name))
+    #             else:
+    #                 simplified_token_embeddings[token_name] = simplified_token_embedding
+    #
+    #     token_to_idx = {}
+    #     simplified_token_embeddings = []
+    #     if is_inhouse_elmo_for_cnn:
+    #         # simplified token embeddings for CNN module
+    #         glboal_token_index = 0
+    #         for token_index, token_name in enumerate(documents[_]):
+    #             _tok_str_index = str_index + token_index
+    #             _tok_end_index = _tok_str_index + 1
+    #             simplified_token_embedding_ = np.mean(
+    #                 np.multiply(np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :]), weight_matrix),
+    #                 axis=1)
+    #             simplified_token_embedding = np.asarray(token_embeddings[_tok_str_index:_tok_end_index, :, :])
+    #             saved_token_embeddings = token_to_idx.get(token_name)
+    #             if saved_token_embeddings is None:
+    #                 token_to_idx[token_name] = glboal_token_index
+    #                 simplified_token_embeddings.append(simplified_token_embedding)
+    #                 glboal_token_index +=1
+    #         simplified_token_embeddings = np.asarray(simplified_token_embeddings)
+    #         simplified_token_embeddings = np.multiply(simplified_token_embeddings, weight_matrix)
+    #         simplified_token_embeddings = np.mean(simplified_token_embeddings, axis=1)
+    #
+    #         vocabulary_size = len(token_to_idx)
+    #         # Assume your embeddings variable
+    #         tok_embeddings = tf.Variable(simplified_token_embedding)
+    #         with tf.Session() as sess:
+    #             embeddings_val = sess.run(tok_embeddings)
+    #             with open(token_embeddings_file.replace('@@', 'CNN').replace('hdf5','txt'), 'w') as file_:
+    #                 for i in range(vocabulary_size):
+    #                     embed = embeddings_val[i, :]
+    #                     word = token_to_idx[i]
+    #                     file_.write('%s %s\n' % (word, ' '.join(map(str, embed))))
+    # del token_embeddings
+    # del simplified_token_embeddings
 
     questions_embeddings = np.asarray(questions_embeddings)
     paragraphs_embeddings = np.asarray(paragraphs_embeddings)
@@ -641,7 +745,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 is_dump_during_execution = True
 is_inject_idf = True
 is_filtered_by_answers_from_rnet = False
@@ -652,9 +756,9 @@ split_num_of_paragrahs_in_slices = 1000
 percent_of_slice_splits = .4
 
 # ELMO EMBEDDINGS #
-is_elmo_embeddings= False
+is_elmo_embeddings= True
 is_elmo_document_embeddings_already_generated = False
-partition_size = 5
+partition_size = 1
 is_elmo_word_embeddings_already_generated = False
 is_calculate_recalls = False
 
@@ -665,7 +769,7 @@ is_use_embedding = False
 is_google_elmo_embedding = True
 
 # CREATE 3D INHOUSE ELMO FOR CNN
-is_inhouse_elmo_for_cnn = True
+is_inhouse_elmo_for_cnn = False
 
 # IMPROVE ELMEDDINGS
 is_improve_elmeddings=False
@@ -732,6 +836,7 @@ split_prefix = '{}_paragraphs'.format(dataset_type)
 
 elmo_weights_file = os.path.join(datadir, 'weights.hdf5')
 elmo_options_file = os.path.join(datadir, 'options.json')
+elmo_dataset_file = os.path.join(datadir, '{}_dataset_file.txt'.format(dataset_type))
 
 print('Squad Data: Processing Started')
 start = datetime.datetime.now()
@@ -843,7 +948,7 @@ if is_split_content_to_documents:
     print('Number of unique tokens in corpus: {}'.format(len(contexts_vocs)))
     print('Splitting is completed in {} minutes'.format((end-start).seconds/60))
 
-if is_elmo_embeddings:
+if is_elmo_embeddings or is_google_elmo_embedding:
     if not is_elmo_document_embeddings_already_generated:
         if not is_elmo_word_embeddings_already_generated:
             print('\n')
@@ -872,7 +977,8 @@ if is_elmo_embeddings:
                                                                                voc_file_name,
                                                                                partition_size,
                                                                                weight_file=elmo_weights_file,
-                                                                               options_file=elmo_options_file
+                                                                               options_file=elmo_options_file,
+                                                                               is_google_elmo=is_google_elmo_embedding
                                                                                )
             end = datetime.datetime.now()
             print('ELMO Token Embeddings is ended in {} minutes'.format((end-start).seconds/60))
@@ -906,10 +1012,13 @@ if is_elmo_embeddings:
         print(20 * '-')
         print('ELMO Embeddings is started')
         start = datetime.datetime.now()
-        _a_b_c_s = []
+        _a_b_c_d_s = []
         # _a_b_c_s.append([0,0,1])
         # _a_b_c_s.append([0, 1, 0])
-        _a_b_c_s.append([1, 0, 0])
+        _a_b_c_d_s.append([1, 0, 0, 0])
+        _a_b_c_d_s.append([0, 1, 0, 0])
+        _a_b_c_d_s.append([0, 0, 1, 0])
+        _a_b_c_d_s.append([0, 0, 0, 1])
         # while len(_a_b_c_s) < 10:
         #     x = np.random.dirichlet(np.ones(3), size=1).tolist()
         #     x_ = [float("{:1.2f}".format(_x)) for _x in x[0]]
@@ -922,11 +1031,11 @@ if is_elmo_embeddings:
 
 
         _token_embed = weighted_token_embeddings if not is_elmo_word_embeddings_already_generated else None
-        for _a_b_c in _a_b_c_s:
-            print('Weight {}'.format(_a_b_c))
+        for _a_b_c_d in _a_b_c_d_s:
+            print('Weight {}'.format(_a_b_c_d))
 
             if not is_elmo_word_embeddings_already_generated:
-                WM = np.array([_a_b_c[0], _a_b_c[1], _a_b_c[2]]).reshape((1, 3, 1))
+                WM = np.array([_a_b_c_d[0], _a_b_c_d[1], _a_b_c_d[2]],_a_b_c_d[3]).reshape((1, 4, 1))
                 questions_embeddings, paragraphs_embeddings = token_to_document_embeddings(tokenized_questions,
                                                                                            tokenized_paragraphs,
                                                                                            _token_embed,
@@ -951,7 +1060,11 @@ if is_elmo_embeddings:
                                               q_to_ps,
                                               len(questions),
                                               os.path.join(datadir,
-                                                           'elmo_{}_weights_a_{}_b_{}_c_{}_output_neighbors_###.csv'.format(_type, _a_b_c[0], _a_b_c[1], _a_b_c[2])))
+                                                           'elmo_{}_weights_a_{}_b_{}_c_{}_d_{}_output_neighbors_###.csv'.format(_type,
+                                                                                                                                 _a_b_c_d[0],
+                                                                                                                                 _a_b_c_d[1],
+                                                                                                                                 _a_b_c_d[2],
+                                                                                                                                 _a_b_c_d[3])))
 
                 # -------------------------------------------#
                 # option 2 [FILTERED PARAGRAPHS BY COMMON KEYWORDS IN QUESTION] depends on your scenerio          #
@@ -963,13 +1076,11 @@ if is_elmo_embeddings:
                                                          q_to_ps,
                                                          len(questions),
                                               os.path.join(datadir,
-                                                           'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_by_paragraphs_neighbors_###.csv'.format(_type,
-                                                                                                                        _a_b_c[
-                                                                                                                            0],
-                                                                                                                        _a_b_c[
-                                                                                                                            1],
-                                                                                                                        _a_b_c[
-                                                                                                                            2])))
+                                                           'elmo_{}_weights_a_{}_b_{}_c_{}_d_{}_output_filtered_by_paragraphs_neighbors_###.csv'.format(_type,
+                                                                                                                        _a_b_c_d[0],
+                                                                                                                        _a_b_c_d[1],
+                                                                                                                        _a_b_c_d[2],
+                                                                                                                        _a_b_c_d[3])))
 
                 # -------------------------------------------#
                 # option 3 [FILTERED PARAGRAPHS BY ANSWERS FROM RNET MODEL] depends on your scenerio          #
@@ -983,14 +1094,12 @@ if is_elmo_embeddings:
                                                                         paragraphs, eval,
                                                                         q_to_ps, len(questions),
                                                                         os.path.join(datadir,
-                                                                                     'elmo_{}_weights_a_{}_b_{}_c_{}_output_filtered_rnet_answers_neighbors_###.csv'.format(
+                                                                                     'elmo_{}_weights_a_{}_b_{}_c_{}_d_{}_output_filtered_rnet_answers_neighbors_###.csv'.format(
                                                                                          _type,
-                                                                                         _a_b_c[
-                                                                                             0],
-                                                                                         _a_b_c[
-                                                                                             1],
-                                                                                         _a_b_c[
-                                                                                             2])))
+                                                                                         _a_b_c_d[0],
+                                                                                         _a_b_c_d[1],
+                                                                                         _a_b_c_d[2],
+                                                                                         _a_b_c_d[3])))
                 sub_end = datetime.datetime.now()
                 print('Nearest Neighbors: Completed is completed in {} minutes'.format((sub_end - sub_start).seconds / 60))
 

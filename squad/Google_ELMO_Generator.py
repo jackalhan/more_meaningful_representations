@@ -161,7 +161,7 @@ for document_type in ['paragraph']:
         batch = 1
         embedding_file = paragraph_embedding_file
 
-    while begin_index <= len(documents):
+    while begin_index <= len(documents)-1:
         if counter % reset_every_iter == 0:
             print('Graph is resetted')
             tf.reset_default_graph()
@@ -170,6 +170,8 @@ for document_type in ['paragraph']:
 
         begin_index = begin_index
         end_index = begin_index + batch
+        if end_index > len(documents):
+            end_index = len(documents)
         print('Processing {} from {} to {}'.format(document_type, begin_index, end_index))
         with tf.Session() as session:
             print('Session is opened')

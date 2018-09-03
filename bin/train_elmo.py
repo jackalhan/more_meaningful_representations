@@ -2,9 +2,7 @@
 import argparse
 
 import numpy as np
-import os
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from bilm.training import train, load_options_latest_checkpoint, load_vocab
 from bilm.data import BidirectionalLMDataset
 
@@ -15,7 +13,7 @@ def main(args):
 
     # define the options
     batch_size = 128  # batch size for each GPU
-    n_gpus = 1
+    n_gpus = 3
 
     # number of tokens in training data (this for 1B Word Benchmark)
     n_train_tokens = 768648884
@@ -48,7 +46,7 @@ def main(args):
     
      'all_clip_norm_val': 10.0,
     
-     'n_epochs': 2,
+     'n_epochs': 10,
      'n_train_tokens': n_train_tokens,
      'batch_size': batch_size,
      'n_tokens_vocab': vocab.size,
@@ -67,9 +65,9 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--save_dir', default='/home/jackalhan/Development/github/more_meaningful_representations/squad/train/output/mydata_checkpoint', help='Location of checkpoint files')
-    parser.add_argument('--vocab_file',default='/home/jackalhan/Development/github/more_meaningful_representations/squad/train/train_contexts_voc.txt', help='Vocabulary file')
-    parser.add_argument('--train_prefix', default='/home/jackalhan/Development/github/more_meaningful_representations/squad/train/train_paragraphs/*',help='Prefix for train files')
+    parser.add_argument('--save_dir', help='Location of checkpoint files')
+    parser.add_argument('--vocab_file', help='Vocabulary file')
+    parser.add_argument('--train_prefix', help='Prefix for train files')
 
     args = parser.parse_args()
     main(args)

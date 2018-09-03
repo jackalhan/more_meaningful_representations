@@ -495,7 +495,7 @@ def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddi
                 documents = corpus_as_tokens
                 begin_index = 0
                 reset_every_iter = 3
-                batch = 500
+                batch = 5000
                 counter = 0
                 while begin_index <= len(documents)-1:
                     if counter % reset_every_iter == 0:
@@ -562,7 +562,7 @@ def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddi
                                                                              token_embeddings_file.replace('@@',
                                                                                                                str(
                                                                                                                    'old_api_@@')),
-                                                                             100000
+                                                                             50000
                                                                              )
                 # INSERT OLD ONES BEST VALUES TO NEW ONES SO THAT WE HAVE MORE LAYERS
                 document_embeddings = np.insert(document_embeddings, 3, document_embeddings_old, axis=1)

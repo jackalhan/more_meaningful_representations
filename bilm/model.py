@@ -675,9 +675,13 @@ def dump_bilm_embeddings(vocab_file, dataset_file, options_file,
                 #     data=embeddings[0, :, :, :]
                 # )
                 sentence_id += 1
+            print('Len of document list is {}'.format(len(document_embeddings)))
             document_embeddings = np.asarray(document_embeddings)
+            print('Shape of document is {}'.format(document_embeddings.shape))
             document_embeddings = document_embeddings[:,0,0:1,:] # useful component 1 is extracted
+            print('Shape of document after useful component is extracted {}'.format(document_embeddings.shape))
             document_embeddings = document_embeddings[:, 0, :]
+            print('Shape of document after useful component is extracted {}'.format(document_embeddings.shape))
             ds = fout.create_dataset(
                 'embeddings',
                 document_embeddings.shape, dtype='float32',

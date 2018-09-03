@@ -836,7 +836,7 @@ def generate_and_dump_elmo_embeddings(documents,
     import sys
     import os
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    from bilm import dump_bilm_embeddings
+    from bilm import dump_bilm_embeddings,dump_usage_token_embeddings
 
     # convert documents into this format
     if non_context:
@@ -851,15 +851,24 @@ def generate_and_dump_elmo_embeddings(documents,
             fout.write(' '.join(cleaned_sentence) + '\n')
 
 
-    # Dump the embeddings to a file. Run this once for your dataset.
-    embeddings = dump_bilm_embeddings(
-        vocab_file_path,
-        dataset_file_path,
-        options_file_path,
-        weights_file_path,
-        embedding_file_path,
-        size_of_each_partition
-    )
+    if non_context:
+        # Dump the embeddings to a file. Run this once for your dataset.
+        embeddings = dump_bilm_embeddings(
+            vocab_file_path,
+            dataset_file_path,
+            options_file_path,
+            weights_file_path,
+            embedding_file_path,
+            size_of_each_partition
+        )
+    else:
+        dump_usage_token_embeddings(
+            vocab_file_path,
+            dataset_file_path,
+            options_file_path,
+            weights_file_path,
+            embedding_file_path
+        )
 
     #embeddings = load_embeddings(embedding_file_path)
     return embeddings

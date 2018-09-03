@@ -763,7 +763,7 @@ dataset_type = DEV
 
 laptop={"batch": 500,
         "partition_size":1000,
-         "is_non_context":True,
+         "is_non_context":False,
         "is_demo_slice":3003,
         }
 
@@ -794,7 +794,7 @@ is_calculate_recalls = False
 is_use_embedding = False
 
 # GOOGLE ELMO EMBEDDINGS #
-is_google_elmo_embedding = True
+is_google_elmo_embedding = False
 
 # CREATE 3D INHOUSE ELMO FOR CNN
 is_inhouse_elmo_for_cnn = False
@@ -824,7 +824,7 @@ _paragraph_embeddings_file_name = '{}_paragraph_embeddings.hdf5'.format(dataset_
 paragraph_embeddings_file = os.path.join(datadir, _paragraph_embeddings_file_name)
 
 _token_embeddings_file_name = '{}_token_embeddings_@@.hdf5'.format(dataset_type)
-token_embeddings_file = os.path.join(datadir, _token_embeddings_file_name)
+token_embeddings_file = os.path.join(datadir, '.',_token_embeddings_file_name)
 
 _token_embeddings_guideline_file_name = '{}_token_embeddings_guideline.pkl'.format(dataset_type)
 token_embeddings_guideline_file = os.path.join(datadir, _token_embeddings_guideline_file_name)

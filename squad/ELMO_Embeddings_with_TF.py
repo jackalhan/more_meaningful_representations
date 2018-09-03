@@ -769,7 +769,7 @@ laptop={"batch": 500,
 
 titanX={"batch": 5000,
         "partition_size":50000,
-         "is_non_context":True,
+         "is_non_context":False,
         "is_demo_slice":None
         }
 resource=titanX

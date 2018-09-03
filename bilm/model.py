@@ -702,6 +702,67 @@ def dump_bilm_embeddings(vocab_file, dataset_file, options_file,
 
     return document_embeddings
 
+def dump_usage_token_embeddings(vocab_file, dataset_file, options_file,
+                         weight_file, outfile, size_of_each_partition):
+    with open(options_file, 'r') as fin:
+        options = json.load(fin)
+    max_word_length = options['char_cnn']['max_characters_per_token']
+
+    vocab = UnicodeCharsVocabulary(vocab_file, max_word_length)
+    batcher = Batcher(vocab_file, max_word_length)
+
+    ids_placeholder = tf.placeholder('int32',
+                                     shape=(None, None, max_word_length)
+    )
+    model = BidirectionalLanguageModel(options_file, weight_file)
+    ops = model(ids_placeholder)
+    document_embeddings = None
+    config = tf.ConfigProto(allow_soft_placement=True)
+    with tf.Session(config=config) as sess:
+        sess.run(tf.global_variables_initializer())
+        sentence_id = 0
+        partition = 0
+        with open(dataset_file, 'r') as fin:
+            for line in fin:
+                sentence = line.strip().split()
+                if not sentence:
+                    sentence = [' ']
+                char_ids = batcher.batch_sentences([sentence])
+                embeddings = sess.run(
+                    ops['lm_embeddings'], feed_dict={ids_placeholder: char_ids}
+                )
+                new_embedding = embeddings[0,:,:,:]
+                new_embedding = np.swapaxes(new_embedding, 0, 1)
+                if document_embeddings is None:
+                    document_embeddings = new_embedding
+                else:
+                    document_embeddings = np.vstack((document_embeddings,new_embedding))
+                sentence_id += 1
+                #print(document_embeddings.shape, '---->', sentence, '----->', str(sentence_id))
+                if sentence_id == size_of_each_partition:
+                    partition += 1
+                    sentence_id = 0
+                    dump_embeddings(document_embeddings, outfile.replace('@@', str(partition)))
+                    document_embeddings = None
+                    print('Partition {} is completed'.format(partition))
+            if sentence_id > 0:
+                partition += 1
+                sentence_id = 0
+                dump_embeddings(document_embeddings, outfile.replace('@@', str(partition)))
+                document_embeddings = None
+                print('Partition {} is completed'.format(partition))
+    del document_embeddings
+    document_embeddings = None
+    for partition_index in range(1, partition + 1):
+        with h5py.File(outfile.replace('@@', str(partition_index)), 'r') as fin:
+            embeddings = fin['embeddings'][...]
+            if document_embeddings is None:
+                document_embeddings = embeddings
+            else:
+                document_embeddings = np.vstack((document_embeddings, embeddings))
+
+    return document_embeddings
+
 def dump_embeddings(document_embeddings, outfile):
     #print('Len of document list is {}'.format(len(document_embeddings)))
     #document_embeddings = np.asarray(document_embeddings)

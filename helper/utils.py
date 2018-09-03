@@ -821,12 +821,13 @@ def tokenize_contexts(contexts:list):
     return tokenized_context
 
 def generate_and_dump_elmo_embeddings(documents,
-                         vocab_file_path,
-                         dataset_file_path,
-                         options_file_path,
-                         weights_file_path,
-                         embedding_file_path,
-                         size_of_each_partition
+                                      non_context,
+                                     vocab_file_path,
+                                     dataset_file_path,
+                                     options_file_path,
+                                     weights_file_path,
+                                     embedding_file_path,
+                                     size_of_each_partition
                                       ):
     '''
     ELMo usage example to write biLM embeddings for an entire dataset to
@@ -838,12 +839,16 @@ def generate_and_dump_elmo_embeddings(documents,
     from bilm import dump_bilm_embeddings
 
     # convert documents into this format
-    new_documents = [[doc] for doc in documents]
+    if non_context:
+        new_documents = [[doc] for doc in documents]
+    else:
+        new_documents = documents
 
     # Create the dataset file.
     with open(dataset_file_path, 'w') as fout:
         for sentence in new_documents:
-            fout.write(' '.join(sentence) + '\n')
+            cleaned_sentence = [word.replace('\n', ' ') for word in sentence]
+            fout.write(' '.join(cleaned_sentence) + '\n')
 
 
     # Dump the embeddings to a file. Run this once for your dataset.

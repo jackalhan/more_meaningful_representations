@@ -495,7 +495,7 @@ def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddi
                 documents = corpus_as_tokens
                 begin_index = 0
                 reset_every_iter = 3
-                batch = 500
+                batch = 5000
                 counter = 0
                 while begin_index <= len(documents)-1:
                     if counter % reset_every_iter == 0:

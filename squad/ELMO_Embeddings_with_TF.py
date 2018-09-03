@@ -462,7 +462,7 @@ def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddi
             with open(token_embeddings_guideline_file, 'wb') as handle:
                 pickle.dump(document_embedding_guideline, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-            corpus_as_tokens = corpus_as_tokens[0:500]
+            #corpus_as_tokens = corpus_as_tokens[0:500]
             if not is_google_elmo:
                 document_embeddings = UTIL.generate_and_dump_elmo_embeddings(corpus_as_tokens,
                                                                 voc_file_name,

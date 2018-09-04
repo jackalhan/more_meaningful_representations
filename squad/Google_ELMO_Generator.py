@@ -11,7 +11,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = DEV
+dataset_type = TRAIN
 
 laptop={"batch_question": 20,
         "batch_paragraph": 1,

@@ -29,6 +29,7 @@ NEW_API_ELMO={"is_inject_idf":False,
       "embedding_questions_path": "questions",
       "embedding_questions_file_pattern": "{}_paragraph_embedding_ELMO_@@".format(dataset_type),
       "contextualized_questions_embeddings_with_token": '{}_contextualized_questions_embeddings_with_token.hdf5'.format(dataset_type),
+       "is_paragraphs_listed_after_questions":False,
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "change_shape": False,
       "weights_arguments": [1],
@@ -46,6 +47,7 @@ OLD_API_ELMO={"is_inject_idf":False,
       "embedding_questions_path": None,
       "embedding_questions_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
       "contextualized_questions_embeddings_with_token": '{}_contextualized_questions_embeddings_with_token.hdf5'.format(dataset_type),
+      "is_paragraphs_listed_after_questions":True,
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "change_shape": False,
       "weights_arguments": [1, 0, 0],
@@ -183,6 +185,7 @@ for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
 # UTIL.save_as_pickle(corpus_as_tokens, tokens_ordered_file)
 # del document_embedding_guideline
 # del corpus_as_tokens
+print("Total tokens in the corpus: {}".format(len(corpus_as_tokens)))
 end = datetime.datetime.now()
 print('Index of tokens in each document is getting saved in {} minutes'.format((end - start).seconds / 60))
 print(100 * '*')
@@ -218,6 +221,7 @@ else:
         else:
             question_embeddings = np.vstack((question_embeddings,question_embedding))
         print('Question {} is processed'.format(question_indx))
+    print('Question_embeddings shape: {}'.format(question_embeddings.shape))
     UTIL.dump_embeddings(question_embeddings, os.path.join(root_folder_path, args['contextualized_questions_embeddings_with_token']))
     print('Questions are dumped')
 
@@ -228,7 +232,12 @@ paragraph_embeddings = None
 if os.path.exists(os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token'])):
     paragraph_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
 else:
-    for paragraph_indx in range(len(tokenized_paragraphs)):
+
+    if args["is_paragraphs_listed_after_questions"]:
+        paragraph_range = range(len(tokenized_questions) + len(tokenized_paragraphs), question_indx)
+    else:
+        paragraph_range = range(len(tokenized_paragraphs))
+    for paragraph_indx in paragraph_range:
         p_file_path = os.path.join(paragraphs_folder_path, args['embedding_paragraphs_file_pattern'].replace('@@', str(paragraph_indx)))
         paragraph_embedding= UTIL.load_embeddings(p_file_path)
         if args['change_shape']:
@@ -238,6 +247,7 @@ else:
         else:
             paragraph_embeddings = np.vstack((paragraph_embeddings,paragraph_embedding))
         print('Paragraph {} is processed'.format(paragraph_indx))
+    print('Paragraph_embeddings shape: {}'.format(paragraph_embeddings.shape))
     UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
     print('Paragraphs are dumped')
 

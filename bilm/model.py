@@ -665,6 +665,7 @@ def dump_bilm_embeddings(vocab_file, dataset_file, options_file,
             for line in fin:
                 sentence = line.strip().split()
                 if not sentence:
+                    print('An empty str')
                     sentence = [' ']
                 char_ids = batcher.batch_sentences([sentence])
                 embeddings = sess.run(
@@ -726,6 +727,7 @@ def dump_usage_token_embeddings(vocab_file, dataset_file, options_file,
             for line in fin:
                 sentence = line.strip().split()
                 if not sentence:
+                    print('An empty str')
                     sentence = [' ']
                 char_ids = batcher.batch_sentences([sentence])
                 embeddings = sess.run(
@@ -785,6 +787,7 @@ def dump_usage_token_embeddings(vocab_file, dataset_file, options_file,
             for line in fin:
                 sentence = line.strip().split()
                 if not sentence:
+                    print('An empty str')
                     sentence = [' ']
                 char_ids = batcher.batch_sentences([sentence])
                 embeddings = sess.run(

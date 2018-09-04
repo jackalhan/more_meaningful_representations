@@ -144,6 +144,7 @@ class UnicodeCharsVocabulary(Vocabulary):
         for i, word in enumerate(self._id_to_word):
             self._word_char_ids[i] = self._convert_word_to_char_ids(word)
 
+
         self._word_char_ids[self.bos] = self.bos_chars
         self._word_char_ids[self.eos] = self.eos_chars
         # TODO: properly handle <UNK>
@@ -157,6 +158,7 @@ class UnicodeCharsVocabulary(Vocabulary):
         return self._max_word_length
 
     def _convert_word_to_char_ids(self, word):
+
         code = np.zeros([self.max_word_length], dtype=np.int32)
         code[:] = self.pad_char
 

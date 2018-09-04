@@ -460,13 +460,16 @@ def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddi
         else:
             document_embedding_guideline[i]['type'] = 'q'
         for token in sentence:
-            if token == "" or token is None:
-                print("Token: {}, Doc Indx: {}, Doc: {}".format(token, i, sentence))
-            corpus_as_tokens.append(token)
+            t = token.strip()
+            if t == "" or t is None:
+                #print("Token: {}, Doc Indx: {}, Doc: {}".format(token, i, sentence))
+                t = '-'
+            corpus_as_tokens.append(t)
+
 
     UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
 
-    all_tokens = set(['<S>', '</S>'])
+    all_tokens = set(['<S>', '</S>','<UNK>'])
     for token in corpus_as_tokens:
         all_tokens.add(token)
     with open(voc_file_name, 'w') as fout:
@@ -767,12 +770,12 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 
 laptop={"batch": 500,
         "partition_size":500,
          "is_non_context":True,
-            "is_demo_slice":1003,
+         "is_demo_slice":1003,
         }
 
 titanX={"batch": 5000,

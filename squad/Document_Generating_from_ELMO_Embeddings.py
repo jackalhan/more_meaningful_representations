@@ -221,10 +221,10 @@ else:
         else:
             question_embeddings = np.vstack((question_embeddings,question_embedding))
         print('Question {} is processed. It has {} tokens and embedding shape is {} so {}'.format(question_indx,
-                                                                                                  tokenized_questions[question_indx],
+                                                                                                  len(tokenized_questions[question_indx]),
                                                                                                   question_embedding.shape[0],
-                                                                                                  tokenized_questions[
-                                                                                                      question_indx] == question_embedding.shape[0]))
+                                                                                                  len(tokenized_questions[
+                                                                                                      question_indx]) == question_embedding.shape[0]))
     print('Question_embeddings shape: {}'.format(question_embeddings.shape))
     UTIL.dump_embeddings(question_embeddings, os.path.join(root_folder_path, args['contextualized_questions_embeddings_with_token']))
     print('Questions are dumped')
@@ -254,12 +254,12 @@ else:
         else:
             paragraph_embeddings = np.vstack((paragraph_embeddings,paragraph_embedding))
         print('Paragraph {} is processed. It has {} tokens and embedding shape is {} so {}'.format(paragraph_indx,
-                                                                                                  tokenized_paragraphs[
-                                                                                                      par_tokenized_indx],
+                                                                                                  len(tokenized_paragraphs[
+                                                                                                      par_tokenized_indx]),
                                                                                                   paragraph_embedding.shape[
                                                                                                       0],
-                                                                                                   tokenized_paragraphs[
-                                                                                                       par_tokenized_indx] ==
+                                                                                                   len(tokenized_paragraphs[
+                                                                                                       par_tokenized_indx]) ==
                                                                                                    paragraph_embedding.shape[
                                                                                                       0]))
 

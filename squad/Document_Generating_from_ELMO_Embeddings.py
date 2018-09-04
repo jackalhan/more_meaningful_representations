@@ -220,7 +220,7 @@ else:
             question_embeddings = question_embedding
         else:
             question_embeddings = np.vstack((question_embeddings,question_embedding))
-        if len(tokenized_questions[question_indx]) == question_embedding.shape[0]:
+        if len(tokenized_questions[question_indx]) != question_embedding.shape[0]:
             print('Question {} is processed. It has {} tokens and embedding shape is {} so {}'.format(question_indx,
                                                                                                   len(tokenized_questions[question_indx]),
                                                                                                   question_embedding.shape[0],
@@ -255,7 +255,7 @@ else:
         else:
             paragraph_embeddings = np.vstack((paragraph_embeddings,paragraph_embedding))
 
-        if len(tokenized_paragraphs[par_tokenized_indx]) == paragraph_embedding.shape[0]:
+        if len(tokenized_paragraphs[par_tokenized_indx]) != paragraph_embedding.shape[0]:
             print('Paragraph {} is processed. It has {} tokens and embedding shape is {} so {}'.format(paragraph_indx,
                                                                                                       len(tokenized_paragraphs[
                                                                                                           par_tokenized_indx]),

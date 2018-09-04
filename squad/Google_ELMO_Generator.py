@@ -2,6 +2,7 @@ import datetime
 from collections import Counter, defaultdict
 import tensorflow as tf
 from tqdm import tqdm
+import numpy as np
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -11,6 +12,17 @@ DEV = 'dev'
 
 ################ CONFIGURATIONS #################
 dataset_type = DEV
+
+laptop={"batch_question": 20,
+        "batch_paragraph": 1,
+        }
+
+titanX={"batch_question": 5000,
+        "batch_paragraph": 40,
+        }
+
+resource=titanX
+
 is_dump_during_execution = True
 is_inject_idf = True
 is_filtered_by_answers_from_rnet = False
@@ -151,14 +163,14 @@ for document_type in ['question','paragraph']:
         documents = questions_nontokenized
         tokenized_documents = tokenized_questions
         reset_every_iter = 3
-        batch = 20
+        batch = resource['batch_question']
         embedding_file = question_embeddings_file
     else:
         begin_index = 0
         documents = paragraphs_nontokenized
         tokenized_documents = tokenized_paragraphs
         reset_every_iter = 3
-        batch = 1
+        batch = resource['batch_paragraph']
         embedding_file = paragraph_embedding_file
 
     while begin_index <= len(documents)-1:
@@ -198,10 +210,13 @@ for document_type in ['question','paragraph']:
                     _begining = 0
                     _ending = len(tokenized_documents[doc_index])
                     _d1 = d1[embed_index,_begining:_ending,:]
+                    _d1 = np.expand_dims(_d1, axis=1)
                     UTIL.dump_embeddings(_d1, embedding_file.replace('@', 'LSTM1_' + str(doc_index)))
                     _d2 = d2[embed_index, _begining:_ending,:]
+                    _d2 = np.expand_dims(_d2, axis=1)
                     UTIL.dump_embeddings(_d2, embedding_file.replace('@', 'LSTM2_' + str(doc_index)))
                     _delmo = delmo[embed_index, _begining:_ending, :]
+                    _delmo = np.expand_dims(_delmo, axis=1)
                     UTIL.dump_embeddings(_delmo, embedding_file.replace('@', 'ELMO_' + str(doc_index)))
                 except Exception as ex:
                     print(ex)

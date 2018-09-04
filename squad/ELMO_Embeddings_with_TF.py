@@ -445,26 +445,9 @@ def sort_and_deduplicate(l):
 def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddings_guideline_file,
                         token_embeddings_file, voc_file_name, partition=20, weight_file = None, options_file = None,
                         is_google_elmo = False):
-
-    # if os.path.exists(token_embeddings_file.replace('@@', 'new_api_with_old'))\
-    #         or os.path.exists(token_embeddings_file.replace('@@', 'new_api_with_old')):
-    document_embedding_guideline = defaultdict()
-
-    corpus_as_tokens = []
-    for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
-        document_embedding_guideline[i] = defaultdict()
-        document_embedding_guideline[i]['start_index'] = len(corpus_as_tokens)
-        document_embedding_guideline[i]['end_index'] = len(corpus_as_tokens) + len(sentence)
-        if i >= len(tokenized_questions):
-            document_embedding_guideline[i]['type'] = 'p'
-        else:
-            document_embedding_guideline[i]['type'] = 'q'
-        for token in sentence:
-            t = token.strip()
-            if t == "" or t is None:
-                #print("Token: {}, Doc Indx: {}, Doc: {}".format(token, i, sentence))
-                t = '-'
-            corpus_as_tokens.append(t)
+    document_embedding_guideline, corpus_as_tokens = UTIL.generate_document_embedding_guideline(tokenized_questions,
+                                                                                                tokenized_paragraphs,
+                                                                                                )
 
     UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
 
@@ -958,6 +941,9 @@ if dataset_type == TRAIN:
     paragraphs = train_paragraphs
     q_to_ps = train_q_to_ps
 end = datetime.datetime.now()
+
+tokenized_questions, tokenized_paragraphs = UTIL.fixing_the_token_problem(tokenized_questions, tokenized_paragraphs)
+
 print('Squad Data: Processing Ended in {} minutes'.format((end - start).seconds / 60))
 
 

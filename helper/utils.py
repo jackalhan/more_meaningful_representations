@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import TfidfVectorizer
 import shelve
 import spacy
+import datetime
 from collections import defaultdict, Counter
 nlp = spacy.blank("en")
 #nlp_s = spacy.load('en')
@@ -820,6 +821,55 @@ def tokenize_contexts(contexts:list):
     tokenized_context = [word_tokenize(context.strip()) for context in contexts]
     return tokenized_context
 
+
+def fixing_the_token_problem(tokenized_questions, tokenized_paragraphs):
+    # fixing the '' problem:
+    fixed_tokenized_question = []
+    for indx, question in enumerate(tokenized_questions):
+        tokens = []
+        for token in question:
+            t = token.strip()
+            if t != "":
+                tokens.append(t)
+        fixed_tokenized_question.append(tokens)
+
+    fixed_tokenized_paragraph = []
+    for indx, paragraph in enumerate(tokenized_paragraphs):
+        tokens = []
+        for token in paragraph:
+            t = token.strip()
+            if t != "":
+                tokens.append(t)
+        fixed_tokenized_paragraph.append(tokens)
+    return fixed_tokenized_question, fixed_tokenized_paragraph
+def generate_document_embedding_guideline(tokenized_questions, tokenized_paragraphs, is_dump = False,
+                                          token_embeddings_guideline_file = None, tokens_ordered_file = None):
+    print(100 * '*')
+    print('Index of tokens in each document is getting identified....')
+    start = datetime.datetime.now()
+    document_embedding_guideline = defaultdict()
+    corpus_as_tokens = []
+
+    for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
+        document_embedding_guideline[i] = defaultdict()
+        document_embedding_guideline[i]['start_index'] = len(corpus_as_tokens)
+        document_embedding_guideline[i]['end_index'] = len(corpus_as_tokens) + len(sentence)
+        if i >= len(tokenized_questions):
+            document_embedding_guideline[i]['type'] = 'p'
+        else:
+            document_embedding_guideline[i]['type'] = 'q'
+        for token in sentence:
+            corpus_as_tokens.append(token)
+    if is_dump:
+        save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
+        save_as_pickle(corpus_as_tokens, tokens_ordered_file)
+    # del document_embedding_guideline
+    # del corpus_as_tokens
+    print("Total tokens in the corpus: {}".format(len(corpus_as_tokens)))
+    end = datetime.datetime.now()
+    print('Index of tokens in each document is getting saved in {} minutes'.format((end - start).seconds / 60))
+    print(100 * '*')
+    return document_embedding_guideline, corpus_as_tokens
 def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token_embeddings, token_embeddings_guideline, weight_matrix):
     questions_embeddings = []
     paragraphs_embeddings = []

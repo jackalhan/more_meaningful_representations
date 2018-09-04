@@ -165,30 +165,10 @@ START: DOCUMENT-TOKEN GUIDELINE
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
-print(100 * '*')
-print('Index of tokens in each document is getting identified....')
-start = datetime.datetime.now()
-document_embedding_guideline = defaultdict()
-corpus_as_tokens = []
-for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
-    document_embedding_guideline[i] = defaultdict()
-    document_embedding_guideline[i]['start_index'] = len(corpus_as_tokens)
-    document_embedding_guideline[i]['end_index'] = len(corpus_as_tokens) + len(sentence)
-    if i >= len(tokenized_questions):
-        document_embedding_guideline[i]['type'] = 'p'
-    else:
-        document_embedding_guideline[i]['type'] = 'q'
-    for token in sentence:
-        corpus_as_tokens.append(token)
 
-# UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
-# UTIL.save_as_pickle(corpus_as_tokens, tokens_ordered_file)
-# del document_embedding_guideline
-# del corpus_as_tokens
-print("Total tokens in the corpus: {}".format(len(corpus_as_tokens)))
-end = datetime.datetime.now()
-print('Index of tokens in each document is getting saved in {} minutes'.format((end - start).seconds / 60))
-print(100 * '*')
+tokenized_questions, tokenized_paragraphs = UTIL.fixing_the_token_problem(tokenized_questions, tokenized_paragraphs)
+document_embedding_guideline, corpus_as_tokens = UTIL.generate_document_embedding_guideline(tokenized_questions, tokenized_paragraphs)
+
 """
 ******************************************************************************************************************
 ******************************************************************************************************************

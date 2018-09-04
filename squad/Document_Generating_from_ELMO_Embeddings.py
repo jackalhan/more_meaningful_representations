@@ -234,7 +234,7 @@ if os.path.exists(os.path.join(root_folder_path, args['contextualized_paragraphs
 else:
 
     if args["is_paragraphs_listed_after_questions"]:
-        paragraph_range = range(len(tokenized_questions) + len(tokenized_paragraphs), len((tokenized_questions)-1))
+        paragraph_range = range(len(tokenized_questions) + len(tokenized_paragraphs), len(tokenized_questions)-1)
     else:
         paragraph_range = range(len(tokenized_paragraphs))
     for paragraph_indx in paragraph_range:

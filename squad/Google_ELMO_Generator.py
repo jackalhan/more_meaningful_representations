@@ -23,7 +23,7 @@ titanX={"batch_question": 5000,
 
 resource=titanX
 
-is_dump_during_execution = True
+is_dump_during_execution = False
 is_inject_idf = True
 is_filtered_by_answers_from_rnet = False
 
@@ -130,11 +130,11 @@ for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
         document_embedding_guideline[i]['type'] = 'q'
     for token in sentence:
         corpus_as_tokens.append(token)
-
-UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
-UTIL.save_as_pickle(corpus_as_tokens, tokens_ordered_file)
-del document_embedding_guideline
-del corpus_as_tokens
+if is_dump_during_execution:
+    UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
+    UTIL.save_as_pickle(corpus_as_tokens, tokens_ordered_file)
+    del document_embedding_guideline
+    del corpus_as_tokens
 end = datetime.datetime.now()
 print('Index of tokens in each document is getting saved in {} minutes'.format((end - start).seconds / 60))
 print(100 * '*')

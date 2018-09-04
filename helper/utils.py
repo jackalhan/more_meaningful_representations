@@ -820,6 +820,32 @@ def tokenize_contexts(contexts:list):
     tokenized_context = [word_tokenize(context.strip()) for context in contexts]
     return tokenized_context
 
+def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token_embeddings, token_embeddings_guideline, weight_matrix):
+    questions_embeddings = []
+    paragraphs_embeddings = []
+    documents = tokenized_questions + tokenized_paragraphs
+    for _ in tqdm(range(len(documents))):
+        str_index = token_embeddings_guideline[_]['start_index']
+        end_index = token_embeddings_guideline[_]['end_index']
+        d_type = token_embeddings_guideline[_]['type']
+        if d_type == 'q':
+            questions_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
+            # idf_question_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
+        else:
+            paragraphs_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
+            # idf_paragraph_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
+
+    questions_embeddings = np.asarray(questions_embeddings)
+    paragraphs_embeddings = np.asarray(paragraphs_embeddings)
+
+    questions_embeddings = np.multiply(questions_embeddings, weight_matrix)
+    paragraphs_embeddings = np.multiply(paragraphs_embeddings, weight_matrix)
+
+    questions_embeddings = np.mean(questions_embeddings, axis=1)
+    paragraphs_embeddings = np.mean(paragraphs_embeddings, axis=1)
+
+    return questions_embeddings, paragraphs_embeddings
+
 def generate_and_dump_elmo_embeddings(documents,
                                       non_context,
                                      vocab_file_path,

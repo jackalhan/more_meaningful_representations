@@ -1,8 +1,8 @@
 import datetime
 from collections import Counter, defaultdict
-import tensorflow as tf
 from tqdm import tqdm
-from sklearn.feature_extraction.text import TfidfVectorizer
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
 import spacy
 import os
 import sys
@@ -21,20 +21,92 @@ datadir = os.path.join(_basepath, dataset_type)
 _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
 
-args={"is_inject_idf":False,
+NEW_API_ELMO={"is_inject_idf":False,
       "root_path": "ELMO",
       "embedding_paragraphs_path": "paragraphs",
       "embedding_paragraphs_file_pattern": "{}_question_embeddings_ELMO_@@".format(dataset_type),
-      "contexualized_paragraphs_embeddings_with_token": 'contexualized_paragraphs_embeddings_with_token.hdf5',
+      "contextualized_paragraphs_embeddings_with_token": '{}_contextualized_paragraphs_embeddings_with_token.hdf5'.format(dataset_type),
       "embedding_questions_path": "questions",
       "embedding_questions_file_pattern": "{}_paragraph_embedding_ELMO_@@".format(dataset_type),
-      "contexualized_questions_embeddings_with_token": 'contexualized_questions_embeddings_with_token.hdf5',
+      "contextualized_questions_embeddings_with_token": '{}_contextualized_questions_embeddings_with_token.hdf5'.format(dataset_type),
+      "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "change_shape": True,
+      "weights_arguments": [1],
+      'questions_file': '{}_question_document_embeddings.hdf5'.format(dataset_type),
+      'paragraphs_file': '{}_paragraph_document_embeddings.hdf5'.format(dataset_type),
+      'is_calculate_recalls': True,
+      'recall_file_path': '{}_recalls_weights_@@.csv'.format(dataset_type)
       }
 
-#resource=laptop
+OLD_API_ELMO={"is_inject_idf":False,
+      "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
+      "embedding_paragraphs_path": None,
+      "embedding_paragraphs_file_pattern": "{}_token_embeddings_old_api_doc_@@".format(dataset_type),
+      "contextualized_paragraphs_embeddings_with_token": '{}_contextualized_paragraphs_embeddings_with_token.hdf5'.format(dataset_type),
+      "embedding_questions_path": None,
+      "embedding_questions_file_pattern": "{}_token_embeddings_old_api_doc_@@".format(dataset_type),
+      "contextualized_questions_embeddings_with_token": '{}_contextualized_questions_embeddings_with_token.hdf5'.format(dataset_type),
+      "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
+      "change_shape": True,
+      "weights_arguments": [1],
+      'questions_file': '{}_question_document_embeddings.hdf5'.format(dataset_type),
+      'paragraphs_file': '{}_paragraph_document_embeddings.hdf5'.format(dataset_type),
+      'is_calculate_recalls': True,
+      'recall_file_path': '{}_recalls_weights_@@.csv'.format(dataset_type)
+      }
+
+args = OLD_API_ELMO
+
 
 ################ CONFIGURATIONS #################
+
+
+################ ALGOS #################
+def calculate_recall_at_n(ns, data, number_of_questions):
+    recalls = []
+    for i in ns:
+        total_number = len(data[(data['nearest_neighbor_order'] <= i) & (data['ground_truth'] == True) ])
+        recalls.append((i, total_number, total_number/number_of_questions))
+    return recalls
+
+def calculate_similarity_and_dump(paragraphs_embeddings,
+                                  questions_embeddings,
+                                  q_to_p,
+                                  number_of_questions,
+                                  outfile):
+    neighbor_list = []
+    for _id, _q_embedding in enumerate(tqdm(questions_embeddings, total=len(questions_embeddings))):
+        _q_embedding = np.array([_q_embedding])
+        sk_sim = cosine_similarity(_q_embedding, paragraphs_embeddings)[0]
+        neighbors = np.argsort(-sk_sim)
+        for _, neighbor_id in enumerate(neighbors):
+            neighbor_list.append((_id,
+                                  neighbor_id,
+                                  (q_to_p[_id] == neighbor_id),
+                                  True,
+                                  sk_sim[neighbor_id],
+                                  _,
+                                  ))
+
+    columns = ['question', 'paragraph', 'ground_truth', 'is_model_answered_correctly',
+               'cosine_score', 'nearest_neighbor_order']
+    df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
+    df_neighbor_within_paragraph = df_neighbor_within_paragraph[
+        df_neighbor_within_paragraph['is_model_answered_correctly'] == True]
+
+    df_neighbor_within_paragraph.to_csv(outfile.replace('###', ''), index=False)
+    recall_ns = [1, 2, 5, 10, 20, 50]
+    recall_columns = ['n', 'number_of_true', 'normalized_recalls']
+    df_neighbor_within_paragraph_recalls = pd.DataFrame(data=calculate_recall_at_n(recall_ns,
+                                                                                   df_neighbor_within_paragraph,
+                                                                                   number_of_questions)
+                                                        , columns=recall_columns
+                                                        )
+
+    df_neighbor_within_paragraph_recalls.to_csv(outfile.replace('###', 'recalls'),
+                                                index=False)
+################ ALGOS #################
+
 
 """
 ******************************************************************************************************************
@@ -129,18 +201,9 @@ START: LOAD EMBEDINGS
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
-
-
-"""
-******************************************************************************************************************
-******************************************************************************************************************
-END: LOAD EMBEDINGS
-******************************************************************************************************************
-******************************************************************************************************************
-"""
-
 root_folder_path = os.path.join(datadir, args["root_path"])
-questions_folder_path = os.path.join(root_folder_path, args["embedding_questions_path"])
+document_embeddings = None
+questions_folder_path = root_folder_path if args["embedding_questions_path"] is None else os.path.join(root_folder_path, args["embedding_questions_path"])
 question_embeddings = None
 for question_indx in range(len(tokenized_questions)):
     q_file_path = os.path.join(questions_folder_path, args['embedding_questions_file_pattern'].format(question_indx))
@@ -152,10 +215,10 @@ for question_indx in range(len(tokenized_questions)):
     else:
         question_embeddings = np.vstack((question_embeddings,question_embedding))
     print('Question {} is processed'.format(question_indx))
-UTIL.dump_embeddings(question_embeddings, os.path.join(root_folder_path, args['contexualized_questions_embeddings_with_token']))
+UTIL.dump_embeddings(question_embeddings, os.path.join(root_folder_path, args['contextualized_questions_embeddings_with_token']))
 print('Questions are dumped')
 
-paragraphs_folder_path = os.path.join(root_folder_path, args["embedding_paragraphs_path"])
+paragraphs_folder_path = root_folder_path if args["embedding_paragraphs_path"] is None else os.path.join(root_folder_path, args["embedding_paragraphs_path"])
 paragraph_embeddings = None
 for paragraph_indx in range(len(tokenized_paragraphs)):
     p_file_path = os.path.join(paragraphs_folder_path, args['embedding_paragraphs_file_pattern'].format(question_indx))
@@ -167,8 +230,23 @@ for paragraph_indx in range(len(tokenized_paragraphs)):
     else:
         paragraph_embeddings = np.vstack((paragraph_embeddings,paragraph_embedding))
     print('Paragraph {} is processed'.format(paragraph_indx))
-UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contexualized_paragraphs_embeddings_with_token']))
+UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
 print('Paragraphs are dumped')
+
+document_embeddings = np.vstack((question_embeddings, paragraph_embeddings ))
+
+UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
+del question_embeddings
+del paragraph_embeddings
+print('All Documents are dumped')
+
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+END: LOAD EMBEDINGS
+******************************************************************************************************************
+******************************************************************************************************************
+"""
 
 """
 ******************************************************************************************************************
@@ -177,27 +255,69 @@ START: IDF
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
-# if args['is_inject_idf']:
-#     print('IDF is going to be calculated')
-#     nlp = spacy.blank("en")
-#     tokenize = lambda doc: [token.text for token in nlp(doc)]
-#     start = datetime.datetime.now()
-#     token2idfweight, idf_vec = UTIL.transform_to_idf_weigths(tokenized_questions,
-#                                                              tokenized_paragraphs,
-#                                                              tokenize,
-#                                                              questions_nontokenized,
-#                                                              paragraphs_nontokenized)
-#     weighted_token_embeddings = np.multiply(idf_vec, token_embeddings)
-#     end = datetime.datetime.now()
-#     print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
-# else:
-#     print('IDF is skipped')
-#     _type = 'only'
-#     weighted_token_embeddings = token_embeddings
+if args['is_inject_idf']:
+    print('IDF is going to be calculated')
+    nlp = spacy.blank("en")
+    tokenize = lambda doc: [token.text for token in nlp(doc)]
+    start = datetime.datetime.now()
+    token2idfweight, idf_vec = UTIL.transform_to_idf_weigths(tokenized_questions,
+                                                             tokenized_paragraphs,
+                                                             tokenize,
+                                                             questions_nontokenized,
+                                                             paragraphs_nontokenized)
+    weighted_token_embeddings = np.multiply(idf_vec, document_embeddings)
+    end = datetime.datetime.now()
+    print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
+else:
+    print('IDF is skipped')
+    _type = 'only'
+    weighted_token_embeddings = document_embeddings
 """
 ******************************************************************************************************************
 ******************************************************************************************************************
 END: LOAD IDF
+******************************************************************************************************************
+******************************************************************************************************************
+"""
+
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+START: WEIGHTED ARE GETTING APPLIED TO TOKEN EMBEDDINGS
+******************************************************************************************************************
+******************************************************************************************************************
+"""
+del document_embeddings
+
+print('Weighted are getting to applied documents with the following weights: {}'.format(args['weights_arguments']))
+
+WM = np.array(args['weights_arguments']).reshape((1, len(args['weights_arguments']), 1))
+questions_embeddings, paragraphs_embeddings = UTIL.token_to_document_embeddings(tokenized_questions,
+                                                                            tokenized_paragraphs,
+                                                                            weighted_token_embeddings,
+                                                                            document_embedding_guideline,
+                                                                            WM)
+if args['is_calculate_recalls']:
+    print('Recalls are getting calculated')
+    calculate_similarity_and_dump(paragraphs_embeddings,
+                                  questions_embeddings,
+                                  q_to_ps,
+                                  len(questions),
+                                  os.path.join(root_folder_path,
+                                               args['recall_file_path']).replace('@@', args['weights_arguments'])
+                                  )
+    print('Recalls are calculated')
+
+questions_elmo_embeddings = np.reshape(questions_embeddings, (questions_embeddings.shape[0], questions_embeddings.shape[1]))
+UTIL.dump_embeddings(questions_elmo_embeddings, os.path.join(root_folder_path, args['questions_file']))
+paragraphs_elmo_embeddings = np.reshape(paragraphs_embeddings,
+                                           (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
+UTIL.dump_embeddings(paragraphs_elmo_embeddings, os.path.join(root_folder_path, args['paragraphs_file']))
+print('Weighted are applied')
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+END : WEIGHTED ARE GETTING APPLIED TO TOKEN EMBEDDINGS
 ******************************************************************************************************************
 ******************************************************************************************************************
 """

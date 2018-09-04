@@ -466,7 +466,6 @@ def get_elmo_embeddings(tokenized_questions, tokenized_paragraphs, token_embeddi
                 t = '-'
             corpus_as_tokens.append(t)
 
-
     UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
 
     all_tokens = set(['<S>', '</S>','<UNK>'])
@@ -773,9 +772,9 @@ DEV = 'dev'
 dataset_type = TRAIN
 
 laptop={"batch": 500,
-        "partition_size":500,
-         "is_non_context":True,
-         "is_demo_slice":1003,
+        "partition_size":5000,
+         "is_non_context":False,
+         "is_demo_slice":None,
         }
 
 titanX={"batch": 5000,

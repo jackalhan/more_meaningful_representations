@@ -794,11 +794,12 @@ def dump_usage_token_embeddings(vocab_file, dataset_file, options_file,
                     ops['lm_embeddings'], feed_dict={ids_placeholder: char_ids}
                 )
                 embeddings = embeddings[0,:,:,:]
+                new_embedding = np.swapaxes(embeddings, 0, 1)
                 with h5py.File(outfile.replace('@@', 'doc_' + str(sentence_id)).replace('/./', '/ELMO_CONTEXT_OLD_API_EMBEDDINGS/'), 'w') as fout:
                     ds = fout.create_dataset(
                         'embeddings',
-                        embeddings.shape, dtype='float32',
-                        data=embeddings
+                        new_embedding.shape, dtype='float32',
+                        data=new_embedding
                     )
                 print('{} is dumped'.format(outfile.replace('@@', 'doc_' + str(sentence_id)).replace('/./', '/ELMO_CONTEXT_OLD_API_EMBEDDINGS/')))
                 sentence_id +=1

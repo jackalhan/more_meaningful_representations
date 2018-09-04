@@ -850,7 +850,6 @@ def generate_and_dump_elmo_embeddings(documents,
             cleaned_sentence = [word.replace('\n', ' ') for word in sentence]
             fout.write(' '.join(cleaned_sentence) + '\n')
 
-
     if non_context:
         # Dump the embeddings to a file. Run this once for your dataset.
         embeddings = dump_bilm_embeddings(

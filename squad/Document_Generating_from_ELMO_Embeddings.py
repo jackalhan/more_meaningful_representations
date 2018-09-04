@@ -230,6 +230,7 @@ else:
 paragraphs_folder_path = root_folder_path if args["embedding_paragraphs_path"] is None else os.path.join(root_folder_path, args["embedding_paragraphs_path"])
 paragraph_embeddings = None
 if os.path.exists(os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token'])):
+    print('contextualized_paragraphs_embeddings_with_token found')
     paragraph_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
 else:
 

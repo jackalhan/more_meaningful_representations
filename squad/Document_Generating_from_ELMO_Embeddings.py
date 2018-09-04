@@ -206,7 +206,7 @@ document_embeddings = None
 questions_folder_path = root_folder_path if args["embedding_questions_path"] is None else os.path.join(root_folder_path, args["embedding_questions_path"])
 question_embeddings = None
 for question_indx in range(len(tokenized_questions)):
-    q_file_path = os.path.join(questions_folder_path, args['embedding_questions_file_pattern'].replace('@@', question_indx))
+    q_file_path = os.path.join(questions_folder_path, args['embedding_questions_file_pattern'].replace('@@', str(question_indx)))
     question_embedding= UTIL.load_embeddings(q_file_path)
     if args['change_shape']:
         question_embedding = np.expand_dims(question_embedding, axis=1)
@@ -221,7 +221,7 @@ print('Questions are dumped')
 paragraphs_folder_path = root_folder_path if args["embedding_paragraphs_path"] is None else os.path.join(root_folder_path, args["embedding_paragraphs_path"])
 paragraph_embeddings = None
 for paragraph_indx in range(len(tokenized_paragraphs)):
-    p_file_path = os.path.join(paragraphs_folder_path, args['embedding_paragraphs_file_pattern'].replace('@@', paragraph_indx))
+    p_file_path = os.path.join(paragraphs_folder_path, args['embedding_paragraphs_file_pattern'].replace('@@', str(paragraph_indx)))
     paragraph_embedding= UTIL.load_embeddings(p_file_path)
     if args['change_shape']:
         paragraph_embeddings = np.expand_dims(paragraph_embedding, axis=1)

@@ -235,7 +235,7 @@ if os.path.exists(os.path.join(root_folder_path, args['contextualized_paragraphs
 else:
 
     if args["is_paragraphs_listed_after_questions"]:
-        paragraph_range = range(len(tokenized_questions) + len(tokenized_paragraphs), len(tokenized_questions)-1)
+        paragraph_range = range(len(tokenized_questions) + len(tokenized_paragraphs), len(tokenized_questions))
     else:
         paragraph_range = range(len(tokenized_paragraphs))
     print('paragraph_range {}'.format(paragraph_range))
@@ -249,7 +249,7 @@ else:
         else:
             paragraph_embeddings = np.vstack((paragraph_embeddings,paragraph_embedding))
         print('Paragraph {} is processed'.format(paragraph_indx))
-    print('Paragraph_embeddings shape: {}'.format(paragraph_embeddings.shape))
+    #print('Paragraph_embeddings shape: {}'.format(paragraph_embeddings.shape))
     UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
     print('Paragraphs are dumped')
 

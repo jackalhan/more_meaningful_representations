@@ -51,7 +51,7 @@ OLD_API_ELMO={"is_inject_idf":False,
       "weights_arguments": [1],
       'questions_file': '{}_question_document_embeddings.hdf5'.format(dataset_type),
       'paragraphs_file': '{}_paragraph_document_embeddings.hdf5'.format(dataset_type),
-      'is_calculate_recalls': True,
+      'is_calculate_recalls': False,
       'recall_file_path': '{}_recalls_weights_@@.csv'.format(dataset_type)
       }
 
@@ -314,7 +314,7 @@ if args['is_calculate_recalls']:
                                   q_to_ps,
                                   len(questions),
                                   os.path.join(root_folder_path,
-                                               args['recall_file_path']).replace('@@', args['weights_arguments'])
+                                               args['recall_file_path']).replace('@@', '_'.join(args['weights_arguments']))
                                   )
     print('Recalls are calculated')
 

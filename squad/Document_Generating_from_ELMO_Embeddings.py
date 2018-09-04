@@ -205,37 +205,47 @@ root_folder_path = os.path.join(datadir, args["root_path"])
 document_embeddings = None
 questions_folder_path = root_folder_path if args["embedding_questions_path"] is None else os.path.join(root_folder_path, args["embedding_questions_path"])
 question_embeddings = None
-for question_indx in range(len(tokenized_questions)):
-    q_file_path = os.path.join(questions_folder_path, args['embedding_questions_file_pattern'].replace('@@', str(question_indx)))
-    question_embedding= UTIL.load_embeddings(q_file_path)
-    if args['change_shape']:
-        question_embedding = np.expand_dims(question_embedding, axis=1)
-    if question_embeddings is None:
-        question_embeddings = question_embedding
-    else:
-        question_embeddings = np.vstack((question_embeddings,question_embedding))
-    print('Question {} is processed'.format(question_indx))
-UTIL.dump_embeddings(question_embeddings, os.path.join(root_folder_path, args['contextualized_questions_embeddings_with_token']))
-print('Questions are dumped')
+if os.path.exists(os.path.join(root_folder_path, args['contextualized_questions_embeddings_with_token'])):
+    question_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_questions_embeddings_with_token']))
+else:
+    for question_indx in range(len(tokenized_questions)):
+        q_file_path = os.path.join(questions_folder_path, args['embedding_questions_file_pattern'].replace('@@', str(question_indx)))
+        question_embedding= UTIL.load_embeddings(q_file_path)
+        if args['change_shape']:
+            question_embedding = np.expand_dims(question_embedding, axis=1)
+        if question_embeddings is None:
+            question_embeddings = question_embedding
+        else:
+            question_embeddings = np.vstack((question_embeddings,question_embedding))
+        print('Question {} is processed'.format(question_indx))
+    UTIL.dump_embeddings(question_embeddings, os.path.join(root_folder_path, args['contextualized_questions_embeddings_with_token']))
+    print('Questions are dumped')
+
+
 
 paragraphs_folder_path = root_folder_path if args["embedding_paragraphs_path"] is None else os.path.join(root_folder_path, args["embedding_paragraphs_path"])
 paragraph_embeddings = None
-for paragraph_indx in range(len(tokenized_paragraphs)):
-    p_file_path = os.path.join(paragraphs_folder_path, args['embedding_paragraphs_file_pattern'].replace('@@', str(paragraph_indx)))
-    paragraph_embedding= UTIL.load_embeddings(p_file_path)
-    if args['change_shape']:
-        paragraph_embeddings = np.expand_dims(paragraph_embedding, axis=1)
-    if paragraph_embeddings is None:
-        paragraph_embeddings = paragraph_embedding
-    else:
-        paragraph_embeddings = np.vstack((paragraph_embeddings,paragraph_embedding))
-    print('Paragraph {} is processed'.format(paragraph_indx))
-UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
-print('Paragraphs are dumped')
+if os.path.exists(os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token'])):
+    paragraph_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
+else:
+    for paragraph_indx in range(len(tokenized_paragraphs)):
+        p_file_path = os.path.join(paragraphs_folder_path, args['embedding_paragraphs_file_pattern'].replace('@@', str(paragraph_indx)))
+        paragraph_embedding= UTIL.load_embeddings(p_file_path)
+        if args['change_shape']:
+            paragraph_embedding = np.expand_dims(paragraph_embedding, axis=1)
+        if paragraph_embeddings is None:
+            paragraph_embeddings = paragraph_embedding
+        else:
+            paragraph_embeddings = np.vstack((paragraph_embeddings,paragraph_embedding))
+        print('Paragraph {} is processed'.format(paragraph_indx))
+    UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
+    print('Paragraphs are dumped')
 
-document_embeddings = np.vstack((question_embeddings, paragraph_embeddings ))
-
-UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
+if os.path.exists(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token'])):
+    document_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
+else:
+    document_embeddings = np.vstack((question_embeddings, paragraph_embeddings ))
+    UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
 del question_embeddings
 del paragraph_embeddings
 print('All Documents are dumped')

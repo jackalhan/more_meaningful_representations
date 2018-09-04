@@ -836,7 +836,7 @@ def generate_and_dump_elmo_embeddings(documents,
     import sys
     import os
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    from bilm import dump_bilm_embeddings,dump_usage_token_embeddings
+    from bilm import dump_usage_cache_embeddings
 
     # convert documents into this format
     if non_context:
@@ -852,7 +852,7 @@ def generate_and_dump_elmo_embeddings(documents,
 
     if non_context:
         # Dump the embeddings to a file. Run this once for your dataset.
-        embeddings = dump_bilm_embeddings(
+        embeddings = dump_usage_cache_embeddings(
             vocab_file_path,
             dataset_file_path,
             options_file_path,
@@ -861,7 +861,7 @@ def generate_and_dump_elmo_embeddings(documents,
             size_of_each_partition
         )
     else:
-        dump_usage_token_embeddings(
+        dump_usage_cache_embeddings(
             vocab_file_path,
             dataset_file_path,
             options_file_path,
@@ -869,5 +869,181 @@ def generate_and_dump_elmo_embeddings(documents,
             embedding_file_path
         )
 
+
     #embeddings = load_embeddings(embedding_file_path)
     return embeddings
+
+
+def generate_and_dump_contextualized_elmo_embeddings(tokenized_questions,
+                                                     tokenized_paragraphs,
+                                                      vocab_file_path,
+                                                      options_file_path,
+                                                      weights_file_path,
+                                                      token_embedding_file_path,
+                                                      embedding_file_path
+                                      ):
+    '''
+    ELMo usage example to write biLM embeddings for an entire dataset to
+    a file.
+    '''
+    import sys
+    import os
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    from bilm import TokenBatcher, BidirectionalLanguageModel, weight_layers, \
+    dump_token_embeddings
+
+    dump_token_embeddings(
+        vocab_file_path, options_file_path, weights_file_path, token_embedding_file_path
+    )
+
+    tf.reset_default_graph()
+
+    ## Now we can do inference.
+    # Create a TokenBatcher to map text to token ids.
+    batcher = TokenBatcher(vocab_file_path)
+
+    # Input placeholders to the biLM.
+    paragraph_token_ids = tf.placeholder('int32', shape=(None, None))
+    question_token_ids = tf.placeholder('int32', shape=(None, None))
+
+    # Build the biLM graph.
+    bilm = BidirectionalLanguageModel(
+        options_file_path,
+        weights_file_path,
+        use_character_inputs=False,
+        embedding_weight_file=token_embedding_file_path
+    )
+
+    paragraph_embeddings_op = bilm(paragraph_token_ids)
+    question_embeddings_op = bilm(question_token_ids)
+
+    # Get an op to compute ELMo (weighted average of the internal biLM layers)
+    # Our SQuAD model includes ELMo at both the input and output layers
+    # of the task GRU, so we need 4x ELMo representations for the question
+    # and context at each of the input and output.
+    # We use the same ELMo weights for both the question and context
+    # at each of the input and output.
+    # elmo_context_input = weight_layers('input', context_embeddings_op, l2_coef=0.0)
+
+    elmo_paragraph_input = weight_layers(
+        'input', paragraph_embeddings_op, l2_coef=0.0
+    )
+    with tf.variable_scope('', reuse=True):
+        # the reuse=True scope reuses weights from the context for the question
+        elmo_question_input = weight_layers(
+            'input', question_embeddings_op, l2_coef=0.0
+        )
+
+    elmo_paragraph_output = weight_layers(
+        'output', paragraph_embeddings_op, l2_coef=0.0
+    )
+    with tf.variable_scope('', reuse=True):
+        # the reuse=True scope reuses weights from the context for the question
+        elmo_question_output = weight_layers(
+            'output', question_embeddings_op, l2_coef=0.0
+        )
+
+
+    with tf.Session() as sess:
+        # It is necessary to initialize variables once before running inference.
+        sess.run(tf.global_variables_initializer())
+
+        for doc_id, paragraph in enumerate(tokenized_paragraphs):
+            p = [paragraph]
+            paragraph_ids = batcher.batch_sentences(p)
+
+            elmo_paragraph_input_, = sess.run(
+                [elmo_paragraph_input['weighted_op']],
+                feed_dict={paragraph_token_ids: paragraph_ids}
+            )
+            new_embedding = np.swapaxes(elmo_paragraph_input_, 0, 1)
+            with h5py.File(
+                    embedding_file_path.replace('@@', 'doc_' + str(doc_id)).replace('/./',
+                                                                             '//ELMO_CONTEXT_OLD_API_ELMO_INPUT_EMBEDDINGS//parapgraphs//'),
+                    'w') as fout:
+                ds = fout.create_dataset(
+                    'embeddings',
+                    new_embedding.shape, dtype='float32',
+                    data=new_embedding
+                )
+            print('{} is dumped'.format(
+                    embedding_file_path.replace('@@', 'doc_' + str(doc_id)).replace('/./',
+                                                                             '//ELMO_CONTEXT_OLD_API_ELMO_INPUT_EMBEDDINGS//paragraphs//')))
+
+            elmo_paragraph_output_ = sess.run(
+                [elmo_paragraph_output['weighted_op']],
+                feed_dict={paragraph_token_ids: paragraph_ids}
+            )
+
+            new_embedding = np.swapaxes(elmo_paragraph_output_, 0, 1)
+            with h5py.File(
+                    embedding_file_path.replace('@@', 'doc_' + str(doc_id)).replace('/./',
+                                                                                    '//ELMO_CONTEXT_OLD_API_ELMO_OUTPUT_EMBEDDINGS//paragraphs//'),
+                    'w') as fout:
+                ds = fout.create_dataset(
+                    'embeddings',
+                    new_embedding.shape, dtype='float32',
+                    data=new_embedding
+                )
+            print('{} is dumped'.format(
+                embedding_file_path.replace('@@', 'doc_' + str(doc_id)).replace('/./',
+                                                                                '//ELMO_CONTEXT_OLD_API_ELMO_OUTPUT_EMBEDDINGS//paragraphs//')))
+
+        # Create batches of data.
+        for question in tokenized_questions:
+            q = [question]
+            question_ids = batcher.batch_sentences(q)
+
+            elmo_question_input_ = sess.run(
+                [elmo_question_input['weighted_op']],
+                feed_dict={question_token_ids: question_ids}
+            )
+
+            #embeddings = elmo_question_input_[0, :, :]
+            new_embedding = np.swapaxes(elmo_question_input_, 0, 1)
+            with h5py.File(
+                    embedding_file_path.replace('@@', 'doc_' + str(doc_id)).replace('/./',
+                                                                                    '//ELMO_CONTEXT_OLD_API_ELMO_INPUT_EMBEDDINGS//questions//'),
+                    'w') as fout:
+                ds = fout.create_dataset(
+                    'embeddings',
+                    new_embedding.shape, dtype='float32',
+                    data=new_embedding
+                )
+            print('{} is dumped'.format(
+                embedding_file_path.replace('@@', 'doc_' + str(doc_id)).replace('/./',
+                                                                                '//ELMO_CONTEXT_OLD_API_ELMO_INPUT_EMBEDDINGS//questions//')))
+
+            elmo_question_output_ = sess.run(
+                [elmo_question_output['weighted_op']],
+                feed_dict={question_token_ids: question_ids}
+            )
+
+            # embeddings = elmo_question_output_[0, :, :]
+            new_embedding = np.swapaxes(elmo_question_output_, 0, 1)
+            with h5py.File(
+                    embedding_file_path.replace('@@', 'doc_' + str(doc_id)).replace('/./',
+                                                                                    '//ELMO_CONTEXT_OLD_API_ELMO_OUTPUT_EMBEDDINGS//questions//'),
+                    'w') as fout:
+                ds = fout.create_dataset(
+                    'embeddings',
+                    new_embedding.shape, dtype='float32',
+                    data=new_embedding
+                )
+            print('{} is dumped'.format(
+                embedding_file_path.replace('@@', 'doc_' + str(doc_id)).replace('/./',
+                                                                                '//ELMO_CONTEXT_OLD_API_ELMO_OUTPUT_EMBEDDINGS//questions//')))
+
+        # Compute ELMo representations (here for the input only, for simplicity).
+
+
+
+
+
+
+
+
+
+
+    # embeddings = load_embeddings(embedding_file_path)
+    #return embeddings

@@ -220,7 +220,11 @@ else:
             question_embeddings = question_embedding
         else:
             question_embeddings = np.vstack((question_embeddings,question_embedding))
-        print('Question {} is processed'.format(question_indx))
+        print('Question {} is processed. It has {} tokens and embedding shape is {} so {}'.format(question_indx,
+                                                                                                  tokenized_questions[question_indx],
+                                                                                                  question_embedding.shape[0],
+                                                                                                  tokenized_questions[
+                                                                                                      question_indx] == question_embedding.shape[0]))
     print('Question_embeddings shape: {}'.format(question_embeddings.shape))
     UTIL.dump_embeddings(question_embeddings, os.path.join(root_folder_path, args['contextualized_questions_embeddings_with_token']))
     print('Questions are dumped')
@@ -238,9 +242,9 @@ else:
         paragraph_range = range(len(tokenized_questions), len(tokenized_questions) + len(tokenized_paragraphs))
     else:
         paragraph_range = range(len(tokenized_paragraphs))
-        
+
     print('paragraph_range {}'.format(paragraph_range))
-    for paragraph_indx in paragraph_range:
+    for par_tokenized_indx, paragraph_indx in enumerate(paragraph_range):
         p_file_path = os.path.join(paragraphs_folder_path, args['embedding_paragraphs_file_pattern'].replace('@@', str(paragraph_indx)))
         paragraph_embedding= UTIL.load_embeddings(p_file_path)
         if args['change_shape']:
@@ -249,7 +253,16 @@ else:
             paragraph_embeddings = paragraph_embedding
         else:
             paragraph_embeddings = np.vstack((paragraph_embeddings,paragraph_embedding))
-        print('Paragraph {} is processed'.format(paragraph_indx))
+        print('Paragraph {} is processed. It has {} tokens and embedding shape is {} so {}'.format(paragraph_indx,
+                                                                                                  tokenized_paragraphs[
+                                                                                                      par_tokenized_indx],
+                                                                                                  paragraph_embedding.shape[
+                                                                                                      0],
+                                                                                                   tokenized_paragraphs[
+                                                                                                       par_tokenized_indx] ==
+                                                                                                   paragraph_embedding.shape[
+                                                                                                      0]))
+
     print('Paragraph_embeddings shape: {}'.format(paragraph_embeddings.shape))
     UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_paragraphs_embeddings_with_token']))
     print('Paragraphs are dumped')

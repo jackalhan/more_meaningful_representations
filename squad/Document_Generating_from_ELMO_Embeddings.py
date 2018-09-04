@@ -330,15 +330,15 @@ if args['is_calculate_recalls']:
                                   q_to_ps,
                                   len(questions),
                                   os.path.join(root_folder_path,
-                                               args['recall_file_path']).replace('@@', '_'.join(args['weights_arguments']))
+                                               args['recall_file_path']).replace('@@', '_'.join([str(x) for x in args['weights_arguments']]))
                                   )
     print('Recalls are calculated')
 
 questions_elmo_embeddings = np.reshape(questions_embeddings, (questions_embeddings.shape[0], questions_embeddings.shape[1]))
-UTIL.dump_embeddings(questions_elmo_embeddings, os.path.join(root_folder_path, args['questions_file'].replace('@@', '_'.join(args['weights_arguments']))))
+UTIL.dump_embeddings(questions_elmo_embeddings, os.path.join(root_folder_path, args['questions_file'].replace('@@', '_'.join([str(x) for x in args['weights_arguments']]))))
 paragraphs_elmo_embeddings = np.reshape(paragraphs_embeddings,
                                            (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
-UTIL.dump_embeddings(paragraphs_elmo_embeddings, os.path.join(root_folder_path, args['paragraphs_file'].replace('@@', '_'.join(args['weights_arguments']))))
+UTIL.dump_embeddings(paragraphs_elmo_embeddings, os.path.join(root_folder_path, args['paragraphs_file'].replace('@@', '_'.join([str(x) for x in args['weights_arguments']]))))
 print('Weighted are applied')
 """
 ******************************************************************************************************************

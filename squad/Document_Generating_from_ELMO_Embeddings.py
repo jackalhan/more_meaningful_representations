@@ -235,13 +235,12 @@ if os.path.exists(os.path.join(root_folder_path, args['contextualized_paragraphs
 else:
 
     if args["is_paragraphs_listed_after_questions"]:
-        paragraph_range = len(tokenized_questions) + len(tokenized_paragraphs)
-        starting_index = len(tokenized_questions)
+        paragraph_range = range(len(tokenized_questions), len(tokenized_questions) + len(tokenized_paragraphs))
     else:
-        paragraph_range = len(tokenized_paragraphs)
-        starting_index = 0
+        paragraph_range = range(len(tokenized_paragraphs))
+        
     print('paragraph_range {}'.format(paragraph_range))
-    for paragraph_indx in range(paragraph_range, starting_index):
+    for paragraph_indx in paragraph_range:
         p_file_path = os.path.join(paragraphs_folder_path, args['embedding_paragraphs_file_pattern'].replace('@@', str(paragraph_indx)))
         paragraph_embedding= UTIL.load_embeddings(p_file_path)
         if args['change_shape']:

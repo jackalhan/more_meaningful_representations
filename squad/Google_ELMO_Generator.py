@@ -17,8 +17,8 @@ laptop={"batch_question": 20,
         "batch_paragraph": 1,
         }
 
-titanX={"batch_question": 5000,
-        "batch_paragraph": 40,
+titanX={"batch_question": 250,
+        "batch_paragraph": 20,
         }
 
 resource=titanX

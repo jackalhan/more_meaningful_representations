@@ -33,8 +33,8 @@ NEW_API_ELMO={"is_inject_idf":False,
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "change_shape": False,
       "weights_arguments": [1],
-      'questions_file': '{}_question_document_embeddings.hdf5'.format(dataset_type),
-      'paragraphs_file': '{}_paragraph_document_embeddings.hdf5'.format(dataset_type),
+      'questions_file': '{}_question_document_embeddings_@@.hdf5'.format(dataset_type),
+      'paragraphs_file': '{}_paragraph_document_embeddings_@@.hdf5'.format(dataset_type),
       'is_calculate_recalls': True,
       'recall_file_path': '{}_recalls_weights_@@.csv'.format(dataset_type)
       }
@@ -51,8 +51,8 @@ OLD_API_ELMO={"is_inject_idf":False,
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "change_shape": False,
       "weights_arguments": [1, 0, 0],
-      'questions_file': '{}_question_document_embeddings.hdf5'.format(dataset_type),
-      'paragraphs_file': '{}_paragraph_document_embeddings.hdf5'.format(dataset_type),
+      'questions_file': '{}_question_document_embeddings_@@.hdf5'.format(dataset_type),
+      'paragraphs_file': '{}_paragraph_document_embeddings_@@.hdf5'.format(dataset_type),
       'is_calculate_recalls': False,
       'recall_file_path': '{}_recalls_weights_@@.csv'.format(dataset_type)
       }
@@ -261,7 +261,7 @@ if os.path.exists(os.path.join(root_folder_path, args['contextualized_document_e
     document_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
 else:
     document_embeddings = np.vstack((question_embeddings, paragraph_embeddings ))
-    UTIL.dump_embeddings(paragraph_embeddings, os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
+    UTIL.dump_embeddings(document_embeddings, os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
 del question_embeddings
 del paragraph_embeddings
 print('All Documents are dumped')
@@ -335,10 +335,10 @@ if args['is_calculate_recalls']:
     print('Recalls are calculated')
 
 questions_elmo_embeddings = np.reshape(questions_embeddings, (questions_embeddings.shape[0], questions_embeddings.shape[1]))
-UTIL.dump_embeddings(questions_elmo_embeddings, os.path.join(root_folder_path, args['questions_file']))
+UTIL.dump_embeddings(questions_elmo_embeddings, os.path.join(root_folder_path, args['questions_file'].replace('@@', '_'.join(args['weights_arguments']))))
 paragraphs_elmo_embeddings = np.reshape(paragraphs_embeddings,
                                            (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
-UTIL.dump_embeddings(paragraphs_elmo_embeddings, os.path.join(root_folder_path, args['paragraphs_file']))
+UTIL.dump_embeddings(paragraphs_elmo_embeddings, os.path.join(root_folder_path, args['paragraphs_file'].replace('@@', '_'.join(args['weights_arguments']))))
 print('Weighted are applied')
 """
 ******************************************************************************************************************

@@ -139,7 +139,7 @@ start = datetime.datetime.now()
 for document_type in ['question','paragraph']:
     counter = 0
     if document_type == 'question':
-        begin_index = 235
+        begin_index = 0
         documents = questions_nontokenized
         tokenized_documents = tokenized_questions
         reset_every_iter = 3

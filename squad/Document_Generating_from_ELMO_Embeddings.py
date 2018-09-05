@@ -21,25 +21,25 @@ datadir = os.path.join(_basepath, dataset_type)
 _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
 
-NEW_API_ELMO={"is_inject_idf":False,
-      "root_path": "ELMO",
+NEW_API_ELMO={"is_inject_idf":True,
+      "root_path": "ELMO_CONTEXT_NEW_API_EMBEDDINGS",
       "embedding_paragraphs_path": "paragraphs",
-      "embedding_paragraphs_file_pattern": "{}_question_embeddings_ELMO_@@".format(dataset_type),
-      "contextualized_paragraphs_embeddings_with_token": '{}_contextualized_paragraphs_embeddings_with_token.hdf5'.format(dataset_type),
+      "embedding_paragraphs_file_pattern": "{}_paragraph_embedding_LSTM1_@@.hdf5".format(dataset_type),
+      "contextualized_paragraphs_embeddings_with_token": '{}_contextualized_paragraphs_embeddings_with_token_LSTM1.hdf5'.format(dataset_type),
       "embedding_questions_path": "questions",
-      "embedding_questions_file_pattern": "{}_paragraph_embedding_ELMO_@@".format(dataset_type),
-      "contextualized_questions_embeddings_with_token": '{}_contextualized_questions_embeddings_with_token.hdf5'.format(dataset_type),
+      "embedding_questions_file_pattern": "{}_question_embeddings_LSTM1_@@.hdf5".format(dataset_type),
+      "contextualized_questions_embeddings_with_token": '{}_contextualized_questions_embeddings_with_token_LSTM1.hdf5'.format(dataset_type),
        "is_paragraphs_listed_after_questions":False,
-      "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
+      "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token_LSTM1.hdf5'.format(dataset_type),
       "change_shape": False,
       "weights_arguments": [1],
-      'questions_file': '{}_question_document_embeddings_@@.hdf5'.format(dataset_type),
-      'paragraphs_file': '{}_paragraph_document_embeddings_@@.hdf5'.format(dataset_type),
+      'questions_file': '{}_question_document_embeddings_LSTM1_@@.hdf5'.format(dataset_type),
+      'paragraphs_file': '{}_paragraph_document_embeddings_LSTM1_@@.hdf5'.format(dataset_type),
       'is_calculate_recalls': True,
-      'recall_file_path': '{}_recalls_weights_@@.csv'.format(dataset_type)
+      'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":False,
+OLD_API_ELMO={"is_inject_idf":True,
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
       "embedding_paragraphs_path": None,
       "embedding_paragraphs_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
@@ -54,10 +54,10 @@ OLD_API_ELMO={"is_inject_idf":False,
       'questions_file': '{}_question_document_embeddings_@@.hdf5'.format(dataset_type),
       'paragraphs_file': '{}_paragraph_document_embeddings_@@.hdf5'.format(dataset_type),
       'is_calculate_recalls': False,
-      'recall_file_path': '{}_recalls_weights_@@.csv'.format(dataset_type)
+      'recall_file_path': '{}_recalls_weights_@@_###.csv'.format(dataset_type)
       }
 
-args = OLD_API_ELMO
+args = NEW_API_ELMO
 
 
 ################ CONFIGURATIONS #################
@@ -334,11 +334,30 @@ if args['is_calculate_recalls']:
                                   )
     print('Recalls are calculated')
 
-questions_elmo_embeddings = np.reshape(questions_embeddings, (questions_embeddings.shape[0], questions_embeddings.shape[1]))
-UTIL.dump_embeddings(questions_elmo_embeddings, os.path.join(root_folder_path, args['questions_file'].replace('@@', '_'.join([str(x) for x in args['weights_arguments']]))))
-paragraphs_elmo_embeddings = np.reshape(paragraphs_embeddings,
-                                           (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
-UTIL.dump_embeddings(paragraphs_elmo_embeddings, os.path.join(root_folder_path, args['paragraphs_file'].replace('@@', '_'.join([str(x) for x in args['weights_arguments']]))))
+if args['is_inject_idf']:
+    questions_elmo_embeddings = np.reshape(questions_embeddings, (questions_embeddings.shape[0], questions_embeddings.shape[1]))
+    UTIL.dump_embeddings(questions_elmo_embeddings, os.path.join(root_folder_path, args['questions_file'].replace('@@', 'with_idf_'+ '_'.join([str(x) for x in args['weights_arguments']]))))
+    paragraphs_elmo_embeddings = np.reshape(paragraphs_embeddings,
+                                               (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
+    UTIL.dump_embeddings(paragraphs_elmo_embeddings, os.path.join(root_folder_path, args['paragraphs_file'].replace('@@', 'with_idf_'+'_'.join([str(x) for x in args['weights_arguments']]))))
+else:
+    questions_elmo_embeddings = np.reshape(questions_embeddings,
+                                           (questions_embeddings.shape[0], questions_embeddings.shape[1]))
+    UTIL.dump_embeddings(questions_elmo_embeddings, os.path.join(root_folder_path, args['questions_file'].replace('@@', '_'.join(
+                                                                                                                      [
+                                                                                                                          str(
+                                                                                                                              x)
+                                                                                                                          for
+                                                                                                                          x
+                                                                                                                          in
+                                                                                                                          args[
+                                                                                                                              'weights_arguments']]))))
+    paragraphs_elmo_embeddings = np.reshape(paragraphs_embeddings,
+                                            (paragraphs_embeddings.shape[0], paragraphs_embeddings.shape[1]))
+    UTIL.dump_embeddings(paragraphs_elmo_embeddings, os.path.join(root_folder_path,
+                                                                  args['paragraphs_file'].replace('@@', '_'.join(
+                                                                      [str(x) for x in args['weights_arguments']]))))
+
 print('Weighted are applied')
 """
 ******************************************************************************************************************

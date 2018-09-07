@@ -117,7 +117,8 @@ if __name__ == '__main__':
                 # -------------------------------------
                 # Train and Test : Train
                 # -------------------------------------
-            train_spec = tf.estimator.TrainSpec(_train_input_fn, max_steps= params.model['num_epochs'] * math.ceil(params.files['splitter']['train_size'] / params.model['batch_size']))
+            train_spec = tf.estimator.TrainSpec(_train_input_fn,
+                                                max_steps= params.model['num_epochs'] * math.ceil(params.files['splitter']['train_size'] / params.model['batch_size']))
 
 
             # -------------------------------------

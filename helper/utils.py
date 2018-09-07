@@ -165,8 +165,8 @@ def train_test_splitter(params, base_path):
     shuffle(labels_as_list)
     # in order to have all the labels in the training set, we need to split them accordingly:
     train_labels, test_labels = list(), list()
-    train_ques_embeddings, train_par_embeddings = list(), list()
-    test_ques_embeddings, test_par_embeddings = list(), list()
+    train_ques_indices, train_ques_embeddings, train_par_embeddings = list(), list(), list()
+    test_ques_indices, test_ques_embeddings, test_par_embeddings = list(), list(), list()
     recall_paragraph_embeddings = list()
     for par_order, par_indx in enumerate(labels_as_list):
         locations = [_ for _, x in enumerate(pre_trained_question_labels) if x == par_indx]
@@ -180,14 +180,17 @@ def train_test_splitter(params, base_path):
         for_local_train_labels = list()
         for_local_train_ques_embeddings = list()
         for_local_train_par_embeddings = list()
+        for_local_train_ques_indices = list()
         recall_paragraph_embeddings.append(paragraph_embeddings[par_indx])
         for _l in for_local_train_locations:
             for_local_train_labels.append(par_order)
             for_local_train_ques_embeddings.append(question_embeddings[_l])
             for_local_train_par_embeddings.append(paragraph_embeddings[par_indx])
+            for_local_train_ques_indices.append(_l)
         train_labels.extend(for_local_train_labels)
         train_ques_embeddings.extend(for_local_train_ques_embeddings)
         train_par_embeddings.extend(for_local_train_par_embeddings)
+        train_ques_indices.extend(for_local_train_ques_indices)
         print('Train Size {} ---> {}'.format(for_local_train_size, for_local_train_locations))
 
         for_local_test_locations = locations[for_local_train_size:]
@@ -195,26 +198,28 @@ def train_test_splitter(params, base_path):
         for_local_test_labels = list()
         for_local_test_ques_embeddings = list()
         for_local_test_par_embeddings = list()
+        for_local_test_ques_indices = list()
         for _l in for_local_test_locations:
             for_local_test_labels.append(par_order)
             for_local_test_ques_embeddings.append(question_embeddings[_l])
             for_local_test_par_embeddings.append(paragraph_embeddings[par_indx])
-
+            for_local_test_ques_indices.append(_l)
         test_labels.extend(for_local_test_labels)
         test_ques_embeddings.extend(for_local_test_ques_embeddings)
         test_par_embeddings.extend(for_local_test_par_embeddings)
+        test_ques_indices.extend(for_local_test_ques_indices)
         print('Test Size {} ---> {}'.format(for_local_test_size, for_local_test_locations))
 
     # assert num_labels == len(set(test_labels)), "Actual Num of Labels: {} vs Test Num of Labels {}".format(num_labels, len(set(test_labels)))
 
-    train = list(zip(train_ques_embeddings, train_labels, train_par_embeddings))
-    test = list(zip(test_ques_embeddings, test_labels, test_par_embeddings))
+    train = list(zip(train_ques_embeddings, train_labels, train_par_embeddings, train_ques_indices))
+    test = list(zip(test_ques_embeddings, test_labels, test_par_embeddings, test_ques_indices))
     random.seed(params.model['seed'])
     random.shuffle(train)
     random.seed(params.model['seed'])
     random.shuffle(test)
-    train_ques_embeddings, train_labels, train_par_embeddings = zip(*train)
-    test_ques_embeddings, test_labels, test_par_embeddings = zip(*test)
+    train_ques_embeddings, train_labels, train_par_embeddings, train_ques_indices = zip(*train)
+    test_ques_embeddings, test_labels, test_par_embeddings, test_ques_indices = zip(*test)
 
     # Creating sample paragraphs:
 
@@ -230,6 +235,8 @@ def train_test_splitter(params, base_path):
     dump_embeddings(train_labels, os.path.join(base_path, params.files['train_loss']['question_labels']))
     train_par_embeddings = np.asarray(train_par_embeddings)
     dump_embeddings(train_par_embeddings, os.path.join(base_path, params.files['train_loss']['paragraph_embeddings']))
+    train_ques_indices = np.asarray(train_ques_indices)
+    dump_embeddings(train_ques_indices, os.path.join(base_path, params.files['train_loss']['question_idx']))
 
     test_ques_embeddings = np.asarray(test_ques_embeddings)
     dump_embeddings(test_ques_embeddings, os.path.join(base_path, params.files['test_loss']['question_embeddings']))
@@ -237,6 +244,8 @@ def train_test_splitter(params, base_path):
     dump_embeddings(test_labels, os.path.join(base_path, params.files['test_loss']['question_labels']))
     test_par_embeddings = np.asarray(test_par_embeddings)
     dump_embeddings(test_par_embeddings, os.path.join(base_path, params.files['test_loss']['paragraph_embeddings']))
+    test_ques_indices = np.asarray(test_ques_indices)
+    dump_embeddings(test_ques_indices, os.path.join(base_path, params.files['test_loss']['question_idx']))
 
     # Creating a subset test set from the test set
     random.seed(params.model['seed'])
@@ -247,10 +256,11 @@ def train_test_splitter(params, base_path):
         number_of_files_for_test = [params.files['splitter']['test_subset_size']]
     for _size in number_of_files_for_test:
         subset_test = test[:_size]
-        subset_test_ques_embeddings, subset_test_labels, subset_test_par_embeddings = zip(*subset_test)
+        subset_test_ques_embeddings, subset_test_labels, subset_test_par_embeddings, subset_test_ques_indices = zip(*subset_test)
         subset_test_ques_embeddings_file = params.files['subset_file_format']['question_embeddings'].format(_size)
         subset_test_par_embeddings_file = params.files['subset_file_format']['paragraph_embeddings'].format(_size)
         subset_test_ques_label_file = params.files['subset_file_format']['question_labels'].format(_size)
+        subset_test_ques_idx_file = params.files['subset_file_format']['question_idx'].format(_size)
 
         subset_test_ques_embeddings = np.asarray(subset_test_ques_embeddings)
         dump_embeddings(subset_test_ques_embeddings, os.path.join(base_path, subset_test_ques_embeddings_file))
@@ -258,11 +268,14 @@ def train_test_splitter(params, base_path):
         dump_embeddings(subset_test_labels, os.path.join(base_path, subset_test_ques_label_file), dtype="int32")
         subset_test_par_embeddings = np.asarray(subset_test_par_embeddings)
         dump_embeddings(subset_test_par_embeddings, os.path.join(base_path, subset_test_par_embeddings_file))
+        subset_test_ques_indices = np.asarray(subset_test_ques_indices)
+        dump_embeddings(subset_test_ques_indices, os.path.join(base_path, subset_test_ques_idx_file))
 
     # update params for new values
     params.files['test_subset_recall']['question_embeddings'] = subset_test_ques_embeddings_file
     params.files['test_subset_recall']['paragraph_embeddings'] = recall_paragraph_embedding_file
     params.files['test_subset_recall']['question_labels'] = subset_test_ques_label_file
+    params.files['test_subset_recall']['question_idx'] = subset_test_ques_idx_file
 
     params.files['test_subset_loss']['question_embeddings'] = subset_test_ques_embeddings_file
     params.files['test_subset_loss']['paragraph_embeddings'] = subset_test_par_embeddings_file

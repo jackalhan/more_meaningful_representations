@@ -39,7 +39,7 @@ NEW_API_ELMO={"is_inject_idf":True,
       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":True,
+OLD_API_ELMO={"is_inject_idf":False,
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
       "embedding_paragraphs_path": None,
       "embedding_paragraphs_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
@@ -50,14 +50,14 @@ OLD_API_ELMO={"is_inject_idf":True,
       "is_paragraphs_listed_after_questions":True,
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "change_shape": False,
-      "weights_arguments": [1, 0, 0],
+      "weights_arguments": [0, 0, 1],
       'questions_file': '{}_question_document_embeddings_@@.hdf5'.format(dataset_type),
       'paragraphs_file': '{}_paragraph_document_embeddings_@@.hdf5'.format(dataset_type),
-      'is_calculate_recalls': False,
+      'is_calculate_recalls': True,
       'recall_file_path': '{}_recalls_weights_@@_###.csv'.format(dataset_type)
       }
 
-args = NEW_API_ELMO
+args = OLD_API_ELMO
 
 
 ################ CONFIGURATIONS #################
@@ -325,13 +325,23 @@ questions_embeddings, paragraphs_embeddings = UTIL.token_to_document_embeddings(
                                                                             WM)
 if args['is_calculate_recalls']:
     print('Recalls are getting calculated')
-    calculate_similarity_and_dump(paragraphs_embeddings,
-                                  questions_embeddings,
-                                  q_to_ps,
-                                  len(questions),
-                                  os.path.join(root_folder_path,
-                                               args['recall_file_path']).replace('@@', '_'.join([str(x) for x in args['weights_arguments']]))
-                                  )
+    if args['is_inject_idf']:
+        calculate_similarity_and_dump(paragraphs_embeddings,
+                                      questions_embeddings,
+                                      q_to_ps,
+                                      len(questions),
+                                      os.path.join(root_folder_path,
+                                                   args['recall_file_path']).replace('@@', 'with_idf' + '_'.join([str(x) for x in args['weights_arguments']]))
+                                      )
+    else:
+        calculate_similarity_and_dump(paragraphs_embeddings,
+                                      questions_embeddings,
+                                      q_to_ps,
+                                      len(questions),
+                                      os.path.join(root_folder_path,
+                                                   args['recall_file_path']).replace('@@', '_'.join(
+                                          [str(x) for x in args['weights_arguments']]))
+                                      )
     print('Recalls are calculated')
 
 if args['is_inject_idf']:

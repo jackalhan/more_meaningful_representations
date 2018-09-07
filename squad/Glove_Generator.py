@@ -7,6 +7,7 @@ import chakin
 import numpy as np
 import os
 import sys
+import spacy
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.utils as UTIL
 TRAIN = 'train'
@@ -15,7 +16,8 @@ DEV = 'dev'
 ################ CONFIGURATIONS #################
 dataset_type = DEV
 is_dump_during_execution = False
-is_inject_idf = True
+is_inject_idf = False
+is_tf_style = False
 ################ CONFIGURATIONS #################
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
@@ -48,6 +50,14 @@ tokens_ordered_file = os.path.join(datadir, _tokens_ordered_file_name)
 
 _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
+
+_voc_file_name = '{}_voc.txt'.format(dataset_type)
+voc_file_name = os.path.join(datadir, _voc_file_name)
+
+
+# question_embedddings_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/test_question_5000_embeddings.hdf5'
+# paragraph_embeddings_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/recall_paragraph_embeddings.hdf5'
+# question_indx_path = ''
 
 """
 ******************************************************************************************************************
@@ -104,30 +114,14 @@ START: DOCUMENT-TOKEN GUIDELINE
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
-print(100 * '*')
-print('Index of tokens in each document is getting identified....')
-start = datetime.datetime.now()
-document_embedding_guideline = defaultdict()
-corpus_as_tokens = []
-for i, sentence in enumerate(tokenized_questions + tokenized_paragraphs):
-    document_embedding_guideline[i] = defaultdict()
-    document_embedding_guideline[i]['start_index'] = len(corpus_as_tokens)
-    document_embedding_guideline[i]['end_index'] = len(corpus_as_tokens) + len(sentence)
-    if i >= len(tokenized_questions):
-        document_embedding_guideline[i]['type'] = 'p'
-    else:
-        document_embedding_guideline[i]['type'] = 'q'
-    for token in sentence:
-        corpus_as_tokens.append(token)
+tokenized_questions, tokenized_paragraphs = UTIL.fixing_the_token_problem(tokenized_questions, tokenized_paragraphs)
+document_embedding_guideline, corpus_as_tokens = UTIL.generate_document_embedding_guideline(tokenized_questions, tokenized_paragraphs, is_dump_during_execution, token_embeddings_guideline_file, tokens_ordered_file)
+all_tokens = set(['<S>', '</S>','<UNK>'])
+for token in corpus_as_tokens:
+    all_tokens.add(token)
+with open(voc_file_name, 'w') as fout:
+    fout.write('\n'.join(all_tokens))
 
-if is_dump_during_execution:
-    UTIL.save_as_pickle(document_embedding_guideline, token_embeddings_guideline_file)
-    UTIL.save_as_pickle(corpus_as_tokens, tokens_ordered_file)
-del document_embedding_guideline
-del corpus_as_tokens
-end = datetime.datetime.now()
-print('Index of tokens in each document is getting saved in {} minutes'.format((end - start).seconds / 60))
-print(100 * '*')
 """
 ******************************************************************************************************************
 ******************************************************************************************************************
@@ -143,6 +137,7 @@ START: GLOVE EMBEDDINGS DOWNLOAD
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
+
 print(100 * '*')
 print('Downloading Glove Pre-Trained Embeddings....')
 start = datetime.datetime.now()
@@ -180,7 +175,7 @@ if not os.path.exists(UNZIP_FOLDER):
 else:
     print("Embeddings already extracted.")
 end = datetime.datetime.now()
-print('ELMO Embeddings from Google are generated in {} minutes'.format((end - start).seconds / 60))
+print('ELMO Embeddings from Glove are generated in {} minutes'.format((end - start).seconds / 60))
 print(100 * '*')
 """
 ******************************************************************************************************************
@@ -237,9 +232,6 @@ def load_embedding_from_disks(glove_filename, with_indexes=True):
         word_to_embedding_dict = defaultdict(lambda: _WORD_NOT_FOUND)
         return word_to_embedding_dict
 
-print("Loading embedding from disks...")
-word_to_index, index_to_embedding = load_embedding_from_disks(GLOVE_FILENAME, with_indexes=True)
-print("Embedding loaded from disks.")
 """
 ******************************************************************************************************************
 ******************************************************************************************************************
@@ -247,64 +239,169 @@ END: GLOVE EMBEDDINGS LOAD
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
-vocab_size, embedding_dim = index_to_embedding.shape
-print("Embedding is of shape: {}".format(index_to_embedding.shape))
-print("This means (number of words, number of dimensions per word)\n")
-print("The first words are words that tend occur more often.")
 
-print("Note: for unknown words, the representation is an empty vector,\n"
-      "and the index is the last one. The dictionnary has a limit:")
-print("    {} --> {} --> {}".format("A word", "Index in embedding", "Representation"))
-word = "worsdfkljsdf"
-idx = word_to_index[word]
-embd = list(np.array(index_to_embedding[idx], dtype=int))  # "int" for compact print only.
-print("    {} --> {} --> {}".format(word, idx, embd))
-word = "the"
-idx = word_to_index[word]
-embd = list(index_to_embedding[idx])  # "int" for compact print only.
-print("    {} --> {} --> {}".format(word, idx, embd))
 
-batch_size = None  # Any size is accepted
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+START : GLOVE CLASSICAL STYLE
+******************************************************************************************************************
+******************************************************************************************************************
+"""
+if not is_tf_style:
+    def read_file(file_name):
+        with open(file_name) as f:
+            content = f.readlines()
+        # you may also want to remove whitespace characters like `\n` at the end of each line
+        content = [x.strip() for x in content]
+        return content
 
-tf.reset_default_graph()
 
-# Define the variable that will hold the embedding:
-tf_embedding = tf.Variable(
-    tf.constant(0.0, shape=index_to_embedding.shape),
-    trainable=False,
-    name="Embedding"
-)
+    encoding = "utf-8"
+    dim = 300
+    tokens = []
+    if voc_file_name is not None:
+        tokens = read_file(voc_file_name)
+    glove_word_weights = {}
+    with open(GLOVE_FILENAME, "rb") as infile:
+        for line in infile:
+            parts = line.split()
+            token = parts[0].decode(encoding)
+            if len(tokens) > 0:
+                if token in tokens:
+                    nums = np.array(parts[1:], dtype=np.float32)
+                    glove_word_weights[token] = nums
+            else:
+                nums = np.array(parts[1:], dtype=np.float32)
+                glove_word_weights[token] = nums
 
-tf_word_ids = tf.placeholder(tf.int32, shape=[batch_size])
+    if is_inject_idf:
+        print('IDF is going to be calculated')
+        nlp = spacy.blank("en")
+        tokenize = lambda doc: [token.text for token in nlp(doc)]
+        start = datetime.datetime.now()
+        token2idfweight, idf_vec = UTIL.transform_to_idf_weigths(tokenized_questions,
+                                                                 tokenized_paragraphs,
+                                                                 tokenize,
+                                                                 questions_nontokenized,
+                                                                 paragraphs_nontokenized)
 
-tf_word_representation_layer = tf.nn.embedding_lookup(
-    params=tf_embedding,
-    ids=tf_word_ids
-)
+        mean_glove_with_idf_embeddings = np.array([
+            np.mean([glove_word_weights[w] * token2idfweight[w]
+                     for w in words if w in glove_word_weights] or
+                    [np.zeros(dim)], axis=0)
+            for words in tokenized_questions + tokenized_paragraphs
+        ])
+        # UTIL.dump_embeddings(mean_glove_with_idf_embeddings,
+        #                 os.path.join(datadir, 'dev_mean_glove_with_idf_embeddings.hdf5'))
+        question_embeddings = mean_glove_with_idf_embeddings[0:len(tokenized_questions), :]
+        UTIL.dump_embeddings(question_embeddings, os.path.join(datadir, '{}_glove_questions_embeddings_with_idf.hdf5'.format(dataset_type)))
+        paragraphs_embeddings = mean_glove_with_idf_embeddings[len(tokenized_questions):, :]
+        UTIL.dump_embeddings(paragraphs_embeddings, os.path.join(datadir, '{}_glove_paragraphs_embeddings_with_idf.hdf5'.format(dataset_type)))
+        end = datetime.datetime.now()
+        print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
+    else:
+        print('IDF is skipped')
+        mean_glove_embeddings = np.array([
+            np.mean([glove_word_weights[w] for w in words if w in glove_word_weights]
+                    or [np.zeros(dim)], axis=0)
+            for words in tokenized_questions + tokenized_paragraphs
+        ])
+        #UTIL.dump_embeddings(mean_glove_embeddings, os.path.join(datadir, 'dev_mean_glove_embeddings.hdf5'))
+        question_embeddings = mean_glove_embeddings[0:len(tokenized_questions), :]
+        UTIL.dump_embeddings(question_embeddings, os.path.join(datadir, '{}_glove_questions_embeddings.hdf5'.format(dataset_type)))
+        paragraphs_embeddings = mean_glove_embeddings[len(tokenized_questions):, :]
+        UTIL.dump_embeddings(paragraphs_embeddings,
+                             os.path.join(datadir, '{}_glove_paragraphs_embeddings.hdf5'.format(dataset_type)))
 
-tf_embedding_placeholder = tf.placeholder(tf.float32, shape=index_to_embedding.shape)
-tf_embedding_init = tf_embedding.assign(tf_embedding_placeholder)
 
-batch_of_words = tokenized_questions[0]
-batch_indexes = [word_to_index[w] for w in batch_of_words]
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+END : GLOVE CLASSICAL STYLE
+******************************************************************************************************************
+******************************************************************************************************************
+"""
 
-with tf.Session() as sess:#sess = tf.InteractiveSession()
-    _ = sess.run(
-        tf_embedding_init,
-        feed_dict={
-            tf_embedding_placeholder: index_to_embedding
-        }
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+START: GLOVE EMBEDDINGS TO DOCUMENT EMBEDDINGS WITH TF STYLE
+******************************************************************************************************************
+*******
+"""
+
+if is_tf_style:
+    print("Loading embedding from disks...")
+    word_to_index, index_to_embedding = load_embedding_from_disks(GLOVE_FILENAME, with_indexes=True)
+    print("Embedding loaded from disks.")
+
+    vocab_size, embedding_dim = index_to_embedding.shape
+    print("Embedding is of shape: {}".format(index_to_embedding.shape))
+    print("This means (number of words, number of dimensions per word)\n")
+    print("The first words are words that tend occur more often.")
+
+    print("Note: for unknown words, the representation is an empty vector,\n"
+          "and the index is the last one. The dictionnary has a limit:")
+    print("    {} --> {} --> {}".format("A word", "Index in embedding", "Representation"))
+    word = "worsdfkljsdf"
+    idx = word_to_index[word]
+    embd = list(np.array(index_to_embedding[idx], dtype=int))  # "int" for compact print only.
+    print("    {} --> {} --> {}".format(word, idx, embd))
+    word = "the"
+    idx = word_to_index[word]
+    embd = list(index_to_embedding[idx])  # "int" for compact print only.
+    print("    {} --> {} --> {}".format(word, idx, embd))
+
+    batch_size = None  # Any size is accepted
+
+    tf.reset_default_graph()
+
+    # Define the variable that will hold the embedding:
+    tf_embedding = tf.Variable(
+        tf.constant(0.0, shape=index_to_embedding.shape),
+        trainable=False,
+        name="Embedding"
     )
-    print("Embedding now stored in TensorFlow. Can delete numpy array to clear some RAM.")
-    del index_to_embedding
 
+    tf_word_ids = tf.placeholder(tf.int32, shape=[batch_size])
 
-    embedding_from_batch_lookup = sess.run(
-        tf_word_representation_layer,
-        feed_dict={
-            tf_word_ids: batch_indexes
-        }
+    tf_word_representation_layer = tf.nn.embedding_lookup(
+        params=tf_embedding,
+        ids=tf_word_ids
     )
-    print("Representations for {}:".format(batch_of_words))
-    print(embedding_from_batch_lookup)
-    print(embedding_from_batch_lookup.shape)
+
+    tf_embedding_placeholder = tf.placeholder(tf.float32, shape=index_to_embedding.shape)
+    tf_embedding_init = tf_embedding.assign(tf_embedding_placeholder)
+
+    batch_of_words = tokenized_questions[0]
+    batch_indexes = [word_to_index[w] for w in batch_of_words]
+
+    with tf.Session() as sess:#sess = tf.InteractiveSession()
+        _ = sess.run(
+            tf_embedding_init,
+            feed_dict={
+                tf_embedding_placeholder: index_to_embedding
+            }
+        )
+        print("Embedding now stored in TensorFlow. Can delete numpy array to clear some RAM.")
+        del index_to_embedding
+
+
+        embedding_from_batch_lookup = sess.run(
+            tf_word_representation_layer,
+            feed_dict={
+                tf_word_ids: batch_indexes
+            }
+        )
+        print("Representations for {}:".format(batch_of_words))
+        print(embedding_from_batch_lookup)
+        print(embedding_from_batch_lookup.shape)
+
+"""
+******************************************************************************************************************
+******************************************************************************************************************
+END: GLOVE EMBEDDINGS TO DOCUMENT EMBEDDINGS WITH TF STYLE
+******************************************************************************************************************
+*******
+"""

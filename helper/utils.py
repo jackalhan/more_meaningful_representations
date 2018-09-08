@@ -678,6 +678,9 @@ def create_execution_name(params):
                                           embedding_dim,
                                           keep_prob,
                                           init_seed,loss)
+
+    if len(execution_name) > 250:
+        execution_name = execution_name[0:251]
     return execution_name
 
 

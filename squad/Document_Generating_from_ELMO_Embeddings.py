@@ -14,7 +14,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = DEV
+dataset_type = TRAIN
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
@@ -45,7 +45,7 @@ NEW_API_ELMO={"is_inject_idf":True,
 
 OLD_API_ELMO={"is_inject_idf":True,
               "load_data_partially": True,
-              "partition_size": 50000,
+              "partition_size": 100000,
               "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_and_idf_@@.hdf5'.format(dataset_type),
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
       "embedding_paragraphs_path": None,

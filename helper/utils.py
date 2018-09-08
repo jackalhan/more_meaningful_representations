@@ -898,6 +898,7 @@ def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token
             paragraphs_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
             # idf_paragraph_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
 
+    del token_embeddings
     questions_embeddings = np.asarray(questions_embeddings)
     print('Question Embbeddings Shape 1:{}'.format(questions_embeddings.shape))
     paragraphs_embeddings = np.asarray(paragraphs_embeddings)

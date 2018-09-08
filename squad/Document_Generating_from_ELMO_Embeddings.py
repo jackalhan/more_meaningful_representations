@@ -14,7 +14,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
@@ -25,6 +25,7 @@ squad_file = os.path.join(datadir, _squad_file_name)
 NEW_API_ELMO={"is_inject_idf":True,
 "load_data_partially": False,
 "partition_size": None,
+"calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_and_idf_@@.hdf5'.format(dataset_type),
       "root_path": "ELMO_CONTEXT_NEW_API_EMBEDDINGS",
       "embedding_paragraphs_path": "paragraphs",
       "embedding_paragraphs_file_pattern": "{}_paragraph_embedding_LSTM1_@@.hdf5".format(dataset_type),
@@ -45,6 +46,7 @@ NEW_API_ELMO={"is_inject_idf":True,
 OLD_API_ELMO={"is_inject_idf":True,
               "load_data_partially": True,
               "partition_size": 50000,
+              "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_and_idf_@@.hdf5'.format(dataset_type),
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
       "embedding_paragraphs_path": None,
       "embedding_paragraphs_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
@@ -298,21 +300,19 @@ if args['is_inject_idf']:
                                                              questions_nontokenized,
                                                              paragraphs_nontokenized)
     if args['load_data_partially'] is True:
-        weighted_token_embeddings = None
         with h5py.File(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']), 'r') as fin:
-            partition_counter=1
+            partition_counter=0
             for partition in range(0,idf_vec.shape[0], args["partition_size"]):
+                partition_counter += 1
                 temp_doc_embeddings = fin['embeddings'][partition:partition + args["partition_size"], :,:]
                 temp_idf_vec = idf_vec[partition:partition + args["partition_size"], :,:]
                 temp_weighted_token_embeddings = np.multiply(temp_idf_vec, temp_doc_embeddings)
-                if weighted_token_embeddings is None:
-                    weighted_token_embeddings = temp_weighted_token_embeddings
-                else:
-                    weighted_token_embeddings = np.vstack((weighted_token_embeddings, temp_weighted_token_embeddings))
+                UTIL.dump_embeddings(temp_weighted_token_embeddings, os.path.join(root_folder_path, args['calculated_idf_token_embeddings_file'].replace('@@', str(partition_counter))))
                 print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition, partition + args["partition_size"]))
-                partition_counter += 1
     else:
         weighted_token_embeddings = np.multiply(idf_vec, document_embeddings)
+    del idf_vec
+    del token2idfweight
     end = datetime.datetime.now()
     print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
 else:
@@ -335,6 +335,19 @@ START: WEIGHTED ARE GETTING APPLIED TO TOKEN EMBEDDINGS
 ******************************************************************************************************************
 """
 del document_embeddings
+
+
+#LOAD PARTIAL FILES AFTER CLEANING THE DOCUMENT EMBEDDINGS.
+if args['load_data_partially'] is True:
+    weighted_token_embeddings = None
+    for partition in range(1, partition_counter+1):
+        temp_weighted_token_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args[
+            'calculated_idf_token_embeddings_file'].replace('@@', str(partition))))
+        if weighted_token_embeddings is None:
+            weighted_token_embeddings = temp_weighted_token_embeddings
+        else:
+            weighted_token_embeddings = np.vstack((weighted_token_embeddings, temp_weighted_token_embeddings))
+        print("Partition {} is loaded".format(partition))
 
 print('Weighted are getting to applied documents with the following weights: {}'.format(args['weights_arguments']))
 

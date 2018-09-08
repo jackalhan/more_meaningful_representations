@@ -7,13 +7,14 @@ import spacy
 import os
 import sys
 import numpy as np
+import h5py
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.utils as UTIL
 TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = DEV
+dataset_type = TRAIN
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
@@ -22,6 +23,8 @@ _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
 
 NEW_API_ELMO={"is_inject_idf":True,
+"load_data_partially": False,
+"partition_size": None,
       "root_path": "ELMO_CONTEXT_NEW_API_EMBEDDINGS",
       "embedding_paragraphs_path": "paragraphs",
       "embedding_paragraphs_file_pattern": "{}_paragraph_embedding_LSTM1_@@.hdf5".format(dataset_type),
@@ -39,7 +42,9 @@ NEW_API_ELMO={"is_inject_idf":True,
       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":False,
+OLD_API_ELMO={"is_inject_idf":True,
+              "load_data_partially": True,
+              "partition_size": 50000,
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
       "embedding_paragraphs_path": None,
       "embedding_paragraphs_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
@@ -50,10 +55,10 @@ OLD_API_ELMO={"is_inject_idf":False,
       "is_paragraphs_listed_after_questions":True,
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "change_shape": False,
-      "weights_arguments": [0, 0, 1],
+      "weights_arguments": [1, 0, 0],
       'questions_file': '{}_question_document_embeddings_@@.hdf5'.format(dataset_type),
       'paragraphs_file': '{}_paragraph_document_embeddings_@@.hdf5'.format(dataset_type),
-      'is_calculate_recalls': True,
+      'is_calculate_recalls': False,
       'recall_file_path': '{}_recalls_weights_@@_###.csv'.format(dataset_type)
       }
 
@@ -258,7 +263,8 @@ else:
     print('Paragraphs are dumped')
 
 if os.path.exists(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token'])):
-    document_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
+    if args['load_data_partially'] is not True:
+        document_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
 else:
     document_embeddings = np.vstack((question_embeddings, paragraph_embeddings ))
     UTIL.dump_embeddings(document_embeddings, os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
@@ -291,7 +297,22 @@ if args['is_inject_idf']:
                                                              tokenize,
                                                              questions_nontokenized,
                                                              paragraphs_nontokenized)
-    weighted_token_embeddings = np.multiply(idf_vec, document_embeddings)
+    if args['load_data_partially'] is True:
+        weighted_token_embeddings = None
+        with h5py.File(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']), 'r') as fin:
+            partition_counter=1
+            for partition in range(0,idf_vec.shape[0], args["partition_size"]):
+                temp_doc_embeddings = fin['embeddings'][partition:partition + args["partition_size"], :,:]
+                temp_idf_vec = idf_vec[partition:partition + args["partition_size"], :,:]
+                temp_weighted_token_embeddings = np.multiply(temp_idf_vec, temp_doc_embeddings)
+                if weighted_token_embeddings is None:
+                    weighted_token_embeddings = temp_weighted_token_embeddings
+                else:
+                    weighted_token_embeddings = np.vstack((weighted_token_embeddings, temp_weighted_token_embeddings))
+                print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition, partition + args["partition_size"]))
+                partition_counter += 1
+    else:
+        weighted_token_embeddings = np.multiply(idf_vec, document_embeddings)
     end = datetime.datetime.now()
     print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
 else:

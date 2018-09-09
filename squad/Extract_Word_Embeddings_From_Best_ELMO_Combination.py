@@ -154,7 +154,7 @@ token2elmoweight=dict()
 weighted_token_embeddings_and_token = zip(corpus_as_tokens, weighted_token_embeddings)
 del weighted_token_embeddings, corpus_as_tokens
 
-with open(os.path.join(root_folder_path, args['word_vector_file_path'].replace("##", 'with_idf' if args['is_inject_idf'] else '')), 'a') as fout:
+with open(os.path.join(root_folder_path, args['word_vector_file_path'].replace("##", 'with_idf' )), 'a') as fout:
     #writer = csv.writer(fout, lineterminator='\n')
     for line in weighted_token_embeddings_and_token:
         token = line[0]

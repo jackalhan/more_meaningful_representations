@@ -214,6 +214,8 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
                                                                   params.files['train_loss']['question_labels']))
     train_question_label_indx = train_question_label_indx.astype(int)
 
+    train_org_questions = load_embeddings(os.path.join(base_data_path,
+                                                            params.files['train_loss']['question_embeddings']))
     train_question_labels = None
     for label_indx in train_question_label_indx:
         train_question_label = paragraph_embeddings[label_indx, :]
@@ -261,6 +263,9 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
     valid_question_label_indx = load_embeddings(os.path.join(base_data_path,
                                                                   params.files['test_subset_recall']['question_labels']))
     valid_question_label_indx = valid_question_label_indx.astype(int)
+
+    valid_org_questions = load_embeddings(os.path.join(base_data_path,
+                                                            params.files['test_subset_recall']['question_embeddings']))
 
     valid_question_labels = None
     for label_indx in valid_question_label_indx:
@@ -342,12 +347,12 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
     x_len_test = np.array([min(len(x), max_document_len) for x in x_test])
     x_len_valid = np.array([min(len(x), max_document_len) for x in x_valid])
 
-    def parser(x, length, y):
-        features = {"x": x, "len": length}
+    def parser(x, length, org, y):
+        features = {"x": x, "len": length, "org": org}
         return features, y
 
     def train_input_fn():
-        dataset = tf.data.Dataset.from_tensor_slices((x_train, x_len_train, y_train))
+        dataset = tf.data.Dataset.from_tensor_slices((x_train, x_len_train, train_org_questions, y_train))
         dataset = dataset.shuffle(buffer_size=x_train.shape[0])
         dataset = dataset.batch(params.model["batch_size"])
         dataset = dataset.map(parser)
@@ -357,7 +362,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         return dataset #iterator.get_next()
 
     def test_input_fn():
-        dataset = tf.data.Dataset.from_tensor_slices((x_valid, x_len_valid, y_valid))
+        dataset = tf.data.Dataset.from_tensor_slices((x_valid, x_len_valid, valid_org_questions, y_valid))
         dataset = dataset.batch(params.files["splitter"]["test_subset_size"])
         dataset = dataset.map(parser)
         dataset = dataset.prefetch(1)

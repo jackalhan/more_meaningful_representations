@@ -199,10 +199,8 @@ def model_fn(features, labels, mode, params, config):
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
     if params.model['model_type'].lower() == 'conv':
-        questions = tf.contrib.layers.embed_sequence(
-            features['x'], params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
-            initializer=params.model['conv_embedding_initializer'])
-        _questions = questions[:,0,:]
+        questions = features['x']
+        _questions = features['org']
         before_model_embeddings = tf.nn.l2_normalize(_questions, name='normalized_before_model_ques_embeddings', axis=1)
     else:
         questions=features

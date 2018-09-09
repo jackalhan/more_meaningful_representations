@@ -74,7 +74,11 @@ def model_3(input, params):
     conf = params.model["model_3"][0]
 
     with tf.variable_scope('CNN'):
-        dropout_emb = tf.layers.dropout(inputs=input,
+        questions = tf.contrib.layers.embed_sequence(
+            input, params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
+            initializer=params.model['conv_embedding_initializer'])
+
+        dropout_emb = tf.layers.dropout(inputs=questions,
                                        rate=conf['keep_prob'],
                                        training=True)
         conv = tf.layers.conv1d(
@@ -95,40 +99,6 @@ def model_3(input, params):
 
         output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 
-        # embed_input = tf.reshape(input, [-1, conf['embedding_dim'],
-        #                                  1])
-        #
-        # # Apply Convolution filtering on input sequence.
-        # conv1_bigram = tf.layers.conv1d(
-        #     embed_input,
-        #     filters=200,
-        #     kernel_size=2,
-        #     padding='same',
-        #     # Add a ReLU for non linearity.
-        #     activation=tf.nn.relu)
-        # # Max pooling across output of Convolution+Relu.
-        # pool1_bigram = tf.layers.max_pooling1d(conv1_bigram,2,2, padding='same')
-        #
-        # flattened = tf.contrib.layers.flatten(pool1_bigram)
-        # print(input.get_shape())
-        # print(embed_input.get_shape())
-        # print(pool1_bigram.get_shape())
-        # print(flattened.get_shape())
-        #
-        #
-        # dense = tf.contrib.layers.fully_connected(
-        #     flattened,
-        #     conf['embedding_dim'],
-        #     activation_fn=None,
-        #     weights_initializer=tf.truncated_normal_initializer(seed=conf['initializer_seed'],
-        #                                                         stddev=0.1),
-        #     weights_regularizer=tf.contrib.layers.l2_regularizer(conf['weight_decay']),
-        #     biases_initializer=tf.zeros_initializer(),
-        #     #trainable=True,
-        #     scope='linear'
-        # )
-        # print(dense.get_shape())
-        # #dense =  tf.layers.Dense(flattened, conf['embedding_dim'], activation=tf.nn.relu)
 
     return output
 

@@ -74,10 +74,7 @@ def model_3(input, params):
     conf = params.model["model_3"][0]
 
     with tf.variable_scope('CNN'):
-        input_layer = tf.contrib.layers.embed_sequence(
-            input['x'], params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
-            initializer=params.model['conv_embedding_initializer'])
-        dropout_emb = tf.layers.dropout(inputs=input_layer,
+        dropout_emb = tf.layers.dropout(inputs=input,
                                        rate=conf['keep_prob'],
                                        training=True)
         conv = tf.layers.conv1d(

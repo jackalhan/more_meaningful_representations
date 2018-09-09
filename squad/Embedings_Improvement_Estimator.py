@@ -171,8 +171,11 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf):
                 #     estimator.train(_train_input_fn, max_steps=1)
                 # else:
                 estimator.train(_train_input_fn)
+                tf.logging.info("-------> Epoch: {} Train is completed".format(ep))
                 result_as_dict_list = estimator.predict(lambda: test_input_fn(base_data_path, params))
+                tf.logging.info("-------> Epoch: {} Predict is completed".format(ep))
                 data_dict = prepare_dict_to_print(result_as_dict_list, params, data_dict,ep)
+                tf.logging.info("-------> Epoch: {} data_dict is completed".format(ep))
 
             save_as_pickle(data_dict, os.path.join(model_save_path, 'debug_dict.pkl'))
             save_as_shelve(data_dict, os.path.join(model_save_path, 'debug_dict.slv'))
@@ -379,8 +382,11 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
             #     estimator.train(_train_input_fn, max_steps=1)
             # else:
             estimator.train(_train_input_fn)
-            result_as_dict_list = estimator.predict(_test_input_fn)
+            tf.logging.info("-------> Epoch: {} Train is completed".format(ep))
+            result_as_dict_list = estimator.predict(lambda: test_input_fn())
+            tf.logging.info("-------> Epoch: {} Predict is completed".format(ep))
             data_dict = prepare_dict_to_print(result_as_dict_list, params, data_dict, ep)
+            tf.logging.info("-------> Epoch: {} data_dict is completed".format(ep))
 
         save_as_pickle(data_dict, os.path.join(model_save_path, 'debug_dict.pkl'))
         save_as_shelve(data_dict, os.path.join(model_save_path, 'debug_dict.slv'))

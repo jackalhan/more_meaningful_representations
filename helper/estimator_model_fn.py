@@ -71,10 +71,10 @@ def recall_fn(base_data_path, params, question_before_model_embeddings, question
 
 
         # ground truth delta before model
-        if params.model['model_type'].lower() == 'conv':
-            distance_from_before_model_q_to_p = tf.zeros([1,1], tf.float32)
-        else:
-            distance_from_before_model_q_to_p = euclidean_distance(question_before_model_embeddings, normalized_paragraph_embeddings)
+        # if params.model['model_type'].lower() == 'conv':
+        #     distance_from_before_model_q_to_p = tf.zeros([1,1], tf.float32)
+        # else:
+        distance_from_before_model_q_to_p = euclidean_distance(question_before_model_embeddings, normalized_paragraph_embeddings)
 
         GL_distance_from_before_model_q_to_p = distance_from_before_model_q_to_p
 
@@ -85,10 +85,10 @@ def recall_fn(base_data_path, params, question_before_model_embeddings, question
         # delta before model - after model to ground truth
         delta_before_after_model = distance_from_before_model_q_to_p - distance_from_after_model_q_to_p
 
-        if params.model['model_type'].lower() == 'conv':
-            recalls_before_model, normalized_recalls_before_model = tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32)
-        else:
-            recalls_before_model, normalized_recalls_before_model = calculate_recalls(question_before_model_embeddings,
+        # if params.model['model_type'].lower() == 'conv':
+        #     recalls_before_model, normalized_recalls_before_model = tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32)
+        # else:
+        recalls_before_model, normalized_recalls_before_model = calculate_recalls(question_before_model_embeddings,
                                                                                         normalized_all_paragraphs,
                                                                                         subset_labels,
                                                                                         params,
@@ -99,19 +99,19 @@ def recall_fn(base_data_path, params, question_before_model_embeddings, question
         avg_recall_before_model = tf.reduce_mean(normalized_recalls_before_model)
 
         if params.executor["distance_type"] == 'cosine':
-            if params.model['model_type'].lower() == 'conv':
-                _, _labels_before, ___, _scores_before = tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32)
-            else:
-                _, _labels_after, ___, _scores_after = pairwise_expanded_cosine_similarities(
+            # if params.model['model_type'].lower() == 'conv':
+            #     _, _labels_before, ___, _scores_before = tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32)
+            # else:
+            _, _labels_after, ___, _scores_after = pairwise_expanded_cosine_similarities(
                                                                                             question_after_model_embeddings,
                                                                                             subset_labels,
                                                                                             normalized_all_paragraphs)
 
         else:
-            if params.model['model_type'].lower() == 'conv':
-                _scores_before = tf.zeros([1, 1], tf.float32)
-            else:
-                _scores_before = pairwise_euclidean_distances(question_before_model_embeddings, normalized_all_paragraphs)
+            # if params.model['model_type'].lower() == 'conv':
+            #     _scores_before = tf.zeros([1, 1], tf.float32)
+            # else:
+            _scores_before = pairwise_euclidean_distances(question_before_model_embeddings, normalized_all_paragraphs)
             _labels_before = subset_labels
 
             _scores_after = pairwise_euclidean_distances(question_after_model_embeddings, normalized_all_paragraphs)
@@ -121,25 +121,25 @@ def recall_fn(base_data_path, params, question_before_model_embeddings, question
         normalized_recalls_after_model = tf.reshape(normalized_recalls_after_model, (1,-1))
         normalized_recalls_after_model = tf.tile(normalized_recalls_after_model, (tf.shape(question_after_model_embeddings)[0],1))
 
-        if params.model['model_type'].lower() == 'conv':
-            avg_recall_before_model = tf.zeros([1, 1], tf.float32)
-            normalized_recalls_before_model = tf.zeros([1, 1], tf.float32)
-        else:
-            avg_recall_before_model = tf.tile([avg_recall_before_model],
-                                              [tf.shape(question_before_model_embeddings)[0]])
-            normalized_recalls_before_model = tf.reshape(normalized_recalls_before_model, (1, -1))
-            normalized_recalls_before_model = tf.tile(normalized_recalls_before_model, (tf.shape(question_before_model_embeddings)[0], 1))
+        # if params.model['model_type'].lower() == 'conv':
+        #     avg_recall_before_model = tf.zeros([1, 1], tf.float32)
+        #     normalized_recalls_before_model = tf.zeros([1, 1], tf.float32)
+        # else:
+        avg_recall_before_model = tf.tile([avg_recall_before_model],
+                                          [tf.shape(question_before_model_embeddings)[0]])
+        normalized_recalls_before_model = tf.reshape(normalized_recalls_before_model, (1, -1))
+        normalized_recalls_before_model = tf.tile(normalized_recalls_before_model, (tf.shape(question_before_model_embeddings)[0], 1))
         for _k in range(1, params.executor["debug_top_k"]+1):
-            if params.model['model_type'].lower() == 'conv':
-                _are_founds_before, _closest_labels_before, _distances_before = tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32)
-            else:
-                _are_founds_before, _closest_labels_before, _distances_before = calculate_recall_top_k(_scores_before,
-                                                                                                    _labels_before, _k,
-                                                                                                    params.executor[
-                                                                                                        "distance_type"])
-                _are_founds_before = tf.reshape(_are_founds_before, [-1, 1])
-                _closest_labels_before = tf.reshape(_closest_labels_before, [-1, _k])
-                _distances_before = tf.reshape(_distances_before, [-1, _k])
+            # if params.model['model_type'].lower() == 'conv':
+            #     _are_founds_before, _closest_labels_before, _distances_before = tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32)
+            # else:
+            _are_founds_before, _closest_labels_before, _distances_before = calculate_recall_top_k(_scores_before,
+                                                                                                _labels_before, _k,
+                                                                                                params.executor[
+                                                                                                    "distance_type"])
+            _are_founds_before = tf.reshape(_are_founds_before, [-1, 1])
+            _closest_labels_before = tf.reshape(_closest_labels_before, [-1, _k])
+            _distances_before = tf.reshape(_distances_before, [-1, _k])
 
 
             _are_founds_after, _closest_labels_after, _distances_after = calculate_recall_top_k(_scores_after, _labels_after, _k, params.executor["distance_type"])
@@ -148,29 +148,29 @@ def recall_fn(base_data_path, params, question_before_model_embeddings, question
             _distances_after = tf.reshape(_distances_after, [-1, _k])
 
             if _k < 2:
-                if params.model['model_type'].lower() == 'conv':
-                    are_founds_before = tf.zeros([1, 1], tf.float32)
-                    closest_labels_before = tf.zeros([1, 1], tf.float32)
-                    distances_before = tf.zeros([1, 1], tf.float32)
-
-                else:
-                    are_founds_before = _are_founds_before
-                    closest_labels_before = _closest_labels_before
-                    distances_before = _distances_before
+                # if params.model['model_type'].lower() == 'conv':
+                #     are_founds_before = tf.zeros([1, 1], tf.float32)
+                #     closest_labels_before = tf.zeros([1, 1], tf.float32)
+                #     distances_before = tf.zeros([1, 1], tf.float32)
+                #
+                # else:
+                are_founds_before = _are_founds_before
+                closest_labels_before = _closest_labels_before
+                distances_before = _distances_before
 
                 are_founds_after = _are_founds_after
                 closest_labels_after = _closest_labels_after
                 distances_after = _distances_after
 
             else:
-                if params.model['model_type'].lower() == 'conv':
-                    are_founds_before = tf.zeros([1, 1], tf.float32)
-                    closest_labels_before = tf.zeros([1, 1], tf.float32)
-                    distances_before = tf.zeros([1, 1], tf.float32)
-                else:
-                    are_founds_before = tf.concat([are_founds_before, are_founds_before], axis=1)
-                    closest_labels_before = tf.concat([closest_labels_before, closest_labels_before], axis=1)
-                    distances_before = tf.concat([distances_before, distances_before], axis=1)
+                # if params.model['model_type'].lower() == 'conv':
+                #     are_founds_before = tf.zeros([1, 1], tf.float32)
+                #     closest_labels_before = tf.zeros([1, 1], tf.float32)
+                #     distances_before = tf.zeros([1, 1], tf.float32)
+                # else:
+                are_founds_before = tf.concat([are_founds_before, are_founds_before], axis=1)
+                closest_labels_before = tf.concat([closest_labels_before, closest_labels_before], axis=1)
+                distances_before = tf.concat([distances_before, distances_before], axis=1)
 
                 are_founds_after = tf.concat([are_founds_after, _are_founds_after], axis=1)
                 closest_labels_after = tf.concat([closest_labels_after, _closest_labels_after], axis=1)
@@ -197,10 +197,15 @@ def model_fn(features, labels, mode, params, config):
     base_data_path = os.path.join(params.executor['model_dir'], params.executor['data_dir'])
     global_step = tf.train.get_global_step()
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-    questions = features
+
     if params.model['model_type'].lower() == 'conv':
-        before_model_embeddings = tf.zeros([1, 1], tf.float32)
+        questions = tf.contrib.layers.embed_sequence(
+            features['x'], params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
+            initializer=params.model['conv_embedding_initializer'])
+        _questions = questions[:,0,:]
+        before_model_embeddings = tf.nn.l2_normalize(_questions, name='normalized_before_model_ques_embeddings', axis=1)
     else:
+        questions=features
         before_model_embeddings = tf.nn.l2_normalize(questions, name='normalized_before_model_ques_embeddings', axis=1)
 
     # -----------------------------------------------------------

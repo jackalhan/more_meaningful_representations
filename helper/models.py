@@ -74,13 +74,13 @@ def model_3(input, params):
     conf = params.model["model_3"][0]
 
     with tf.variable_scope('CNN'):
-        questions = tf.contrib.layers.embed_sequence(
+        dropout_emb = questions = tf.contrib.layers.embed_sequence(
             input, params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
             initializer=params.model['conv_embedding_initializer'])
 
-        dropout_emb = tf.layers.dropout(inputs=questions,
-                                       rate=conf['keep_prob'],
-                                       training=True)
+        # dropout_emb = tf.layers.dropout(inputs=questions,
+        #                                rate=conf['keep_prob'],
+        #                                training=True)
         conv = tf.layers.conv1d(
             inputs=dropout_emb,
             filters=conf['number_of_filters'],
@@ -88,14 +88,16 @@ def model_3(input, params):
             padding="same",
             activation=tf.nn.relu)
 
+
+
         # Global Max Pooling
         pool = tf.reduce_max(input_tensor=conv, axis=1)
 
-        hidden = tf.layers.dense(inputs=pool, units=conf['embedding_dim'], activation=tf.nn.relu)
+        dropout_hidden = hidden = tf.layers.dense(inputs=pool, units=conf['embedding_dim'], activation=tf.nn.relu)
 
-        dropout_hidden = tf.layers.dropout(inputs=hidden,
-                                           rate=conf['keep_prob'],
-                                           training=True)
+        # dropout_hidden = tf.layers.dropout(inputs=hidden,
+        #                                    rate=conf['keep_prob'],
+        #                                    training=True)
 
         output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 

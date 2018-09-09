@@ -229,31 +229,31 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         train_question = questions_nontokenized[indx]
         train_questions.append(train_question)
 
-    del train_question_indx
+    #del train_question_indx
 
-    # TEST QUESTIONS ARE GETTING LOADED
-    test_question_indx = load_embeddings(os.path.join(base_data_path,
-                                                            params.files['test_loss']['question_idx']))
-    test_question_indx = test_question_indx.astype(int)
-
-    test_question_label_indx = load_embeddings(os.path.join(base_data_path,
-                                                                  params.files['test_loss']['question_labels']))
-    test_question_label_indx = test_question_label_indx.astype(int)
-
-    test_question_labels = None
-    for label_indx in test_question_label_indx:
-        test_question_label = paragraph_embeddings[label_indx, :]
-        if test_question_labels is None:
-            test_question_labels = test_question_label
-        else:
-            test_question_labels = np.vstack((test_question_labels, test_question_label))
-
-    test_questions = []
-    for indx in test_question_indx:
-        test_question = questions_nontokenized[indx]
-        test_questions.append(test_question)
-
-    del test_question_indx, test_question_label_indx
+    # # TEST QUESTIONS ARE GETTING LOADED
+    # test_question_indx = load_embeddings(os.path.join(base_data_path,
+    #                                                         params.files['test_loss']['question_idx']))
+    # test_question_indx = test_question_indx.astype(int)
+    #
+    # test_question_label_indx = load_embeddings(os.path.join(base_data_path,
+    #                                                               params.files['test_loss']['question_labels']))
+    # test_question_label_indx = test_question_label_indx.astype(int)
+    #
+    # test_question_labels = None
+    # for label_indx in test_question_label_indx:
+    #     test_question_label = paragraph_embeddings[label_indx, :]
+    #     if test_question_labels is None:
+    #         test_question_labels = test_question_label
+    #     else:
+    #         test_question_labels = np.vstack((test_question_labels, test_question_label))
+    #
+    # test_questions = []
+    # for indx in test_question_indx:
+    #     test_question = questions_nontokenized[indx]
+    #     test_questions.append(test_question)
+    #
+    # del test_question_indx, test_question_label_indx
 
     # TEST RECALL = VALID QUESTIONS ARE GETTING LOADED
     valid_question_indx = load_embeddings(os.path.join(base_data_path,
@@ -280,19 +280,19 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         valid_question = questions_nontokenized[indx]
         valid_questions.append(valid_question)
 
-    del valid_question_indx
+    #del valid_question_indx
 
     max_document_len = params.model['max_document_len']
     num_class = len(paragraphs_nontokenized)
 
     train_tokenized_questions = [question.split(' ') for question in train_questions]
-    test_tokenized_questions = [question.split(' ') for question in test_questions]
+    #test_tokenized_questions = [question.split(' ') for question in test_questions]
     valid_tokenized_questions = [question.split(' ') for question in valid_questions]
 
     indx_to_voc, voc_to_indx = vocabulary_processor(tokenized_questions)
 
     train_tokenized_questions = fit_vocab_to_documents(train_tokenized_questions, voc_to_indx)
-    test_tokenized_questions = fit_vocab_to_documents(test_tokenized_questions, voc_to_indx)
+    #test_tokenized_questions = fit_vocab_to_documents(test_tokenized_questions, voc_to_indx)
     valid_tokenized_questions = fit_vocab_to_documents(valid_tokenized_questions, voc_to_indx)
 
     x_train = sequence.pad_sequences(train_tokenized_questions,
@@ -306,15 +306,15 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
     del train_question_labels, train_question_label_indx
     print("x_train shape is {}".format(x_train.shape))
 
-    x_test = sequence.pad_sequences(test_tokenized_questions,
-                                 maxlen=max_document_len,
-                                 truncating='post',
-                                 padding='post',
-                                 value=0)
-
-    y_test = test_question_labels
-    del test_question_labels
-    print("x_test shape is {}".format(x_test.shape))
+    # x_test = sequence.pad_sequences(test_tokenized_questions,
+    #                              maxlen=max_document_len,
+    #                              truncating='post',
+    #                              padding='post',
+    #                              value=0)
+    #
+    # y_test = test_question_labels
+    # del test_question_labels
+    # print("x_test shape is {}".format(x_test.shape))
 
     x_valid = sequence.pad_sequences(valid_tokenized_questions,
                                  maxlen=max_document_len,
@@ -347,7 +347,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
     START: BUILDING ESTIMATORS
     """
     x_len_train = np.array([min(len(x), max_document_len) for x in x_train])
-    x_len_test = np.array([min(len(x), max_document_len) for x in x_test])
+    #x_len_test = np.array([min(len(x), max_document_len) for x in x_test])
     x_len_valid = np.array([min(len(x), max_document_len) for x in x_valid])
 
     def parser(x, length, org, y_paragraph, y_labels):

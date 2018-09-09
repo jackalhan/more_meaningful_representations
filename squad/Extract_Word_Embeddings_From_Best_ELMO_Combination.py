@@ -22,10 +22,11 @@ datadir = os.path.join(_basepath, dataset_type)
 _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
 
-OLD_API_ELMO={"is_inject_idf":True,
+OLD_API_ELMO={
+      "total_number_of_partitioned_files": 9,
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
+       "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_and_idf_@@.hdf5'.format(dataset_type),
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
-      "is_paragraphs_listed_after_questions":True,
       "weights_arguments": [1, 0, 0],
       "word_vector_file_path" : '{}_word_embeddings_##.txt'.format(dataset_type)
       }
@@ -106,62 +107,22 @@ END: DOCUMENT-TOKEN GUIDELINE
 """
 ******************************************************************************************************************
 ******************************************************************************************************************
-START: LOAD EMBEDINGS
-******************************************************************************************************************
-******************************************************************************************************************
-"""
-root_folder_path = os.path.join(datadir, args["root_path"])
-document_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']))
-print('contextualized_document_embeddings_with_token is loaded')
-
-"""
-******************************************************************************************************************
-******************************************************************************************************************
-END: LOAD EMBEDINGS
-******************************************************************************************************************
-******************************************************************************************************************
-"""
-
-"""
-******************************************************************************************************************
-******************************************************************************************************************
-START: IDF
-******************************************************************************************************************
-******************************************************************************************************************
-"""
-if args['is_inject_idf']:
-    print('IDF is going to be calculated')
-    nlp = spacy.blank("en")
-    tokenize = lambda doc: [token.text for token in nlp(doc)]
-    start = datetime.datetime.now()
-    token2idfweight, idf_vec = UTIL.transform_to_idf_weigths(tokenized_questions,
-                                                             tokenized_paragraphs,
-                                                             tokenize,
-                                                             questions_nontokenized,
-                                                             paragraphs_nontokenized)
-    weighted_token_embeddings = np.multiply(idf_vec, document_embeddings)
-    end = datetime.datetime.now()
-    print('IDF calculation is ended in {} minutes'.format((end - start).seconds / 60))
-else:
-    print('IDF is skipped')
-    _type = 'only'
-    weighted_token_embeddings = document_embeddings
-"""
-******************************************************************************************************************
-******************************************************************************************************************
-END: LOAD IDF
-******************************************************************************************************************
-******************************************************************************************************************
-"""
-
-"""
-******************************************************************************************************************
-******************************************************************************************************************
 START: WEIGHTED ARE GETTING APPLIED TO TOKEN EMBEDDINGS
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
-del document_embeddings
+root_folder_path = os.path.join(datadir, args["root_path"])
+
+weighted_token_embeddings = None
+for partition in range(1, args['total_number_of_partitioned_files']+1):
+    temp_weighted_token_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args[
+        'calculated_idf_token_embeddings_file'].replace('@@', str(partition))))
+    if weighted_token_embeddings is None:
+        weighted_token_embeddings = temp_weighted_token_embeddings
+    else:
+        weighted_token_embeddings = np.vstack((weighted_token_embeddings, temp_weighted_token_embeddings))
+    print("Partition {} is loaded".format(partition))
+
 
 print('Weighted are getting to applied documents with the following weights: {}'.format(args['weights_arguments']))
 
@@ -190,7 +151,7 @@ print('Weight file is generated')
 start = datetime.datetime.now()
 token2elmoweight=dict()
 weighted_token_embeddings_and_token = zip(corpus_as_tokens, weighted_token_embeddings)
-del weighted_token_embeddings
+del weighted_token_embeddings, corpus_as_tokens
 
 with open(os.path.join(root_folder_path, args['word_vector_file_path'].replace("##", 'with_idf' if args['is_inject_idf'] else '')), 'a') as fout:
     #writer = csv.writer(fout, lineterminator='\n')

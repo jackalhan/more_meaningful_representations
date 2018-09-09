@@ -229,7 +229,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         train_question = questions_nontokenized[indx]
         train_questions.append(train_question)
 
-    del train_question_indx, train_question_label_indx
+    del train_question_indx
 
     # TEST QUESTIONS ARE GETTING LOADED
     test_question_indx = load_embeddings(os.path.join(base_data_path,
@@ -280,7 +280,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         valid_question = questions_nontokenized[indx]
         valid_questions.append(valid_question)
 
-    del valid_question_indx, valid_question_label_indx
+    del valid_question_indx
 
     max_document_len = params.model['max_document_len']
     num_class = len(paragraphs_nontokenized)
@@ -300,8 +300,10 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
                                  truncating='post',
                                  padding='post',
                                  value=0)
-    y_train = train_question_labels
-    del train_question_labels
+
+    y_train_paragraph = train_question_labels
+    y_train_labels = train_question_label_indx
+    del train_question_labels, train_question_label_indx
     print("x_train shape is {}".format(x_train.shape))
 
     x_test = sequence.pad_sequences(test_tokenized_questions,
@@ -319,8 +321,9 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
                                  truncating='post',
                                  padding='post',
                                  value=0)
-    y_valid = valid_question_labels
-    del valid_question_labels
+    y_valid_paragraph = valid_question_labels
+    y_valid_labels = valid_question_label_indx
+    del valid_question_labels,valid_question_label_indx
     print("x_valid shape is {}".format(x_valid.shape))
 
     vocab_size = len(voc_to_indx)
@@ -347,12 +350,13 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
     x_len_test = np.array([min(len(x), max_document_len) for x in x_test])
     x_len_valid = np.array([min(len(x), max_document_len) for x in x_valid])
 
-    def parser(x, length, org, y):
+    def parser(x, length, org, y_paragraph, y_labels):
         features = {"x": x, "len": length, "org": org}
-        return features, y
+        labels = {"paragraph": y_paragraph, "labels": y_labels}
+        return features, labels
 
     def train_input_fn():
-        dataset = tf.data.Dataset.from_tensor_slices((x_train, x_len_train, train_org_questions, y_train))
+        dataset = tf.data.Dataset.from_tensor_slices((x_train, x_len_train, train_org_questions, y_train_paragraph, y_train_labels))
         dataset = dataset.shuffle(buffer_size=x_train.shape[0])
         dataset = dataset.batch(params.model["batch_size"])
         dataset = dataset.map(parser)
@@ -362,7 +366,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         return dataset #iterator.get_next()
 
     def test_input_fn():
-        dataset = tf.data.Dataset.from_tensor_slices((x_valid, x_len_valid, valid_org_questions, y_valid))
+        dataset = tf.data.Dataset.from_tensor_slices((x_valid, x_len_valid, valid_org_questions, y_valid_paragraph, y_valid_labels))
         dataset = dataset.batch(params.files["splitter"]["test_subset_size"])
         dataset = dataset.map(parser)
         dataset = dataset.prefetch(1)

@@ -237,9 +237,14 @@ def model_fn(features, labels, mode, params, config):
 
         return tf.estimator.EstimatorSpec(mode=mode, predictions=results)
 
-    # question_embedding_mean_norm = tf.reduce_mean(tf.norm(embeddings, axis=1))
-    paragraphs = labels[:, 0:params.files['pre_trained_files']['embedding_dim']]
-    labels = labels[:, params.files['pre_trained_files']['embedding_dim']:params.files['pre_trained_files']['embedding_dim']+1]
+    if params.model['model_type'].lower() == 'conv':
+        paragraphs = labels['paragraph']
+        labels = tf.cast(labels['labels'], tf.float32)
+    else:
+        # question_embedding_mean_norm = tf.reduce_mean(tf.norm(embeddings, axis=1))
+        paragraphs = labels[:, 0:params.files['pre_trained_files']['embedding_dim']]
+        labels = labels[:, params.files['pre_trained_files']['embedding_dim']:params.files['pre_trained_files']['embedding_dim']+1]
+
     paragraphs = tf.nn.l2_normalize(paragraphs, name='normalized_paragraph_embeddings', axis=1)
     # paragraph_embedding_mean_norm = tf.reduce_mean(tf.norm(paragraph, axis=1))
 

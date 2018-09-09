@@ -240,6 +240,7 @@ def model_fn(features, labels, mode, params, config):
     if params.model['model_type'].lower() == 'conv':
         paragraphs = labels['paragraph']
         labels = tf.cast(labels['labels'], tf.float32)
+        labels = tf.reshape(labels, [-1, 1])
     else:
         # question_embedding_mean_norm = tf.reduce_mean(tf.norm(embeddings, axis=1))
         paragraphs = labels[:, 0:params.files['pre_trained_files']['embedding_dim']]

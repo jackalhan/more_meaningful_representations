@@ -99,6 +99,58 @@ def set_logger(log_path):
         stream_handler.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(stream_handler)
 
+def load_word_embeddings(path, vocab, embedding_size):
+    embeddings = {}
+    vocab_size = len(vocab)
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            values = line.strip().split()
+            w = values[0]
+            vectors = np.asarray(values[1:], dtype='float32')
+            embeddings[w] = vectors
+
+    embedding_matrix = np.random.uniform(-1, 1, size=(vocab_size, embedding_size))
+    num_loaded = 0
+    for w, i in vocab.items():
+        v = embeddings.get(w)
+        if v is not None and i < vocab_size:
+            embedding_matrix[i] = v
+            num_loaded += 1
+        else:
+            print('Token {} with {} id is not found'.format(w,v))
+    print('Successfully loaded pretrained embeddings for {}/{} words'.format(num_loaded, vocab_size))
+    embedding_matrix = embedding_matrix.astype(np.float32)
+    return embedding_matrix
+
+def vocabulary_processor(tokenized_docs):
+    indx_to_voc = {0: '<PAD>'} #, 1: '<S>', 2:'</S>',3:'<UNK>'
+    voc_to_indx = {'<PAD>':0} # , '<S>':1, '</S>':2,'<UNK>':3
+    offset = 1 # 4
+    for tokens in tokenized_docs:
+        for token in tokens:
+            if token not in voc_to_indx:
+                voc_to_indx[token] = offset
+                indx_to_voc[offset] = token
+                offset +=1
+    print('{} vocs are created'.format(offset))
+    return indx_to_voc, voc_to_indx
+
+def fit_vocab_to_documents(tokenized_docs, voc_to_indx):
+    document_lists = []
+    for doc_indx, tokens in enumerate(tokenized_docs):
+        token_list = []
+        #token_list.append(voc_to_indx['<S>'])
+        for token in tokens:
+            try:
+                token_list.append(voc_to_indx[token])
+            except:
+                print('{} token in Doc {} could not found'.format(token,doc_indx))
+        #token_list.append(voc_to_indx['</S>'])
+        document_lists.append(token_list)
+    document_lists = np.array(document_lists)
+    return document_lists
+
+
 
 def define_pre_executions(params, json_path, base_data_path):
     model_save_path = os.path.join(params.executor['model_dir'], params.executor['save_dir'],
@@ -273,7 +325,7 @@ def train_test_splitter(params, base_path):
 
     # update params for new values
     params.files['test_subset_recall']['question_embeddings'] = subset_test_ques_embeddings_file
-    params.files['test_subset_recall']['paragraph_embeddings'] = recall_paragraph_embedding_file
+    params.files['test_subset_recall']['paragraph_embeddings'] = subset_test_par_embeddings_file
     params.files['test_subset_recall']['question_labels'] = subset_test_ques_label_file
     params.files['test_subset_recall']['question_idx'] = subset_test_ques_idx_file
 
@@ -662,9 +714,19 @@ def create_execution_name(params):
         except:
             keep_prob = keep_prob + "_no"
 
-        init_seed = init_seed + "_" + str(layers['initializer_seed']) if layers['initializer_seed'] is not None else "seed_no"
-        weight_decay = weight_decay + "_" + str(layers['weight_decay'])
-        scaling_factor = scaling_factor + "_" + str(layers['scaling_factor'])
+        try:
+            init_seed = init_seed + "_" + str(layers['initializer_seed'])
+        except:
+            init_seed = ""
+
+        try:
+            weight_decay = weight_decay + "_" + str(layers['weight_decay'])
+        except:
+            weight_decay = ""
+        try:
+            scaling_factor = scaling_factor + "_" + str(layers['scaling_factor'])
+        except:
+            scaling_factor = ""
 
     layers = "layers_{}".format(len(model_params))
 
@@ -836,6 +898,46 @@ def dump_tokenized_contexts(tokenized_contexts:list, file_path:str):
 def tokenize_contexts(contexts:list):
     tokenized_context = [word_tokenize(context.strip()) for context in contexts]
     return tokenized_context
+
+def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=False,
+                          paragraphs_file=None, questions_file=None, mapping_file=None):
+    print(100 * '*')
+    print('Parsing Started')
+    start = datetime.datetime.now()
+
+    word_counter, char_counter = Counter(), Counter()
+    examples, eval, questions, paragraphs, q_to_ps = process_squad_file(squad_file,
+                                                                        dataset_type,
+                                                                        word_counter,
+                                                                        char_counter)
+
+    print('# of Paragraphs in {} : {}'.format(dataset_type, len(paragraphs)))
+    print('# of Questions in {} : {}'.format(dataset_type, len(questions)))
+    print('# of Q_to_P {} : {}'.format(dataset_type, len(q_to_ps)))
+
+    print(20 * '-')
+    print('Paragraphs: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
+    tokenized_paragraphs = tokenize_contexts(paragraphs)
+    print('# of Tokenized Paragraphs in {} : {}'.format(dataset_type, len(tokenized_paragraphs)))
+    print(20 * '-')
+    print('Questions: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
+    tokenized_questions = tokenize_contexts(questions)
+    print('# of Tokenized Questions in {} : {}'.format(dataset_type, len(tokenized_questions)))
+
+    if is_dump_during_execution:
+        UTIL.dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file)
+        UTIL.dump_tokenized_contexts(tokenized_questions, questions_file)
+        UTIL.dump_mapping_data(q_to_ps, mapping_file)
+    end = datetime.datetime.now()
+    print('Parsing Ended in {} minutes'.format((end - start).seconds / 60))
+    print(100 * '*')
+
+    tokenized_questions, tokenized_paragraphs = fixing_the_token_problem(tokenized_questions, tokenized_paragraphs)
+    paragraphs_nontokenized = [" ".join(context) for context in tokenized_paragraphs]
+    questions_nontokenized = [" ".join(context) for context in tokenized_questions]
+
+    return tokenized_questions, tokenized_paragraphs, questions_nontokenized, paragraphs_nontokenized
+
 
 
 def fixing_the_token_problem(tokenized_questions, tokenized_paragraphs):

@@ -3,7 +3,8 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.estimator_dataset as ds
-import tensorflow as tf
+import helper.utils as UTIL
+
 def train_input_fn(base_data_path, params):
     """Train input function for the dataset.
 

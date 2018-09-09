@@ -348,7 +348,8 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         dataset = dataset.shuffle(buffer_size=x_train.shape[0])
         dataset = dataset.batch(params.model["batch_size"])
         dataset = dataset.map(parser)
-        dataset = dataset.repeat()
+        #dataset = dataset.repeat()
+        dataset = dataset.prefetch(1)
         #iterator = dataset.make_one_shot_iterator()
         return dataset #iterator.get_next()
 
@@ -356,6 +357,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         dataset = tf.data.Dataset.from_tensor_slices((x_valid, x_len_valid, y_valid))
         dataset = dataset.batch(params.files["splitter"]["test_subset_size"])
         dataset = dataset.map(parser)
+        dataset = dataset.prefetch(1)
         #iterator = dataset.make_one_shot_iterator()
         return dataset #iterator.get_next()
 

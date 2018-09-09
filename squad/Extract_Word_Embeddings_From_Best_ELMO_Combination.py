@@ -117,6 +117,13 @@ weighted_token_embeddings = None
 for partition in range(1, args['total_number_of_partitioned_files']+1):
     temp_weighted_token_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args[
         'calculated_idf_token_embeddings_file'].replace('@@', str(partition))))
+    WM = np.array(args['weights_arguments']).reshape((1, len(args['weights_arguments']), 1))
+    print('Weights are calculated according to the best combination')
+    print('temp_weighted_token_embeddings shape {}, WM shape {}'.format(temp_weighted_token_embeddings.shape, WM.shape))
+    temp_weighted_token_embeddings = np.multiply(temp_weighted_token_embeddings, WM)
+    print('temp_weighted_token_embeddings shape {}'.format(temp_weighted_token_embeddings.shape))
+    temp_weighted_token_embeddings = temp_weighted_token_embeddings[:, 0, :]
+    print('temp_weighted_token_embeddings shape {}'.format(temp_weighted_token_embeddings.shape))
     if weighted_token_embeddings is None:
         weighted_token_embeddings = temp_weighted_token_embeddings
     else:
@@ -125,12 +132,6 @@ for partition in range(1, args['total_number_of_partitioned_files']+1):
 
 
 print('Weighted are getting to applied documents with the following weights: {}'.format(args['weights_arguments']))
-
-WM = np.array(args['weights_arguments']).reshape((1, len(args['weights_arguments']), 1))
-weighted_token_embeddings = np.multiply(weighted_token_embeddings, WM)
-weighted_token_embeddings = weighted_token_embeddings[:,0,:]
-
-print('Weights are calculated according to the best combination')
 
 """
 ******************************************************************************************************************

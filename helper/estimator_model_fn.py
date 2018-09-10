@@ -199,7 +199,7 @@ def model_fn(features, labels, mode, params, config):
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
     if params.model['model_type'].lower() == 'conv':
-        questions = features['x']
+        questions = features
         _questions = features['org']
         before_model_embeddings = tf.nn.l2_normalize(_questions, name='normalized_before_model_ques_embeddings', axis=1)
     else:

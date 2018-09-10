@@ -351,15 +351,20 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
     print('Total words: %d' % vocab_size)
     params.files['questions_vocab_size'] = vocab_size
 
-    word_embeddings = load_word_embeddings(os.path.join(base_data_path, params.files['word_embeddings']),
-                                           voc_to_indx,
-                                           params.files['pre_trained_files']['embedding_dim'])
 
-    def my_initializer(shape=None, dtype=tf.float32, partition_info=None):
-        assert dtype is tf.float32
-        return word_embeddings
 
-    params.model['conv_embedding_initializer']= my_initializer
+    if params.model['word_embeddings'] is None:
+        params.model['conv_embedding_initializer'] = tf.truncated_normal_initializer(seed=params.model['initializer_seed'],
+                                                                    stddev=0.1)
+    else:
+        word_embeddings = load_word_embeddings(os.path.join(base_data_path, params.files['word_embeddings']),
+                                               voc_to_indx,
+                                               params.files['pre_trained_files']['embedding_dim'])
+
+        def my_initializer(shape=None, dtype=tf.float32, partition_info=None):
+            assert dtype is tf.float32
+            return word_embeddings
+        params.model['conv_embedding_initializer']= my_initializer
     """
     END: DATA PREPARATION
     """

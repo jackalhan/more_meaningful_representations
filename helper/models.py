@@ -72,15 +72,16 @@ def model_3(input, params):
     tf.logging.info("Creating the {}...".format(model_3.__name__))
 
     conf = params.model["model_3"][0]
-
+    org_questions = input['org']
+    input = input['x']
     with tf.variable_scope('CNN'):
         dropout_emb = questions = tf.contrib.layers.embed_sequence(
             input, params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
             initializer=params.model['conv_embedding_initializer'])
 
-        # dropout_emb = tf.layers.dropout(inputs=questions,
-        #                                rate=conf['keep_prob'],
-        #                                training=True)
+        dropout_emb = tf.layers.dropout(inputs=questions,
+                                       rate=conf['keep_prob'],
+                                       training=True)
         conv = tf.layers.conv1d(
             inputs=dropout_emb,
             filters=conf['number_of_filters'],
@@ -95,13 +96,13 @@ def model_3(input, params):
 
         dropout_hidden = hidden = tf.layers.dense(inputs=pool, units=conf['embedding_dim'], activation=tf.nn.relu)
 
-        # dropout_hidden = tf.layers.dropout(inputs=hidden,
-        #                                    rate=conf['keep_prob'],
-        #                                    training=True)
+        dropout_hidden = tf.layers.dropout(inputs=hidden,
+                                           rate=conf['keep_prob'],
+                                           training=True)
 
-        output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
+        dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 
-
+        output = tf.add(dense_output * conf['scaling_factor'], org_questions)
     return output
 
 

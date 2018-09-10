@@ -94,13 +94,13 @@ def model_3(input, params):
         # Global Max Pooling
         pool = tf.reduce_max(input_tensor=conv, axis=1)
 
-        dropout_hidden = hidden = tf.layers.dense(inputs=pool, units=conf['embedding_dim'], activation=tf.nn.relu)
+        #dropout_hidden = hidden = tf.layers.dense(inputs=pool, units=conf['embedding_dim'], activation=tf.nn.relu)
 
         # dropout_hidden = tf.layers.dropout(inputs=hidden,
         #                                    rate=conf['keep_prob'],
         #                                    training=True)
 
-        dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
+        dense_output = tf.layers.dense(inputs=pool, units=conf['final_unit'])
 
         output = tf.add(dense_output * conf['scaling_factor'], org_questions)
     return output

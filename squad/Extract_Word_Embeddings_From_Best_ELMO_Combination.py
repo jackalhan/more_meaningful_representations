@@ -14,7 +14,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
@@ -23,9 +23,10 @@ _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
 
 OLD_API_ELMO={
-      "total_number_of_partitioned_files": 36,
+      "is_inject_idf":False,
+      "total_number_of_partitioned_files": 5,
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
-       "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_and_idf_@@.hdf5'.format(dataset_type),
+       "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_@@.hdf5'.format(dataset_type),
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "weights_arguments": [1, 0, 0],
       "word_vector_file_path" : '{}_word_embeddings_##.txt'.format(dataset_type)
@@ -44,38 +45,8 @@ START: PARSING FILE
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
-print(100 * '*')
-print('Parsing Started')
-start = datetime.datetime.now()
 
-word_counter, char_counter = Counter(), Counter()
-examples, eval, questions, paragraphs, q_to_ps = UTIL.process_squad_file(squad_file.format(dataset_type),
-                                                                        dataset_type,
-                                                                        word_counter,
-                                                                        char_counter)
-
-print('# of Paragraphs in {} : {}'.format(dataset_type, len(paragraphs)))
-print('# of Questions in {} : {}'.format(dataset_type, len(questions)))
-print('# of Q_to_P {} : {}'.format(dataset_type, len(q_to_ps)))
-
-print(20 * '-')
-print('Paragraphs: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
-tokenized_paragraphs = UTIL.tokenize_contexts(paragraphs)
-paragraphs_nontokenized = [" ".join(context) for context in tokenized_paragraphs]
-print('# of Tokenized Paragraphs in {} : {}'.format(dataset_type, len(tokenized_paragraphs)))
-print(20 * '-')
-print('Questions: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
-tokenized_questions = UTIL.tokenize_contexts(questions)
-questions_nontokenized = [" ".join(context) for context in tokenized_questions]
-print('# of Tokenized Questions in {} : {}'.format(dataset_type, len(tokenized_questions)))
-#
-# if is_dump_during_execution:
-#     UTIL.dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file.format(dataset_type))
-#     UTIL.dump_tokenized_contexts(tokenized_questions, questions_file.format(dataset_type))
-#     UTIL.dump_mapping_data(q_to_ps, mapping_file.format(dataset_type))
-end = datetime.datetime.now()
-print('Parsing Ended in {} minutes'.format((end - start).seconds / 60))
-print(100 * '*')
+tokenized_questions, tokenized_paragraphs, questions_nontokenized, paragraphs_nontokenized = UTIL.prepare_squad_objects(squad_file.format(dataset_type),dataset_type)
 """
 ******************************************************************************************************************
 ******************************************************************************************************************
@@ -93,7 +64,6 @@ START: DOCUMENT-TOKEN GUIDELINE
 ******************************************************************************************************************
 """
 
-tokenized_questions, tokenized_paragraphs = UTIL.fixing_the_token_problem(tokenized_questions, tokenized_paragraphs)
 document_embedding_guideline, corpus_as_tokens = UTIL.generate_document_embedding_guideline(tokenized_questions, tokenized_paragraphs)
 
 """
@@ -154,7 +124,7 @@ token2elmoweight=dict()
 weighted_token_embeddings_and_token = zip(corpus_as_tokens, weighted_token_embeddings)
 del weighted_token_embeddings, corpus_as_tokens
 
-with open(os.path.join(root_folder_path, args['word_vector_file_path'].replace("##", 'with_idf' )), 'a') as fout:
+with open(os.path.join(root_folder_path, args['word_vector_file_path'].replace("##", 'with_idf' if args['is_inject_idf'] else '' )), 'a') as fout:
     #writer = csv.writer(fout, lineterminator='\n')
     for line in weighted_token_embeddings_and_token:
         token = line[0]

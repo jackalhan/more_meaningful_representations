@@ -925,9 +925,9 @@ def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=Fals
     print('# of Tokenized Questions in {} : {}'.format(dataset_type, len(tokenized_questions)))
 
     if is_dump_during_execution:
-        UTIL.dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file)
-        UTIL.dump_tokenized_contexts(tokenized_questions, questions_file)
-        UTIL.dump_mapping_data(q_to_ps, mapping_file)
+        dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file)
+        dump_tokenized_contexts(tokenized_questions, questions_file)
+        dump_mapping_data(q_to_ps, mapping_file)
     end = datetime.datetime.now()
     print('Parsing Ended in {} minutes'.format((end - start).seconds / 60))
     print(100 * '*')

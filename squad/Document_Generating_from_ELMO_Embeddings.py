@@ -14,7 +14,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
@@ -43,10 +43,10 @@ NEW_API_ELMO={"is_inject_idf":True,
       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":True,
+OLD_API_ELMO={"is_inject_idf":False,
               "load_data_partially": True,
               "partition_size": 100000,
-              "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_and_idf_@@.hdf5'.format(dataset_type),
+              "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_@@.hdf5'.format(dataset_type),
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
       "embedding_paragraphs_path": None,
       "embedding_paragraphs_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
@@ -124,38 +124,7 @@ START: PARSING FILE
 ******************************************************************************************************************
 ******************************************************************************************************************
 """
-print(100 * '*')
-print('Parsing Started')
-start = datetime.datetime.now()
-
-word_counter, char_counter = Counter(), Counter()
-examples, eval, questions, paragraphs, q_to_ps = UTIL.process_squad_file(squad_file.format(dataset_type),
-                                                                        dataset_type,
-                                                                        word_counter,
-                                                                        char_counter)
-
-print('# of Paragraphs in {} : {}'.format(dataset_type, len(paragraphs)))
-print('# of Questions in {} : {}'.format(dataset_type, len(questions)))
-print('# of Q_to_P {} : {}'.format(dataset_type, len(q_to_ps)))
-
-print(20 * '-')
-print('Paragraphs: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
-tokenized_paragraphs = UTIL.tokenize_contexts(paragraphs)
-paragraphs_nontokenized = [" ".join(context) for context in tokenized_paragraphs]
-print('# of Tokenized Paragraphs in {} : {}'.format(dataset_type, len(tokenized_paragraphs)))
-print(20 * '-')
-print('Questions: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
-tokenized_questions = UTIL.tokenize_contexts(questions)
-questions_nontokenized = [" ".join(context) for context in tokenized_questions]
-print('# of Tokenized Questions in {} : {}'.format(dataset_type, len(tokenized_questions)))
-#
-# if is_dump_during_execution:
-#     UTIL.dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file.format(dataset_type))
-#     UTIL.dump_tokenized_contexts(tokenized_questions, questions_file.format(dataset_type))
-#     UTIL.dump_mapping_data(q_to_ps, mapping_file.format(dataset_type))
-end = datetime.datetime.now()
-print('Parsing Ended in {} minutes'.format((end - start).seconds / 60))
-print(100 * '*')
+tokenized_questions, tokenized_paragraphs, questions_nontokenized, paragraphs_nontokenized = UTIL.prepare_squad_objects(squad_file.format(dataset_type),dataset_type)
 """
 ******************************************************************************************************************
 ******************************************************************************************************************
@@ -173,7 +142,6 @@ START: DOCUMENT-TOKEN GUIDELINE
 ******************************************************************************************************************
 """
 
-tokenized_questions, tokenized_paragraphs = UTIL.fixing_the_token_problem(tokenized_questions, tokenized_paragraphs)
 document_embedding_guideline, corpus_as_tokens = UTIL.generate_document_embedding_guideline(tokenized_questions, tokenized_paragraphs)
 
 """
@@ -318,7 +286,20 @@ if args['is_inject_idf']:
 else:
     print('IDF is skipped')
     _type = 'only'
-    weighted_token_embeddings = document_embeddings
+    if args['load_data_partially'] is True:
+        with h5py.File(os.path.join(root_folder_path, args['contextualized_document_embeddings_with_token']),
+                       'r') as fin:
+            partition_counter = 0
+            for partition in range(0, len(corpus_as_tokens), args["partition_size"]):
+                partition_counter += 1
+                temp_doc_embeddings = fin['embeddings'][partition:partition + args["partition_size"], :, :]
+                UTIL.dump_embeddings(temp_doc_embeddings, os.path.join(root_folder_path, args[
+                    'calculated_idf_token_embeddings_file'].replace('@@', str(partition_counter))))
+                print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition,
+                                                                                      partition + args[
+                                                                                          "partition_size"]))
+    else:
+        weighted_token_embeddings = document_embeddings
 """
 ******************************************************************************************************************
 ******************************************************************************************************************

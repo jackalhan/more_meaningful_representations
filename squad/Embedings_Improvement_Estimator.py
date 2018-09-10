@@ -198,8 +198,29 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
     """
     START: DATA PREPARATION
     """
-    squad_file = os.path.join(base_data_path, params.files['corpus'])
-    tokenized_questions, tokenized_paragraphs, questions_nontokenized, paragraphs_nontokenized = prepare_squad_objects(squad_file, squad_file)
+    splitted_corpus_files = params.files['corpus'].split(',')
+    splitted_corpus_files = [f.strip() for f in splitted_corpus_files]
+    for i, squad_file in enumerate(splitted_corpus_files):
+        squad_file = os.path.join(base_data_path, squad_file)
+        if i == 0:
+            tokenized_questions, \
+            tokenized_paragraphs, \
+            questions_nontokenized, \
+            paragraphs_nontokenized = prepare_squad_objects(squad_file, squad_file)
+        else:
+            temp_tokenized_questions, \
+            temp_tokenized_paragraphs, \
+            temp_questions_nontokenized, \
+            temp_paragraphs_nontokenized = prepare_squad_objects(squad_file, squad_file)
+
+            tokenized_questions = tokenized_questions + temp_tokenized_questions
+            tokenized_paragraphs = tokenized_paragraphs + temp_tokenized_paragraphs
+            questions_nontokenized = questions_nontokenized + temp_questions_nontokenized
+            paragraphs_nontokenized = paragraphs_nontokenized + temp_paragraphs_nontokenized
+
+    print('Len of Questions: {}, Len of Paragraphs: {}'.format(len(tokenized_questions),
+                                                                           len(tokenized_paragraphs)))
+
     # PARAGRAPHS ARE GETTING LOADED
     paragraph_embeddings = load_embeddings(os.path.join(base_data_path,
                                                              params.files['test_subset_recall'][

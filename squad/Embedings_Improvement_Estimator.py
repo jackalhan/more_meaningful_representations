@@ -277,7 +277,8 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
 
     def train_input_fn():
         dataset = tf.data.Dataset.from_tensor_slices((x_train, x_len_train, train_org_questions, y_train_paragraph, y_train_labels))
-        dataset = dataset.shuffle(buffer_size=x_train.shape[0])
+        if params.model["shuffle"]:
+            dataset = dataset.shuffle(buffer_size=x_train.shape[0])
         dataset = dataset.batch(params.model["batch_size"])
         dataset = dataset.map(parser)
         #dataset = dataset.repeat()

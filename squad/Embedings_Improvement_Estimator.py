@@ -219,7 +219,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
                                                             params.files['test_subset_recall']['question_embeddings']))
 
     valid_question_labels = load_embeddings(os.path.join(base_data_path,
-                                                            params.files['train_loss']['paragraph_embeddings']))
+                                                            params.files['test_subset_recall']['paragraph_embeddings']))
 
 
 

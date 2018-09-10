@@ -75,32 +75,49 @@ def model_3(input, params):
     org_questions = input['org']
     input = input['x']
     with tf.variable_scope('CNN'):
-        dropout_emb = questions = tf.contrib.layers.embed_sequence(
+        questions = tf.contrib.layers.embed_sequence(
             input, params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
             initializer=params.model['conv_embedding_initializer'])
 
-        dropout_emb = tf.layers.dropout(inputs=questions,
-                                       rate=conf['keep_prob'],
-                                       training=True)
-        conv = tf.layers.conv1d(
-            inputs=dropout_emb,
-            filters=conf['number_of_filters'],
-            kernel_size=conf['kernel_size'],
-            padding="same",
-            activation=tf.nn.relu)
+        conv1 = tf.layers.conv1d(questions, 32, kernel_size=3, padding="same", activation=tf.nn.relu)
+        pool1 = tf.layers.max_pooling1d(inputs=conv1, pool_size=2, strides=2)
+
+        conv2 = tf.layers.conv1d(pool1, 64, kernel_size=3, padding="same", activation=tf.nn.relu)
+        pool2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2)
+
+        conv3 = tf.layers.conv1d(pool2, 128, kernel_size=3, padding="same", activation=tf.nn.relu)
+        pool3 = tf.layers.max_pooling1d(inputs=conv3, pool_size=2, strides=2)
+
+        conv4 = tf.layers.conv1d(pool3, 256, kernel_size=3, padding="same", activation=tf.nn.relu)
+        pool4 = tf.layers.max_pooling1d(inputs=conv4, pool_size=2, strides=2)
+
+        pool4_flat = tf.reshape(pool4, [-1, 8 * 256])
+
+        dropout_hidden = tf.layers.dropout(inputs=pool4_flat, rate=conf['keep_prob'])
+        dense_output = tf.layers.dense(dropout_hidden, conf['final_unit'])
+        #net = tf.layers.dense(net, self.num_classes)
 
 
-
-        # Global Max Pooling
-        pool = tf.reduce_max(input_tensor=conv, axis=1)
-
-        dropout_hidden = hidden = tf.layers.dense(inputs=pool, units=conf['embedding_dim'], activation=tf.nn.relu)
-
-        dropout_hidden = tf.layers.dropout(inputs=hidden,
-                                           rate=conf['keep_prob'],
-                                           training=True)
-
-        dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
+        # dropout_emb = tf.layers.dropout(inputs=questions,
+        #                                rate=conf['keep_prob'],
+        #                                training=True)
+        # conv = tf.layers.conv1d(
+        #     inputs=dropout_emb,
+        #     filters=conf['number_of_filters'],
+        #     kernel_size=conf['kernel_size'],
+        #     padding="same",
+        #     activation=tf.nn.relu)
+        #
+        #
+        # # Global Max Pooling
+        # pool = tf.reduce_max(input_tensor=conv, axis=1)
+        #
+        # hidden = tf.layers.dense(inputs=pool, units=conf['embedding_dim'], activation=tf.nn.relu)
+        #
+        # dropout_hidden = tf.layers.dropout(inputs=hidden,
+        #                                    rate=conf['keep_prob'])
+        #
+        # dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 
         output = tf.add(dense_output * conf['scaling_factor'], org_questions)
     return output

@@ -79,11 +79,11 @@ def model_3(input, params):
             input, params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
             initializer=params.model['conv_embedding_initializer'])
 
-        conv1 = tf.layers.conv1d(questions, 4096, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
+        conv1 = tf.layers.conv1d(questions, 2048, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        conv2 = tf.layers.conv1d(conv1, 4096, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
+        conv2 = tf.layers.conv1d(conv1, 2048, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        conv3 = tf.layers.conv1d(conv2, 4096, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
+        conv3 = tf.layers.conv1d(conv2, 2048, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
         min_avg_pooling = tf.reduce_min(conv3, axis=1)
 

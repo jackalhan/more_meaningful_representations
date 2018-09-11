@@ -298,8 +298,8 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
     END: BUILDING ESTIMATORS
     """
 
-    _train_input_fn = train_input_fn()
-    _test_input_fn = test_input_fn()
+    _train_input_fn = lambda: train_input_fn()
+    _test_input_fn = lambda: test_input_fn()
     estimator = tf.estimator.Estimator(model_fn, params=params, config=config)
     if params.executor["is_debug_mode"]:
         tf.logging.info(10 * '*')

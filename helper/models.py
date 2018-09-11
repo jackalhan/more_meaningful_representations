@@ -79,22 +79,29 @@ def model_3(input, params):
             input, params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
             initializer=params.model['conv_embedding_initializer'])
 
-        conv1 = tf.layers.conv1d(questions, 32, kernel_size=3, padding="same", activation=tf.nn.relu)
-        pool1 = tf.layers.max_pooling1d(inputs=conv1, pool_size=2, strides=2)
+        conv1 = tf.layers.conv1d(questions, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        conv2 = tf.layers.conv1d(pool1, 64, kernel_size=3, padding="same", activation=tf.nn.relu)
-        pool2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2)
+        conv2 = tf.layers.conv1d(conv1, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        conv3 = tf.layers.conv1d(pool2, 128, kernel_size=3, padding="same", activation=tf.nn.relu)
-        pool3 = tf.layers.max_pooling1d(inputs=conv3, pool_size=2, strides=2)
+        conv3 = tf.layers.conv1d(conv2, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        conv4 = tf.layers.conv1d(pool3, 256, kernel_size=3, padding="same", activation=tf.nn.relu)
-        pool4 = tf.layers.max_pooling1d(inputs=conv4, pool_size=2, strides=2)
+        min_avg_pooling = tf.reduce_min(conv3, axis=1)
+        #
+        # pool2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2)
+        #
+        # conv3 = tf.layers.conv1d(pool2, 1024, kernel_size=3, padding="same", activation=tf.nn.relu)
+        # pool3 = tf.layers.max_pooling1d(inputs=conv3, pool_size=2, strides=2)
 
-        pool4_flat = tf.reshape(pool4, [-1, 8 * 256])
-
-        dropout_hidden = tf.layers.dropout(inputs=pool4_flat, rate=conf['keep_prob'])
-        dense_output = tf.layers.dense(dropout_hidden, conf['final_unit'])
+        # conv4 = tf.layers.conv1d(pool3, 4096, kernel_size=3, padding="same", activation=tf.nn.relu)
+        # pool4 = tf.layers.max_pooling1d(inputs=conv4, pool_size=2, strides=2)
+        #
+        # conv4 = tf.layers.conv1d(pool3, 4096, kernel_size=3, padding="same", activation=tf.nn.relu)
+        # pool4 = tf.layers.max_pooling1d(inputs=conv4, pool_size=2, strides=2)
+        #
+        # pool4_flat = tf.reshape(pool4, [-1, 8 * 4096])
+        #
+        # dropout_hidden = tf.layers.dropout(inputs=pool4_flat, rate=conf['keep_prob'])
+        # dense_output = tf.layers.dense(dropout_hidden, conf['final_unit'])
         #net = tf.layers.dense(net, self.num_classes)
 
 
@@ -119,7 +126,7 @@ def model_3(input, params):
         #
         # dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 
-        output = tf.add(dense_output * conf['scaling_factor'], org_questions)
+        output = tf.add(min_avg_pooling * conf['scaling_factor'], org_questions)
     return output
 
 

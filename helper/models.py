@@ -86,6 +86,11 @@ def model_3(input, params):
         conv3 = tf.layers.conv1d(conv2, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
         min_avg_pooling = tf.reduce_min(conv3, axis=1)
+
+        dropout_hidden = tf.layers.dropout(inputs=min_avg_pooling, rate=conf['keep_prob'])
+
+        dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
+
         #
         # pool2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2)
         #
@@ -126,7 +131,7 @@ def model_3(input, params):
         #
         # dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 
-        output = tf.add(min_avg_pooling * conf['scaling_factor'], org_questions)
+        output = tf.add(dense_output * conf['scaling_factor'], org_questions)
     return output
 
 

@@ -282,24 +282,24 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
         dataset = dataset.batch(params.model["batch_size"])
         dataset = dataset.map(parser)
         #dataset = dataset.repeat()
-        dataset = dataset.prefetch(1)
-        #iterator = dataset.make_one_shot_iterator()
-        return dataset #iterator.get_next()
+        #dataset = dataset.prefetch(1)
+        iterator = dataset.make_one_shot_iterator()
+        return iterator.get_next()
 
     def test_input_fn():
         dataset = tf.data.Dataset.from_tensor_slices((x_valid, x_len_valid, valid_org_questions, y_valid_paragraph, y_valid_labels))
         dataset = dataset.batch(params.files["splitter"]["test_subset_size"])
         dataset = dataset.map(parser)
-        dataset = dataset.prefetch(1)
-        #iterator = dataset.make_one_shot_iterator()
-        return dataset #iterator.get_next()
+        #dataset = dataset.prefetch(1)
+        iterator = dataset.make_one_shot_iterator()
+        return iterator.get_next()
 
     """
     END: BUILDING ESTIMATORS
     """
 
-    _train_input_fn = lambda: train_input_fn()
-    _test_input_fn = lambda: test_input_fn()
+    _train_input_fn = train_input_fn()
+    _test_input_fn = test_input_fn()
     estimator = tf.estimator.Estimator(model_fn, params=params, config=config)
     if params.executor["is_debug_mode"]:
         tf.logging.info(10 * '*')
@@ -313,7 +313,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
             # else:
             estimator.train(_train_input_fn)
             tf.logging.info("-------> Epoch: {} Train is completed".format(ep))
-            result_as_dict_list = estimator.predict(lambda: test_input_fn())
+            result_as_dict_list = estimator.predict(_test_input_fn)
             tf.logging.info("-------> Epoch: {} Predict is completed".format(ep))
             data_dict = prepare_dict_to_print(result_as_dict_list, params, data_dict, ep)
             tf.logging.info("-------> Epoch: {} data_dict is completed".format(ep))

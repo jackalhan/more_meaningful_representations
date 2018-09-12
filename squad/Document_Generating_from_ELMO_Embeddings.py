@@ -3,6 +3,7 @@ from collections import Counter, defaultdict
 from tqdm import tqdm
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn import preprocessing
 import spacy
 import os
 import sys
@@ -43,7 +44,7 @@ NEW_API_ELMO={"is_inject_idf":True,
       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":False,
+OLD_API_ELMO={"is_inject_idf":True,
               "load_data_partially": True,
               "partition_size": 100000,
               "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_@@.hdf5'.format(dataset_type),
@@ -57,7 +58,7 @@ OLD_API_ELMO={"is_inject_idf":False,
       "is_paragraphs_listed_after_questions":True,
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "change_shape": False,
-      "weights_arguments": [1, 0, 0],
+      "weights_arguments": [1, 0, 0], #icerde max index olarak kullanilabilr.
       'questions_file': '{}_question_document_embeddings_@@.hdf5'.format(dataset_type),
       'paragraphs_file': '{}_paragraph_document_embeddings_@@.hdf5'.format(dataset_type),
       'is_calculate_recalls': False,
@@ -273,7 +274,9 @@ if args['is_inject_idf']:
             for partition in range(0,idf_vec.shape[0], args["partition_size"]):
                 partition_counter += 1
                 temp_doc_embeddings = fin['embeddings'][partition:partition + args["partition_size"], :,:]
-                temp_idf_vec = idf_vec[partition:partition + args["partition_size"], :,:]
+                temp_idf_vec = idf_vec[partition:partition + args["partition_size"], :,:].reshape(-1,1)
+                temp_doc_embeddings = temp_doc_embeddings[:,0,:]
+                temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
                 temp_weighted_token_embeddings = np.multiply(temp_idf_vec, temp_doc_embeddings)
                 UTIL.dump_embeddings(temp_weighted_token_embeddings, os.path.join(root_folder_path, args['calculated_idf_token_embeddings_file'].replace('@@', str(partition_counter))))
                 print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition, partition + args["partition_size"]))
@@ -293,6 +296,8 @@ else:
             for partition in range(0, len(corpus_as_tokens), args["partition_size"]):
                 partition_counter += 1
                 temp_doc_embeddings = fin['embeddings'][partition:partition + args["partition_size"], :, :]
+                temp_doc_embeddings = temp_doc_embeddings[:, 0, :]
+                temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
                 UTIL.dump_embeddings(temp_doc_embeddings, os.path.join(root_folder_path, args[
                     'calculated_idf_token_embeddings_file'].replace('@@', str(partition_counter))))
                 print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition,
@@ -332,12 +337,13 @@ if args['load_data_partially'] is True:
 
 print('Weighted are getting to applied documents with the following weights: {}'.format(args['weights_arguments']))
 
-WM = np.array(args['weights_arguments']).reshape((1, len(args['weights_arguments']), 1))
+WM = None #np.array(args['weights_arguments']).reshape((1, len(args['weights_arguments']), 1))
 questions_embeddings, paragraphs_embeddings = UTIL.token_to_document_embeddings(tokenized_questions,
                                                                             tokenized_paragraphs,
                                                                             weighted_token_embeddings,
                                                                             document_embedding_guideline,
-                                                                            WM)
+                                                                            WM
+                                                                            )
 if args['is_calculate_recalls']:
     print('Recalls are getting calculated')
     if args['is_inject_idf']:

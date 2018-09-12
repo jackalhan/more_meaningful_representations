@@ -44,7 +44,7 @@ NEW_API_ELMO={"is_inject_idf":True,
       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":True,
+OLD_API_ELMO={"is_inject_idf":False,
               "load_data_partially": True,
               "partition_size": 100000,
               "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_@@.hdf5'.format(dataset_type),

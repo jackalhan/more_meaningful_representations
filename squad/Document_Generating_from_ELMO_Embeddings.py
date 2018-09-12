@@ -15,7 +15,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = DEV
+dataset_type = TRAIN
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
@@ -44,7 +44,7 @@ NEW_API_ELMO={"is_inject_idf":True,
       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":True,
+OLD_API_ELMO={"is_inject_idf":False,
               "load_data_partially": True,
               "partition_size": 100000,
               "calculated_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_##_@@.hdf5'.format(dataset_type),

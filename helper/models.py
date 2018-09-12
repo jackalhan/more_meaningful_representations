@@ -26,6 +26,8 @@ def model_1(input, params):
 
     conf = params.model["model_1"]
 
+    questions = input['questions']
+
     with tf.variable_scope('fc'):
         fc_linear = tf.contrib.layers.fully_connected(
             input,

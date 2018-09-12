@@ -181,6 +181,45 @@ def recall_fn(base_data_path, params, question_before_model_embeddings, question
            delta_before_after_model, subset_labels, are_founds_after,closest_labels_after,distances_after,\
            are_founds_before,closest_labels_before,distances_before,
 
+def recall_fn_train(base_data_path, params, question_after_model_embeddings):
+    """
+    # Evaluate the model's recall on the test set
+    # 5k questions, ~20k paragraphs, can not be handled in estimator api (number of questions and number of paragraphs are not same)
+    # In order to accelarete the calculation, I prefer doing the following
+    """
+    all_paragraphs = tf.constant(load_embeddings(os.path.join(base_data_path,
+                                                                  params.files["train_subset_recall"][
+                                                                      "all_paragraph_embeddings"])))
+
+
+    normalized_all_paragraphs = tf.nn.l2_normalize(all_paragraphs,
+                                                   name='normalized_all_paragraph_embeddings',
+                                                   axis=1)
+
+
+
+    subset_labels = tf.constant(load_embeddings(os.path.join(base_data_path,
+                                                             params.files["train_subset_recall"][
+                                                                 "question_labels"])))
+    subset_labels = tf.reshape(subset_labels, [-1, 1])
+
+
+
+
+    # AVG RECALLS FOR ALL RECALL_TOPS
+    recalls_after_model, normalized_recalls_after_model = calculate_recalls(question_after_model_embeddings,
+                                                    normalized_all_paragraphs,
+                                                    subset_labels,
+                                                    params,
+                                                    distance_type=params.executor["distance_type"])
+
+    avg_recall_after_model = tf.reduce_mean(normalized_recalls_after_model)
+
+
+
+    return avg_recall_after_model, normalized_recalls_after_model
+
+
 def model_fn(features, labels, mode, params, config):
     """Model function for tf.estimator
 
@@ -198,16 +237,11 @@ def model_fn(features, labels, mode, params, config):
     global_step = tf.train.get_global_step()
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-    if params.model['model_type'].lower() == 'conv':
-        questions = features
-        _questions = features['org']
-        before_model_embeddings = tf.nn.l2_normalize(_questions, name='normalized_before_model_ques_embeddings', axis=1)
-    else:
-        questions=features
-        before_model_embeddings = tf.nn.l2_normalize(questions, name='normalized_before_model_ques_embeddings', axis=1)
+    baseline_question_embeddings = features['baseline_question_embeddings']
+    before_model_embeddings = tf.nn.l2_normalize(baseline_question_embeddings, name='normalized_before_model_ques_embeddings', axis=1)
 
     # -----------------------------------------------------------
-    after_model_embeddings = orchestrate_model(questions, params)
+    after_model_embeddings = orchestrate_model(features, params)
 
     if mode == tf.estimator.ModeKeys.PREDICT:
         if params.executor["is_debug_mode"]:
@@ -249,36 +283,42 @@ def model_fn(features, labels, mode, params, config):
     paragraphs = tf.nn.l2_normalize(paragraphs, name='normalized_paragraph_embeddings', axis=1)
     # paragraph_embedding_mean_norm = tf.reduce_mean(tf.norm(paragraph, axis=1))
 
-    if params.loss['name'] == 'abs_reg_loss':
-        _loss = euclidean_distance_loss(after_model_embeddings, paragraphs, params, labels)
-    else:
-        raise ValueError("Loss strategy not recognized: {}".format(params.loss['name']))
-
-    tf.losses.add_loss(_loss)
-    loss = tf.losses.get_total_loss()
-    # # -----------------------------------------------------------
-    # # METRICS AND SUMMARIES
-    # # Metrics for evaluation using tf.metrics (average over whole dataset)
-    # with tf.variable_scope("metrics"):
-    #logging_hook = tf.train.LoggingTensorHook({"step": global_step}, every_n_iter=1)
-    tf.summary.scalar('loss', loss)
     if mode == tf.estimator.ModeKeys.EVAL:
         #global_step_ = tf.Print(global_step, [global_step], message="Value of global step")
         avg_recall_after_model, normalized_recalls_after_model, distance_from_after_model_q_to_p, \
         avg_recall_before_model, normalized_recalls_before_model, distance_from_before_model_q_to_p, \
         delta_before_after_model, actual_labels, are_founds_after,closest_labels_after,distances_after, \
         are_founds_before, closest_labels_before, distances_before = recall_fn(base_data_path, params, before_model_embeddings, after_model_embeddings)
-        loss_over_recall_top_1 = tf.cast(loss, dtype=tf.float64) + tf.keras.backend.epsilon() / normalized_recalls_after_model[0]
+        #loss_over_recall_top_1 = tf.cast(loss, dtype=tf.float64) + tf.keras.backend.epsilon() / normalized_recalls_after_model[0]
         tf.summary.scalar("avg_recall", avg_recall_after_model)
         tf.summary.scalar("recall_top_1", normalized_recalls_after_model[0])
         tf.summary.scalar("recall_top_2", normalized_recalls_after_model[1])
-        tf.summary.scalar("loss/recall_top_1", loss_over_recall_top_1)
+        #tf.summary.scalar("loss/recall_top_1", loss_over_recall_top_1)
         eval_metric_ops= {"recall_top_1": tf.metrics.mean(normalized_recalls_after_model[0])}
         eval_metric_ops["recall_top_2"] = tf.metrics.mean(normalized_recalls_after_model[1])
         eval_metric_ops["avg_recall"] = tf.metrics.mean(avg_recall_after_model)
-        eval_metric_ops["loss/recall_top_1"] = tf.metrics.mean(loss_over_recall_top_1)
+        #eval_metric_ops["loss/recall_top_1"] = tf.metrics.mean(loss_over_recall_top_1)
         return tf.estimator.EstimatorSpec(mode, loss=loss,eval_metric_ops=eval_metric_ops)
 
+    if params.executor['is_calculate_recall_for_training_set']:
+        avg_recall_after_model, normalized_recalls_after_model = recall_fn_train(base_data_path, params,
+                                                                                 after_model_embeddings)
+        tf.summary.scalar("avg_recall_train", avg_recall_after_model)
+        tf.summary.scalar("recall_top_1_train", normalized_recalls_after_model[0])
+        tf.summary.scalar("recall_top_2_train", normalized_recalls_after_model[1])
+
+    if params.loss['name'] == 'abs_reg_loss':
+        _loss = euclidean_distance_loss(after_model_embeddings, paragraphs, params, labels)
+    else:
+        raise ValueError("Loss strategy not recognized: {}".format(params.loss['name']))
+    tf.losses.add_loss(_loss)
+    loss = tf.losses.get_total_loss()
+    # # -----------------------------------------------------------
+    # # METRICS AND SUMMARIES
+    # # Metrics for evaluation using tf.metrics (average over whole dataset)
+    # with tf.variable_scope("metrics"):
+    # logging_hook = tf.train.LoggingTensorHook({"step": global_step}, every_n_iter=1)
+    tf.summary.scalar('loss', loss)
 
     if params.optimizer['name'] == 'Adam':
         optimizer = tf.train.AdamOptimizer(params.optimizer['learning_rate'])

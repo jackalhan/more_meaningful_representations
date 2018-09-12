@@ -309,10 +309,10 @@ def train_test_splitter(params, base_path):
     for _size in number_of_files_for_test:
         subset_test = test[:_size]
         subset_test_ques_embeddings, subset_test_labels, subset_test_par_embeddings, subset_test_ques_indices = zip(*subset_test)
-        subset_test_ques_embeddings_file = params.files['subset_file_format']['question_embeddings'].format(_size)
-        subset_test_par_embeddings_file = params.files['subset_file_format']['paragraph_embeddings'].format(_size)
-        subset_test_ques_label_file = params.files['subset_file_format']['question_labels'].format(_size)
-        subset_test_ques_idx_file = params.files['subset_file_format']['question_idx'].format(_size)
+        subset_test_ques_embeddings_file = params.files['subset_file_format']['question_embeddings'].format('test', _size)
+        subset_test_par_embeddings_file = params.files['subset_file_format']['paragraph_embeddings'].format('test', _size)
+        subset_test_ques_label_file = params.files['subset_file_format']['question_labels'].format('test',_size)
+        subset_test_ques_idx_file = params.files['subset_file_format']['question_idx'].format('test',_size)
 
         subset_test_ques_embeddings = np.asarray(subset_test_ques_embeddings)
         dump_embeddings(subset_test_ques_embeddings, os.path.join(base_path, subset_test_ques_embeddings_file))
@@ -323,11 +323,40 @@ def train_test_splitter(params, base_path):
         subset_test_ques_indices = np.asarray(subset_test_ques_indices)
         dump_embeddings(subset_test_ques_indices, os.path.join(base_path, subset_test_ques_idx_file))
 
+    random.seed(params.model['seed'])
+    random.shuffle(train)
+    if params.executor['limit_paragraph_size'] is not None:
+        number_of_files_for_train = range(1, params.files['splitter']['train_subset_size'] + 1)
+    else:
+        number_of_files_for_train = [params.files['splitter']['train_subset_size']]
+
+    for _size in number_of_files_for_train:
+        subset_train = train[:_size]
+        subset_train_ques_embeddings, subset_train_labels, subset_train_par_embeddings, subset_train_ques_indices = zip(*subset_train)
+        subset_train_ques_embeddings_file = params.files['subset_file_format']['question_embeddings'].format('train_recall',_size)
+        subset_train_par_embeddings_file = params.files['subset_file_format']['paragraph_embeddings'].format('train_recall', _size)
+        subset_train_ques_label_file = params.files['subset_file_format']['question_labels'].format('train_recall', _size)
+        subset_train_ques_idx_file = params.files['subset_file_format']['question_idx'].format('train_recall',_size)
+
+        subset_train_ques_embeddings = np.asarray(subset_train_ques_embeddings)
+        dump_embeddings(subset_train_ques_embeddings, os.path.join(base_path, subset_train_ques_embeddings_file))
+        subset_train_labels = np.asarray(subset_train_labels)
+        dump_embeddings(subset_train_labels, os.path.join(base_path, subset_train_ques_label_file), dtype="int32")
+        subset_train_par_embeddings = np.asarray(subset_train_par_embeddings)
+        dump_embeddings(subset_train_par_embeddings, os.path.join(base_path, subset_train_par_embeddings_file))
+        subset_train_ques_indices = np.asarray(subset_train_ques_indices)
+        dump_embeddings(subset_train_ques_indices, os.path.join(base_path, subset_train_ques_idx_file))
+
     # update params for new values
     params.files['test_subset_recall']['question_embeddings'] = subset_test_ques_embeddings_file
     params.files['test_subset_recall']['paragraph_embeddings'] = subset_test_par_embeddings_file
     params.files['test_subset_recall']['question_labels'] = subset_test_ques_label_file
     params.files['test_subset_recall']['question_idx'] = subset_test_ques_idx_file
+
+    params.files['train_subset_recall']['question_embeddings'] = subset_train_ques_embeddings_file
+    params.files['train_subset_recall']['paragraph_embeddings'] = subset_train_par_embeddings_file
+    params.files['train_subset_recall']['question_labels'] = subset_train_ques_label_file
+    params.files['train_subset_recall']['question_idx'] = subset_train_ques_idx_file
 
     params.files['test_subset_loss']['question_embeddings'] = subset_test_ques_embeddings_file
     params.files['test_subset_loss']['paragraph_embeddings'] = subset_test_par_embeddings_file
@@ -988,7 +1017,7 @@ def generate_document_embedding_guideline(tokenized_questions, tokenized_paragra
     print('Index of tokens in each document is getting saved in {} minutes'.format((end - start).seconds / 60))
     print(100 * '*')
     return document_embedding_guideline, corpus_as_tokens
-def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token_embeddings, token_embeddings_guideline, weight_matrix):
+def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token_embeddings, token_embeddings_guideline, weight_matrix=None):
     questions_embeddings = []
     paragraphs_embeddings = []
     documents = tokenized_questions + tokenized_paragraphs
@@ -997,10 +1026,16 @@ def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token
         end_index = token_embeddings_guideline[_]['end_index']
         d_type = token_embeddings_guideline[_]['type']
         if d_type == 'q':
-            questions_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
+            if weight_matrix is None:
+                questions_embeddings.append(np.mean(token_embeddings[str_index:end_index, :], axis=0))
+            else:
+                questions_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
             # idf_question_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
         else:
-            paragraphs_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
+            if weight_matrix is None:
+                paragraphs_embeddings.append(np.mean(token_embeddings[str_index:end_index, :], axis=0))
+            else:
+                paragraphs_embeddings.append(np.mean(token_embeddings[str_index:end_index, :, :], axis=0))
             # idf_paragraph_matrix.append(np.mean(idf_vec[str_index:end_index], axis=0))
 
     del token_embeddings
@@ -1009,15 +1044,16 @@ def token_to_document_embeddings(tokenized_questions, tokenized_paragraphs,token
     paragraphs_embeddings = np.asarray(paragraphs_embeddings)
     print('Paragraph Embbeddings Shape 1:{}'.format(paragraphs_embeddings.shape))
 
-    questions_embeddings = np.multiply(questions_embeddings, weight_matrix)
-    print('Question Embbeddings Shape 2:{}'.format(questions_embeddings.shape))
-    paragraphs_embeddings = np.multiply(paragraphs_embeddings, weight_matrix)
-    print('Paragraph Embbeddings Shape 2:{}'.format(paragraphs_embeddings.shape))
+    if weight_matrix is not None:
+        questions_embeddings = np.multiply(questions_embeddings, weight_matrix)
+        print('Question Embbeddings Shape 2:{}'.format(questions_embeddings.shape))
+        paragraphs_embeddings = np.multiply(paragraphs_embeddings, weight_matrix)
+        print('Paragraph Embbeddings Shape 2:{}'.format(paragraphs_embeddings.shape))
 
-    questions_embeddings = np.mean(questions_embeddings, axis=1)
-    print('Question Embbeddings Shape 3:{}'.format(questions_embeddings.shape))
-    paragraphs_embeddings = np.mean(paragraphs_embeddings, axis=1)
-    print('Paragraph Embbeddings Shape 3:{}'.format(paragraphs_embeddings.shape))
+        # questions_embeddings = np.mean(questions_embeddings, axis=1)
+        # print('Question Embbeddings Shape 3:{}'.format(questions_embeddings.shape))
+        # paragraphs_embeddings = np.mean(paragraphs_embeddings, axis=1)
+        # print('Paragraph Embbeddings Shape 3:{}'.format(paragraphs_embeddings.shape))
 
     return questions_embeddings, paragraphs_embeddings
 

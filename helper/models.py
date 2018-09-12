@@ -26,8 +26,8 @@ def model_1(input, params):
 
     conf = params.model["model_1"]
 
-    questions = input['questions']
-    baseline_question_embeddings = input['baseline_question_embeddings']
+    questions = input #input['questions']
+    #baseline_question_embeddings = input['baseline_question_embeddings']
     with tf.variable_scope('fc'):
         fc_linear = tf.contrib.layers.fully_connected(
             questions,
@@ -51,9 +51,9 @@ def model_2(input, params):
     tf.logging.info("Creating the {}...".format(model_2.__name__))
 
     conf = params.model["model_2"]
-    questions = input['questions']
-    baseline_question_embeddings = input['baseline_question_embeddings']
-    _in_out = questions
+    #questions = input['questions']
+    #baseline_question_embeddings = input['baseline_question_embeddings']
+    _in_out = input #questions
     for i, block_conf in enumerate(conf):
         _in_out = residual_block(_in_out, block_conf, "res_block_{}".format(i))
     return _in_out

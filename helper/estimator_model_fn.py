@@ -237,9 +237,12 @@ def model_fn(features, labels, mode, params, config):
     global_step = tf.train.get_global_step()
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-    baseline_question_embeddings = features['baseline_question_embeddings']
-    before_model_embeddings = tf.nn.l2_normalize(baseline_question_embeddings, name='normalized_before_model_ques_embeddings', axis=1)
-
+    if params.model['model_type'].lower() == 'conv':
+        baseline_question_embeddings = features['baseline_question_embeddings']
+    else:
+        baseline_question_embeddings = features
+    before_model_embeddings = tf.nn.l2_normalize(baseline_question_embeddings,
+                                                     name='normalized_before_model_ques_embeddings', axis=1)
     # -----------------------------------------------------------
     after_model_embeddings = orchestrate_model(features, params)
 
@@ -271,9 +274,15 @@ def model_fn(features, labels, mode, params, config):
 
         return tf.estimator.EstimatorSpec(mode=mode, predictions=results)
 
-    paragraphs = labels['paragraph_as_embeddings']
-    labels = tf.cast(labels['paragraph_as_label'], tf.float32)
-    labels = tf.reshape(labels, [-1, 1])
+    if params.model['model_type'].lower() == 'conv':
+        paragraphs = labels['paragraph_as_embeddings']
+        labels = tf.cast(labels['paragraph_as_label'], tf.float32)
+        labels = tf.reshape(labels, [-1, 1])
+    else:
+        # question_embedding_mean_norm = tf.reduce_mean(tf.norm(embeddings, axis=1))
+        paragraphs = labels[:, 0:params.files['pre_trained_files']['embedding_dim']]
+        labels = labels[:, params.files['pre_trained_files']['embedding_dim']:params.files['pre_trained_files']['embedding_dim']+1]
+
     paragraphs = tf.nn.l2_normalize(paragraphs, name='normalized_paragraph_embeddings', axis=1)
     # paragraph_embedding_mean_norm = tf.reduce_mean(tf.norm(paragraph, axis=1))
     if params.loss['name'] == 'abs_reg_loss':

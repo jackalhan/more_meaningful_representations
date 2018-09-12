@@ -7,7 +7,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.parser as parser
 import numpy as np
 from helper.utils import load_from_pickle, vocabulary_processor, fit_vocab_to_documents,  tokenize_contexts, load_word_embeddings, prepare_squad_objects, Params, define_pre_executions,dump_embeddings, save_as_pickle, save_as_shelve, load_embeddings
-from helper.estimator_input_fn import train_input_fn, predict_input_fn, test_recall_input_fn, train_recall_input_fn
+from helper.estimator_input_fn import train_input_fn, predict_input_fn, test_recall_input_fn  #test_recall_input_fn, train_recall_input_fn
 from helper.estimator_model_fn import model_fn
 import math
 from tensorflow.python.keras.preprocessing import sequence
@@ -194,13 +194,76 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf):
 
 
 def execute_conv_pipeline(params, base_data_path, config, tf):
+    """
+       START: DATA PREPARATION
+       """
 
+    train_question_label_indx = load_embeddings(os.path.join(base_data_path,
+                                                             params.files['train_loss']['question_labels']))
+    train_question_label_indx = train_question_label_indx.astype(int)
+
+    train_org_questions = load_embeddings(os.path.join(base_data_path,
+                                                       params.files['train_loss']['question_embeddings']))
+    train_question_labels = load_embeddings(os.path.join(base_data_path,
+                                                         params.files['train_loss']['paragraph_embeddings']))
+
+    # TEST RECALL = VALID QUESTIONS ARE GETTING LOADED
+
+    test_recall_question_label_indx = load_embeddings(os.path.join(base_data_path,
+                                                             params.files['test_subset_recall']['question_labels']))
+    test_recall_question_label_indx = test_recall_question_label_indx.astype(int)
+
+    test_recall_org_questions = load_embeddings(os.path.join(base_data_path,
+                                                       params.files['test_subset_recall']['question_embeddings']))
+
+    test_recall_question_labels = load_embeddings(os.path.join(base_data_path,
+                                                         params.files['test_subset_recall']['paragraph_embeddings']))
+
+    # TRAIN RECALL = VALID QUESTIONS ARE GETTING LOADED
+
+    train_recall_question_label_indx = load_embeddings(os.path.join(base_data_path,
+                                                                    params.files['train_subset_recall'][
+                                                                        'question_labels']))
+    train_recall_question_label_indx = train_recall_question_label_indx.astype(int)
+
+    train_recall_org_questions = load_embeddings(os.path.join(base_data_path,
+                                                              params.files['train_subset_recall'][
+                                                                  'question_embeddings']))
+
+    train_recall_question_labels = load_embeddings(os.path.join(base_data_path,
+                                                                params.files['train_subset_recall'][
+                                                                    'paragraph_embeddings']))
+
+    x_train = load_from_pickle(os.path.join(base_data_path,
+                                            params.files['train_loss']['question_x_train']))
+
+    y_train_paragraph = train_question_labels
+    y_train_labels = train_question_label_indx
+
+    del train_question_labels, train_question_label_indx
+    print("x_train shape is {}".format(x_train.shape))
+
+    x_test_recall = load_from_pickle(os.path.join(base_data_path,
+                                            params.files['test_subset_recall']['question_x_valid']))
+    y_test_recall_paragraph = test_recall_question_labels
+    y_test_recall_labels = test_recall_question_label_indx
+    del test_recall_question_labels, test_recall_question_label_indx
+    print("x_test_recall shape is {}".format(x_test_recall.shape))
+
+    x_train_recall = load_from_pickle(os.path.join(base_data_path,
+                                                   params.files['train_subset_recall']['question_x_valid']))
+    y_train_recall_paragraph = train_recall_question_labels
+    y_train_recall_paragraph_labels = train_recall_question_label_indx
+    del train_recall_question_labels, train_recall_question_label_indx
+    print("x_train_recall shape is {}".format(x_train_recall.shape))
 
     voc_to_indx = load_from_pickle(os.path.join(base_data_path,
-                                                     params.files['voc_to_indx']))
+                                                params.files['voc_to_indx']))
     vocab_size = len(voc_to_indx)
     print('Total words: %d' % vocab_size)
     params.files['questions_vocab_size'] = vocab_size
+
+    max_document_len = params.files['max_document_len']
 
     if params.files['word_embeddings'] is None:
         params.model['conv_embedding_initializer'] = tf.truncated_normal_initializer(
@@ -208,14 +271,74 @@ def execute_conv_pipeline(params, base_data_path, config, tf):
             stddev=0.1)
     else:
         word_embeddings = load_word_embeddings(os.path.join(base_data_path, params.files['word_embeddings']),
-                                                    voc_to_indx,
-                                                    params.files['pre_trained_files']['embedding_dim'])
+                                               voc_to_indx,
+                                               params.files['pre_trained_files']['embedding_dim'])
 
         def my_initializer(shape=None, dtype=tf.float32, partition_info=None):
             assert dtype is tf.float32
             return word_embeddings
 
-    params.model['conv_embedding_initializer'] = my_initializer
+        params.model['conv_embedding_initializer'] = my_initializer
+    """
+    END: DATA PREPARATION
+    """
+    # ----------------------------------------------------
+    """
+    START: BUILDING ESTIMATORS
+    """
+    x_len_train = np.array([min(len(x), max_document_len) for x in x_train])
+    x_len_test_recall = np.array([min(len(x), max_document_len) for x in x_test_recall])
+    x_len_train_recall = np.array([min(len(x), max_document_len) for x in x_train_recall])
+
+    def parser_train(questions, document_length, baseline_question_embeddings, paragraph_as_embeddings,
+                     paragraph_as_label):
+
+        features = {"questions": questions,
+                    "document_length": document_length,
+                    "baseline_question_embeddings": baseline_question_embeddings}
+        labels = {"paragraph_as_embeddings": paragraph_as_embeddings,
+                  "paragraph_as_label": paragraph_as_label}
+        return features, labels
+
+    def parser_estimate(questions):
+        features = {"questions": questions}
+        return features
+
+    def train_input_fn():
+        dataset = tf.data.Dataset.from_tensor_slices(
+            (x_train, x_len_train, train_org_questions, y_train_paragraph, y_train_labels))
+        if params.model["shuffle"]:
+            dataset = dataset.shuffle(buffer_size=x_train.shape[0])
+        dataset = dataset.batch(params.model["batch_size"])
+        dataset = dataset.map(parser_train)
+        # dataset = dataset.repeat()
+        # dataset = dataset.prefetch(1)
+        iterator = dataset.make_one_shot_iterator()
+        return iterator.get_next()
+
+    def test_recall_input_fn():
+        dataset = tf.data.Dataset.from_tensor_slices(
+            (x_test_recall, x_len_test_recall, test_recall_org_questions, y_test_recall_paragraph, y_test_recall_labels))
+        dataset = dataset.batch(params.files["splitter"]["test_subset_size"])
+        dataset = dataset.map(parser_train())
+        # dataset = dataset.prefetch(1)
+        iterator = dataset.make_one_shot_iterator()
+        return iterator.get_next()
+
+    def train_recall_input_fn():
+        dataset = tf.data.Dataset.from_tensor_slices(
+                    (x_train_recall,
+                     x_len_train_recall,
+                     train_recall_org_questions,
+                     y_train_recall_paragraph,
+                     y_train_recall_paragraph_labels))
+        dataset = dataset.batch(params.files["splitter"]["train_subset_size"])
+        dataset = dataset.map(parser_train)
+        # dataset = dataset.prefetch(1)
+        iterator = dataset.make_one_shot_iterator()
+        return iterator.get_next()
+
+
     estimator = tf.estimator.Estimator(model_fn, params=params, config=config)
     if not params.executor["is_prediction"]:
 

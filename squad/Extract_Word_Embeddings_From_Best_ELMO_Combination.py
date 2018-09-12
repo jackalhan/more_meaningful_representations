@@ -23,7 +23,7 @@ _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
 
 OLD_API_ELMO={
-      "is_inject_idf":True,
+      "is_inject_idf":False,
       "total_number_of_partitioned_files": 36,
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
        "calculated_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_##_@@.hdf5'.format(dataset_type),

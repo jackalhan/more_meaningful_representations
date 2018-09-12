@@ -15,7 +15,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
@@ -44,10 +44,10 @@ NEW_API_ELMO={"is_inject_idf":True,
       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":False,
+OLD_API_ELMO={"is_inject_idf":True,
               "load_data_partially": True,
               "partition_size": 100000,
-              "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_@@.hdf5'.format(dataset_type),
+              "calculated_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_##_@@.hdf5'.format(dataset_type),
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
       "embedding_paragraphs_path": None,
       "embedding_paragraphs_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
@@ -278,7 +278,7 @@ if args['is_inject_idf']:
                 temp_doc_embeddings = temp_doc_embeddings[:,0,:]
                 temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
                 temp_weighted_token_embeddings = np.multiply(temp_idf_vec, temp_doc_embeddings)
-                UTIL.dump_embeddings(temp_weighted_token_embeddings, os.path.join(root_folder_path, args['calculated_idf_token_embeddings_file'].replace('@@', str(partition_counter))))
+                UTIL.dump_embeddings(temp_weighted_token_embeddings, os.path.join(root_folder_path, args['calculated_token_embeddings_file'].replace('@@', str(partition_counter)).replace('##', 'idf')))
                 print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition, partition + args["partition_size"]))
     else:
         weighted_token_embeddings = np.multiply(idf_vec, document_embeddings)
@@ -299,7 +299,7 @@ else:
                 temp_doc_embeddings = temp_doc_embeddings[:, 0, :]
                 temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
                 UTIL.dump_embeddings(temp_doc_embeddings, os.path.join(root_folder_path, args[
-                    'calculated_idf_token_embeddings_file'].replace('@@', str(partition_counter))))
+                    'calculated_token_embeddings_file'].replace('@@', str(partition_counter)).replace('##', '')))
                 print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition,
                                                                                       partition + args[
                                                                                           "partition_size"]))
@@ -328,7 +328,7 @@ if args['load_data_partially'] is True:
     weighted_token_embeddings = None
     for partition in range(1, partition_counter+1):
         temp_weighted_token_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args[
-            'calculated_idf_token_embeddings_file'].replace('@@', str(partition))))
+            'calculated_token_embeddings_file'].replace('@@', str(partition)).replace('##', 'idf' if args['is_inject_idf'] else '')))
         if weighted_token_embeddings is None:
             weighted_token_embeddings = temp_weighted_token_embeddings
         else:

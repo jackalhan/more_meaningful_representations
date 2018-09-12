@@ -14,7 +14,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = TRAIN
+dataset_type = DEV
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)

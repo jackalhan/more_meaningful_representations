@@ -7,7 +7,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.parser as parser
 import numpy as np
 from helper.utils import load_from_pickle, vocabulary_processor, fit_vocab_to_documents,  tokenize_contexts, load_word_embeddings, prepare_squad_objects, Params, define_pre_executions,dump_embeddings, save_as_pickle, save_as_shelve, load_embeddings
-from helper.estimator_input_fn import train_input_fn, test_recall_input_fn, train_recall_input_fn, predict_input_fn
+from helper.estimator_input_fn import train_input_fn, predict_input_fn, test_recall_input_fn, train_recall_input_fn
 from helper.estimator_model_fn import model_fn
 import math
 from tensorflow.python.keras.preprocessing import sequence
@@ -195,6 +195,27 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf):
 
 def execute_conv_pipeline(params, base_data_path, config, tf):
 
+
+    voc_to_indx = load_from_pickle(os.path.join(base_data_path,
+                                                     params.files['voc_to_indx']))
+    vocab_size = len(voc_to_indx)
+    print('Total words: %d' % vocab_size)
+    params.files['questions_vocab_size'] = vocab_size
+
+    if params.files['word_embeddings'] is None:
+        params.model['conv_embedding_initializer'] = tf.truncated_normal_initializer(
+            seed=params.model['initializer_seed'],
+            stddev=0.1)
+    else:
+        word_embeddings = load_word_embeddings(os.path.join(base_data_path, params.files['word_embeddings']),
+                                                    voc_to_indx,
+                                                    params.files['pre_trained_files']['embedding_dim'])
+
+        def my_initializer(shape=None, dtype=tf.float32, partition_info=None):
+            assert dtype is tf.float32
+            return word_embeddings
+
+    params.model['conv_embedding_initializer'] = my_initializer
     estimator = tf.estimator.Estimator(model_fn, params=params, config=config)
     if not params.executor["is_prediction"]:
 

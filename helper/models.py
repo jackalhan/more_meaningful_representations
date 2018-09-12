@@ -27,10 +27,10 @@ def model_1(input, params):
     conf = params.model["model_1"]
 
     questions = input['questions']
-
+    baseline_question_embeddings = input['baseline_question_embeddings']
     with tf.variable_scope('fc'):
         fc_linear = tf.contrib.layers.fully_connected(
-            input,
+            questions,
             conf['embedding_dim'],
             activation_fn=None,
             weights_initializer=tf.truncated_normal_initializer(seed=conf['initializer_seed'],
@@ -41,7 +41,7 @@ def model_1(input, params):
             scope='linear'
         )
 
-        output = tf.add(fc_linear * conf['scaling_factor'], input, name='linear_add')
+        output = tf.add(fc_linear * conf['scaling_factor'], baseline_question_embeddings, name='linear_add')
 
     return output
 
@@ -51,7 +51,9 @@ def model_2(input, params):
     tf.logging.info("Creating the {}...".format(model_2.__name__))
 
     conf = params.model["model_2"]
-    _in_out = input
+    questions = input['questions']
+    baseline_question_embeddings = input['baseline_question_embeddings']
+    _in_out = questions
     for i, block_conf in enumerate(conf):
         _in_out = residual_block(_in_out, block_conf, "res_block_{}".format(i))
     return _in_out

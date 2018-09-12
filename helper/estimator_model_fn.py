@@ -271,17 +271,23 @@ def model_fn(features, labels, mode, params, config):
 
         return tf.estimator.EstimatorSpec(mode=mode, predictions=results)
 
-    if params.model['model_type'].lower() == 'conv':
-        paragraphs = labels['paragraph']
-        labels = tf.cast(labels['labels'], tf.float32)
-        labels = tf.reshape(labels, [-1, 1])
-    else:
-        # question_embedding_mean_norm = tf.reduce_mean(tf.norm(embeddings, axis=1))
-        paragraphs = labels[:, 0:params.files['pre_trained_files']['embedding_dim']]
-        labels = labels[:, params.files['pre_trained_files']['embedding_dim']:params.files['pre_trained_files']['embedding_dim']+1]
-
+    paragraphs = labels['paragraph_as_embeddings']
+    labels = tf.cast(labels['paragraph_as_label'], tf.float32)
+    labels = tf.reshape(labels, [-1, 1])
     paragraphs = tf.nn.l2_normalize(paragraphs, name='normalized_paragraph_embeddings', axis=1)
     # paragraph_embedding_mean_norm = tf.reduce_mean(tf.norm(paragraph, axis=1))
+    if params.loss['name'] == 'abs_reg_loss':
+        _loss = euclidean_distance_loss(after_model_embeddings, paragraphs, params, labels)
+    else:
+        raise ValueError("Loss strategy not recognized: {}".format(params.loss['name']))
+    tf.losses.add_loss(_loss)
+    loss = tf.losses.get_total_loss()
+    # # -----------------------------------------------------------
+    # # METRICS AND SUMMARIES
+    # # Metrics for evaluation using tf.metrics (average over whole dataset)
+    # with tf.variable_scope("metrics"):
+    # logging_hook = tf.train.LoggingTensorHook({"step": global_step}, every_n_iter=1)
+    tf.summary.scalar('loss', loss)
 
     if mode == tf.estimator.ModeKeys.EVAL:
         #global_step_ = tf.Print(global_step, [global_step], message="Value of global step")
@@ -298,27 +304,16 @@ def model_fn(features, labels, mode, params, config):
         eval_metric_ops["recall_top_2"] = tf.metrics.mean(normalized_recalls_after_model[1])
         eval_metric_ops["avg_recall"] = tf.metrics.mean(avg_recall_after_model)
         #eval_metric_ops["loss/recall_top_1"] = tf.metrics.mean(loss_over_recall_top_1)
-        return tf.estimator.EstimatorSpec(mode, loss=loss,eval_metric_ops=eval_metric_ops)
+        return tf.estimator.EstimatorSpec(mode, loss= loss, eval_metric_ops=eval_metric_ops)
 
-    if params.executor['is_calculate_recall_for_training_set']:
-        avg_recall_after_model, normalized_recalls_after_model = recall_fn_train(base_data_path, params,
-                                                                                 after_model_embeddings)
-        tf.summary.scalar("avg_recall_train", avg_recall_after_model)
-        tf.summary.scalar("recall_top_1_train", normalized_recalls_after_model[0])
-        tf.summary.scalar("recall_top_2_train", normalized_recalls_after_model[1])
+    # if params.executor['is_calculate_recall_for_training_set']:
+    #     avg_recall_after_model, normalized_recalls_after_model = recall_fn_train(base_data_path, params,
+    #                                                                              after_model_embeddings)
+    #     tf.summary.scalar("avg_recall_train", avg_recall_after_model)
+    #     tf.summary.scalar("recall_top_1_train", normalized_recalls_after_model[0])
+    #     tf.summary.scalar("recall_top_2_train", normalized_recalls_after_model[1])
 
-    if params.loss['name'] == 'abs_reg_loss':
-        _loss = euclidean_distance_loss(after_model_embeddings, paragraphs, params, labels)
-    else:
-        raise ValueError("Loss strategy not recognized: {}".format(params.loss['name']))
-    tf.losses.add_loss(_loss)
-    loss = tf.losses.get_total_loss()
-    # # -----------------------------------------------------------
-    # # METRICS AND SUMMARIES
-    # # Metrics for evaluation using tf.metrics (average over whole dataset)
-    # with tf.variable_scope("metrics"):
-    # logging_hook = tf.train.LoggingTensorHook({"step": global_step}, every_n_iter=1)
-    tf.summary.scalar('loss', loss)
+
 
     if params.optimizer['name'] == 'Adam':
         optimizer = tf.train.AdamOptimizer(params.optimizer['learning_rate'])

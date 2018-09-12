@@ -44,7 +44,7 @@ NEW_API_ELMO={"is_inject_idf":True,
       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
       }
 
-OLD_API_ELMO={"is_inject_idf":True,
+OLD_API_ELMO={"is_inject_idf":False,
               "load_data_partially": True,
               "partition_size": 100000,
               "calculated_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_##_@@.hdf5'.format(dataset_type),
@@ -276,7 +276,7 @@ if args['is_inject_idf']:
                 temp_doc_embeddings = fin['embeddings'][partition:partition + args["partition_size"], :,:]
                 temp_idf_vec = idf_vec[partition:partition + args["partition_size"], :,:].reshape(-1,1)
                 temp_doc_embeddings = temp_doc_embeddings[:,0,:]
-                temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
+                #temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
                 temp_weighted_token_embeddings = np.multiply(temp_idf_vec, temp_doc_embeddings)
                 UTIL.dump_embeddings(temp_weighted_token_embeddings, os.path.join(root_folder_path, args['calculated_token_embeddings_file'].replace('@@', str(partition_counter)).replace('##', 'idf')))
                 print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition, partition + args["partition_size"]))
@@ -297,7 +297,7 @@ else:
                 partition_counter += 1
                 temp_doc_embeddings = fin['embeddings'][partition:partition + args["partition_size"], :, :]
                 temp_doc_embeddings = temp_doc_embeddings[:, 0, :]
-                temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
+                #temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
                 UTIL.dump_embeddings(temp_doc_embeddings, os.path.join(root_folder_path, args[
                     'calculated_token_embeddings_file'].replace('@@', str(partition_counter)).replace('##', '')))
                 print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition,

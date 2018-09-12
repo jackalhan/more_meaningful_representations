@@ -14,7 +14,7 @@ TRAIN = 'train'
 DEV = 'dev'
 
 ################ CONFIGURATIONS #################
-dataset_type = DEV
+dataset_type = TRAIN
 
 _basepath = os.path.abspath(__file__).rpartition(os.sep)[0]
 datadir = os.path.join(_basepath, dataset_type)
@@ -24,9 +24,9 @@ squad_file = os.path.join(datadir, _squad_file_name)
 
 OLD_API_ELMO={
       "is_inject_idf":False,
-      "total_number_of_partitioned_files": 5,
+      "total_number_of_partitioned_files": 36,
       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
-       "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_@@.hdf5'.format(dataset_type),
+       "calculated_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_##_@@.hdf5'.format(dataset_type),
       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
       "weights_arguments": [1, 0, 0],
       "word_vector_file_path" : '{}_word_embeddings_##.txt'.format(dataset_type)
@@ -86,14 +86,14 @@ root_folder_path = os.path.join(datadir, args["root_path"])
 weighted_token_embeddings = None
 for partition in range(1, args['total_number_of_partitioned_files']+1):
     temp_weighted_token_embeddings = UTIL.load_embeddings(os.path.join(root_folder_path, args[
-        'calculated_idf_token_embeddings_file'].replace('@@', str(partition))))
-    WM = np.array(args['weights_arguments']).reshape((1, len(args['weights_arguments']), 1))
-    print('Weights are calculated according to the best combination')
-    print('temp_weighted_token_embeddings shape {}, WM shape {}'.format(temp_weighted_token_embeddings.shape, WM.shape))
-    temp_weighted_token_embeddings = np.multiply(temp_weighted_token_embeddings, WM)
-    print('temp_weighted_token_embeddings shape {}'.format(temp_weighted_token_embeddings.shape))
-    temp_weighted_token_embeddings = temp_weighted_token_embeddings[:, 0, :]
-    print('temp_weighted_token_embeddings shape {}'.format(temp_weighted_token_embeddings.shape))
+        'calculated_token_embeddings_file'].replace('@@', str(partition)).replace('##', 'idf' if args['is_inject_idf'] else '')))
+    # WM = np.array(args['weights_arguments']).reshape((1, len(args['weights_arguments']), 1))
+    # print('Weights are calculated according to the best combination')
+    # print('temp_weighted_token_embeddings shape {}, WM shape {}'.format(temp_weighted_token_embeddings.shape, WM.shape))
+    # temp_weighted_token_embeddings = np.multiply(temp_weighted_token_embeddings, WM)
+    # print('temp_weighted_token_embeddings shape {}'.format(temp_weighted_token_embeddings.shape))
+    # temp_weighted_token_embeddings = temp_weighted_token_embeddings[:, 0, :]
+    # print('temp_weighted_token_embeddings shape {}'.format(temp_weighted_token_embeddings.shape))
     if weighted_token_embeddings is None:
         weighted_token_embeddings = temp_weighted_token_embeddings
     else:

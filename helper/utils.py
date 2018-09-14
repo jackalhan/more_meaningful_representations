@@ -189,7 +189,7 @@ def save_dict_to_json(d, json_path):
         json.dump(d, f, indent=4)
 
 
-def train_test_splitter(params, base_path):
+def train_test_splitter_deprecated(params, base_path):
     """ Read the embedding file with its labels and split it train - test
         Args:
             embeddings_file: embeddings_file path
@@ -207,7 +207,6 @@ def train_test_splitter(params, base_path):
     question_embeddings = load_embeddings(pre_trained_question_embeddings_file)
     paragraph_embeddings = load_embeddings(pre_trained_paragraph_embeddings_file)
     num_labels = len(set(pre_trained_question_labels))
-
     if params.executor['limit_paragraph_size'] is not None:
         # just grab the questions within the size of the paragraph that are limited with this parameter
         num_labels = params.executor['limit_paragraph_size']
@@ -367,6 +366,223 @@ def train_test_splitter(params, base_path):
 
     return params
 
+def get_file_key_names_for_execution(params):
+    KN_FILE_NAMES = {}
+    if params.executor['source'].lower().startswith('qu'):
+        #key names
+        KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"] = 'question_embeddings'
+        KN_FILE_NAMES["KN_SOURCE_LABELS"]= 'question_labels'
+        KN_FILE_NAMES["KN_SOURCE_IDX"] = 'question_idx'
+        KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]='paragraph_embeddings'
+        KN_FILE_NAMES["DIR"] = 'question_training'
+    else:
+        # key names
+        KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"] = 'paragraph_embeddings'
+        KN_FILE_NAMES["KN_SOURCE_LABELS"] = 'paragraph_labels'
+        KN_FILE_NAMES["KN_SOURCE_IDX"] = 'paragraph_idx'
+        KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"] = 'question_embeddings'
+        KN_FILE_NAMES["DIR"] = 'paragraph_training'
+
+    return KN_FILE_NAMES
+
+def train_test_splitter(params, base_path):
+    """ Read the embedding file with its labels and split it train - test
+        Args:
+            embeddings_file: embeddings_file path
+            label_file: labels file path
+            train_split_rate: rate of the train dataset from whole records
+    """
+    pre_trained_question_embeddings_file = os.path.join(base_path,
+                                                        params.files['pre_trained_files']['question_embeddings'])
+    pre_trained_paragraph_embeddings_file = os.path.join(base_path,
+                                                         params.files['pre_trained_files']['paragraph_embeddings'])
+    pre_trained_question_labels_file = os.path.join(base_path, params.files['pre_trained_files']['question_labels'])
+
+    df_pre_trained_question_labels = pd.read_csv(pre_trained_question_labels_file)
+    pre_trained_question_labels = df_pre_trained_question_labels['p'].tolist()
+    pre_trained_paragraph_labels = df_pre_trained_question_labels['q'].tolist()
+    question_embeddings = load_embeddings(pre_trained_question_embeddings_file)
+    paragraph_embeddings = load_embeddings(pre_trained_paragraph_embeddings_file)
+
+    KN_FILE_NAMES = get_file_key_names_for_execution(params)
+    if params.executor['source'].lower().startswith('qu'):
+        target = 'paragraph'
+        source_label_list = pre_trained_question_labels
+        source_embeddings = question_embeddings
+        target_embeddings = paragraph_embeddings
+    else:
+        target = 'question'
+        source_label_list = pre_trained_paragraph_labels
+        source_embeddings = paragraph_embeddings
+        target_embeddings = question_embeddings
+
+    base_path = create_dir(os.path.join(base_path, KN_FILE_NAMES['DIR']))
+    num_labels = len(set(source_label_list))
+    if params.executor['limit_source_size'] is not None:
+        # just grab the items in the source side within the size of the source size that are limited with this parameter
+        num_labels = params.executor['limit_source_size']
+        number_of_files_for_train = range(1, params.files['splitter']['train_subset_size'] + 1)
+        number_of_files_for_test = range(1, params.files['splitter']['test_subset_size'] + 1)
+    else:
+        number_of_files_for_train = [params.files['splitter']['train_subset_size']]
+        number_of_files_for_test = [params.files['splitter']['test_subset_size']]
+
+    labels_as_list = list(range(num_labels))
+    seed(params.model['seed'])
+    shuffle(labels_as_list)
+    # in order to have all the labels in the training set, we need to split them accordingly:
+    train_labels, test_labels = list(), list()
+    train_source_indices, train_source_embeddings, train_target_embeddings = list(), list(), list()
+    test_source_indices, test_source_embeddings, test_target_embeddings = list(), list(), list()
+    recall_target_embeddings = list()
+    for order, indx in enumerate(labels_as_list):
+        #indexes from source list where each of target equals to particular value.
+        #sample: par_indx = 3, take all the questions's locationswhere their par_id =3
+        #sample: que_indx = 5000, take all the paragraphs locations where their que_id = 5000 (paragraph has only 1 question that is 5000)
+        #therefore, can we get all paragraphs locations that are in the group of same paragraph in which que_id = 5000
+        if not params.executor['source'].lower().startswith('qu'):
+            paragraph = pre_trained_question_labels[indx]
+            locations = [paragraph for _, x in enumerate(pre_trained_question_labels) if x == paragraph]
+        else:
+            locations = [_ for _, x in enumerate(source_label_list) if x == indx]
+        seed(params.model['seed'])
+        shuffle(locations)
+        occur = len(locations)
+        print(10 * '*')
+        print('For target({}) : {}, we have -> {} sources({}) ---> {}'.format(target, indx, occur, params.executor['source'].lower() ,locations))
+        for_local_train_size = math.ceil(occur * params.files['splitter']['train_split_rate'])
+        for_local_train_locations = locations[0:for_local_train_size]
+        for_local_train_labels = list()
+        for_local_train_source_embeddings = list()
+        for_local_train_target_embeddings = list()
+        for_local_train_source_indices = list()
+        recall_target_embeddings.append(target_embeddings[indx])
+        for _l in for_local_train_locations:
+            for_local_train_labels.append(order)
+            for_local_train_source_embeddings.append(source_embeddings[_l])
+            for_local_train_target_embeddings.append(target_embeddings[indx])
+            for_local_train_source_indices.append(_l)
+        train_labels.extend(for_local_train_labels)
+        train_source_embeddings.extend(for_local_train_source_embeddings)
+        train_target_embeddings.extend(for_local_train_target_embeddings)
+        train_source_indices.extend(for_local_train_source_indices)
+        print('Train Size {} ---> {}'.format(for_local_train_size, for_local_train_locations))
+
+        for_local_test_locations = locations[for_local_train_size:]
+        for_local_test_size = len(for_local_test_locations)
+        for_local_test_labels = list()
+        for_local_test_source_embeddings = list()
+        for_local_test_target_embeddings = list()
+        for_local_test_source_indices = list()
+        for _l in for_local_test_locations:
+            for_local_test_labels.append(order)
+            for_local_test_source_embeddings.append(source_embeddings[_l])
+            for_local_test_target_embeddings.append(target_embeddings[indx])
+            for_local_test_source_indices.append(_l)
+        test_labels.extend(for_local_test_labels)
+        test_source_embeddings.extend(for_local_test_source_embeddings)
+        test_target_embeddings.extend(for_local_test_target_embeddings)
+        test_source_indices.extend(for_local_test_source_indices)
+        print('Test Size {} ---> {}'.format(for_local_test_size, for_local_test_locations))
+
+    # assert num_labels == len(set(test_labels)), "Actual Num of Labels: {} vs Test Num of Labels {}".format(num_labels, len(set(test_labels)))
+
+    train = list(zip(train_source_embeddings, train_labels, train_target_embeddings, train_source_indices))
+    test = list(zip(test_source_embeddings, test_labels, test_target_embeddings, test_source_indices))
+    random.seed(params.model['seed'])
+    random.shuffle(train)
+    random.seed(params.model['seed'])
+    random.shuffle(test)
+    train_source_embeddings, train_labels, train_target_embeddings, train_source_indices = zip(*train)
+    test_source_embeddings, test_labels, test_target_embeddings, test_source_indices = zip(*test)
+
+    # Creating sample paragraphs:
+
+    recall_target_embedding_file = 'recall_' + params.files['pre_trained_files'][KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]]
+    recall_target_embeddings = np.asarray(recall_target_embeddings)
+
+    dump_embeddings(recall_target_embeddings,
+                    os.path.join(base_path, recall_target_embedding_file))
+
+    # Creating test/train datasets
+    train_source_embeddings = np.asarray(train_source_embeddings)
+    dump_embeddings(train_source_embeddings, os.path.join(base_path, params.files['train_loss'][KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"]]))
+    train_labels = np.asarray(train_labels)
+    dump_embeddings(train_labels, os.path.join(base_path, params.files['train_loss'][KN_FILE_NAMES["KN_SOURCE_LABELS"]]))
+    train_target_embeddings = np.asarray(train_target_embeddings)
+    dump_embeddings(train_target_embeddings, os.path.join(base_path, params.files['train_loss'][KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]]))
+    train_source_indices = np.asarray(train_source_indices)
+    dump_embeddings(train_source_indices, os.path.join(base_path, params.files['train_loss'][KN_FILE_NAMES["KN_SOURCE_IDX"]]))
+
+    test_source_embeddings = np.asarray(test_source_embeddings)
+    dump_embeddings(test_source_embeddings, os.path.join(base_path, params.files['test_loss'][KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"]]))
+    test_labels = np.asarray(test_labels)
+    dump_embeddings(test_labels, os.path.join(base_path, params.files['test_loss'][KN_FILE_NAMES["KN_SOURCE_LABELS"]]))
+    test_target_embeddings = np.asarray(test_target_embeddings)
+    dump_embeddings(test_target_embeddings, os.path.join(base_path, params.files['test_loss'][KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]]))
+    test_source_indices = np.asarray(test_source_indices)
+    dump_embeddings(test_source_indices, os.path.join(base_path, params.files['test_loss'][KN_FILE_NAMES["KN_SOURCE_IDX"]]))
+
+    # Creating a subset test set from the test set
+    random.seed(params.model['seed'])
+    random.shuffle(test)
+
+    for _size in number_of_files_for_test:
+        subset_test = test[:_size]
+        subset_test_source_embeddings, subset_test_labels, subset_test_target_embeddings, subset_test_source_indices = zip(*subset_test)
+        subset_test_source_embeddings_file = params.files['subset_file_format'][KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"]].format('test', _size)
+        subset_test_target_embeddings_file = params.files['subset_file_format'][KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]].format('test', _size)
+        subset_test_source_label_file = params.files['subset_file_format'][KN_FILE_NAMES["KN_SOURCE_LABELS"]].format('test',_size)
+        subset_test_source_idx_file = params.files['subset_file_format'][KN_FILE_NAMES["KN_SOURCE_IDX"]].format('test',_size)
+
+        subset_test_source_embeddings = np.asarray(subset_test_source_embeddings)
+        dump_embeddings(subset_test_source_embeddings, os.path.join(base_path, subset_test_source_embeddings_file))
+        subset_test_labels = np.asarray(subset_test_labels)
+        dump_embeddings(subset_test_labels, os.path.join(base_path, subset_test_source_label_file), dtype="int32")
+        subset_test_target_embeddings = np.asarray(subset_test_target_embeddings)
+        dump_embeddings(subset_test_target_embeddings, os.path.join(base_path, subset_test_target_embeddings_file))
+        subset_test_source_indices = np.asarray(subset_test_source_indices)
+        dump_embeddings(subset_test_source_indices, os.path.join(base_path, subset_test_source_idx_file))
+
+    random.seed(params.model['seed'])
+    random.shuffle(train)
+
+    for _size in number_of_files_for_train:
+        subset_train = train[:_size]
+        subset_train_source_embeddings, subset_train_labels, subset_train_target_embeddings, subset_train_source_indices = zip(*subset_train)
+        subset_train_source_embeddings_file = params.files['subset_file_format'][KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"]].format('train_recall',_size)
+        subset_train_target_embeddings_file = params.files['subset_file_format'][KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]].format('train_recall', _size)
+        subset_train_source_label_file = params.files['subset_file_format'][KN_FILE_NAMES["KN_SOURCE_LABELS"]].format('train_recall', _size)
+        subset_train_source_idx_file = params.files['subset_file_format'][KN_FILE_NAMES["KN_SOURCE_IDX"]].format('train_recall',_size)
+
+        subset_train_source_embeddings = np.asarray(subset_train_source_embeddings)
+        dump_embeddings(subset_train_source_embeddings, os.path.join(base_path, subset_train_source_embeddings_file))
+        subset_train_labels = np.asarray(subset_train_labels)
+        dump_embeddings(subset_train_labels, os.path.join(base_path, subset_train_source_label_file), dtype="int32")
+        subset_train_target_embeddings = np.asarray(subset_train_target_embeddings)
+        dump_embeddings(subset_train_target_embeddings, os.path.join(base_path, subset_train_target_embeddings_file))
+        subset_train_source_indices = np.asarray(subset_train_source_indices)
+        dump_embeddings(subset_train_source_indices, os.path.join(base_path, subset_train_source_idx_file))
+
+    # update params for new values
+    params.files['test_subset_recall'][KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"]] = subset_test_source_embeddings_file
+    params.files['test_subset_recall'][KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]] = subset_test_target_embeddings_file
+    params.files['test_subset_recall'][KN_FILE_NAMES["KN_SOURCE_LABELS"]] = subset_test_source_label_file
+    params.files['test_subset_recall'][KN_FILE_NAMES["KN_SOURCE_IDX"]] = subset_test_source_idx_file
+
+    params.files['train_subset_recall'][KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"]] = subset_train_source_embeddings_file
+    params.files['train_subset_recall'][KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]] = subset_train_target_embeddings_file
+    params.files['train_subset_recall'][KN_FILE_NAMES["KN_SOURCE_LABELS"]] = subset_train_source_label_file
+    params.files['train_subset_recall'][KN_FILE_NAMES["KN_SOURCE_IDX"]] = subset_train_source_idx_file
+
+    params.files['test_subset_loss'][KN_FILE_NAMES["KN_SOURCE_EMBEDDINGS"]] = subset_test_source_embeddings_file
+    params.files['test_subset_loss'][KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]] = subset_test_target_embeddings_file
+
+    params.files['splitter']['num_labels'] = num_labels
+    params.files['splitter']['train_size'] = train_source_embeddings.shape[0]
+    params.files['splitter']['test_size'] = test_source_embeddings.shape[0]
+
+    return params
 
 def load_embeddings(infile_to_get):
     with h5py.File(infile_to_get, 'r') as fin:

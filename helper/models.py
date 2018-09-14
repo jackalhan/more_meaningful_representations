@@ -8,12 +8,12 @@ from prompt_toolkit.key_binding.bindings.named_commands import accept_line
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from helper.utils import get_variable_name_as_str
 
-def orchestrate_model(questions, params):
+def orchestrate_model(source, params):
 
     scope = params.model["active_model"]
     with tf.variable_scope(scope):
-        tf.logging.info("Question shape: {}...".format(questions))
-        output = eval(scope)(questions, params)
+        tf.logging.info("Source shape: {}...".format(source))
+        output = eval(scope)(source, params)
         tf.contrib.layers.summarize_activation(output)
         normalized_output = tf.nn.l2_normalize(output, axis=1)
         tf.contrib.layers.summarize_activation(normalized_output)
@@ -26,11 +26,10 @@ def model_1(input, params):
 
     conf = params.model["model_1"]
 
-    questions = input #input['questions']
-    #baseline_question_embeddings = input['baseline_question_embeddings']
+    source = input['source_embeddings']
     with tf.variable_scope('fc'):
         fc_linear = tf.contrib.layers.fully_connected(
-            questions,
+            source,
             conf['embedding_dim'],
             activation_fn=None,
             weights_initializer=tf.truncated_normal_initializer(seed=conf['initializer_seed'],
@@ -41,7 +40,7 @@ def model_1(input, params):
             scope='linear'
         )
 
-        output = tf.add(fc_linear * conf['scaling_factor'], baseline_question_embeddings, name='linear_add')
+        output = tf.add(fc_linear * conf['scaling_factor'], source, name='linear_add')
 
     return output
 
@@ -51,9 +50,8 @@ def model_2(input, params):
     tf.logging.info("Creating the {}...".format(model_2.__name__))
 
     conf = params.model["model_2"]
-    #questions = input['questions']
-    #baseline_question_embeddings = input['baseline_question_embeddings']
-    _in_out = input #questions
+    source = input['source_embeddings']
+    _in_out = source
     for i, block_conf in enumerate(conf):
         _in_out = residual_block(_in_out, block_conf, "res_block_{}".format(i))
     return _in_out
@@ -76,14 +74,14 @@ def model_3(input, params):
     tf.logging.info("Creating the {}...".format(model_3.__name__))
 
     conf = params.model["model_3"][0]
-    org_questions = input['org']
-    input = input['x']
+    baseline_source_embeddings = input['baseline_source_embeddings']
+    source_embeddings = input['source_embeddings']
     with tf.variable_scope('CNN'):
-        questions = tf.contrib.layers.embed_sequence(
-            input, params.files['questions_vocab_size'], params.files['pre_trained_files']['embedding_dim'],
+        embedding_layer = tf.contrib.layers.embed_sequence(
+            source_embeddings, params.files['vocab_size'], params.files['pre_trained_files']['embedding_dim'],
             initializer=params.model['conv_embedding_initializer'])
 
-        conv1 = tf.layers.conv1d(questions, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
+        conv1 = tf.layers.conv1d(embedding_layer, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
         conv2 = tf.layers.conv1d(conv1, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
@@ -91,9 +89,9 @@ def model_3(input, params):
 
         min_avg_pooling = tf.reduce_min(conv3, axis=1)
 
-        dropout_hidden = tf.layers.dropout(inputs=min_avg_pooling, rate=conf['keep_prob'])
-
-        dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
+        # dropout_hidden = tf.layers.dropout(inputs=min_avg_pooling, rate=conf['keep_prob'])
+        #
+        # dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 
         #
         # pool2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2)
@@ -135,7 +133,7 @@ def model_3(input, params):
         #
         # dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 
-        output = tf.add(dense_output * conf['scaling_factor'], org_questions)
+        output = tf.add(min_avg_pooling * conf['scaling_factor'], baseline_source_embeddings)
     return output
 
 

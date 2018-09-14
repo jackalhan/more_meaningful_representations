@@ -87,7 +87,7 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf, databuilder):
                 # -------------------------------------
                 # First Train
                 # -------------------------------------
-            estimator.train(_train_input_fn, max_steps=1)
+            #estimator.train(_train_input_fn, max_steps=1)
 
                 # -------------------------------------
                 # Train and Test : Train
@@ -101,7 +101,7 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf, databuilder):
             # -------------------------------------
             tf.logging.info("Evaluation loss and recall loss on test set.")
             tf.logging.info(
-                "Evaluation Floss on test set with a size of {} ".format(params.files["splitter"]["test_size"]))
+                "Evaluation loss on test set with a size of {} ".format(params.files["splitter"]["test_size"]))
             tf.logging.info(
                 "Evaluation recall loss on test set with a size of {} ".format(params.files["splitter"]["test_subset_size"]))
 
@@ -111,7 +111,7 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf, databuilder):
                 # -------------------------------------
                 # Then Test
                 # -------------------------------------
-            estimator.evaluate(_recall_input_fn)
+            #estimator.evaluate(_recall_input_fn)
 
                 # -------------------------------------
                 # Train and Test : Test
@@ -123,35 +123,6 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf, databuilder):
             # -------------------------------------
             tf.estimator.train_and_evaluate(estimator, train_spec, test_spec)
 
-            # for key in res:
-            #     print("{}: {}".format(key, res[key]))
-
-            # ----------------------------------------
-            # Save Model
-            # ---------------------------------------
-            # Added this for solving the issue
-            # def serving_input_receiver_fn():
-            #
-            #     feature_spec = {'image/encoded': tf.FixedLenFeature(shape=[],
-            #                                                         dtype=tf.string)}
-            #
-            #     serialized_tf_example = tf.placeholder(
-            #         dtype=tf.string)
-            #
-            #     receiver_tensors = {'examples': serialized_tf_example}
-            #
-            #     features = tf.parse_example(serialized_tf_example, feature_spec)
-            #     jpegs = features['image/encoded']
-            #     fn = lambda x : ds.get_dataset(os.path.join(base_data_path, params.files['pre_trained_files']['question_embeddings']),
-            #                      None,
-            #                      params.files['pre_trained_files']['embedding_dim'],
-            #                      including_target=False)
-            #
-            #     images = tf.map_fn(fn, jpegs, dtype=tf.float32)
-            #
-            #     return tf.estimator.export.ServingInputReceiver(images, receiver_tensors)
-            #
-            # estimator.export_savedmodel(model_save_path, serving_input_receiver_fn)
 
             if params.executor["is_prediction_during_training"]:
                 predictions = estimator.predict(lambda: databuilder.predict_input_fn())
@@ -215,7 +186,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf, databuilder):
             # -------------------------------------
             # First Train
             # -------------------------------------
-            estimator.train(_train_input_fn, max_steps=1)
+            #estimator.train(_train_input_fn, max_steps=1)
 
             # -------------------------------------
             # Train and Test : Train
@@ -240,7 +211,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf, databuilder):
             # -------------------------------------
             # Then Test
             # -------------------------------------
-            estimator.evaluate(_recall_input_fn)
+            #estimator.evaluate(_recall_input_fn)
 
             # -------------------------------------
             # Train and Test : Test

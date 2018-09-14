@@ -162,9 +162,10 @@ class DataBuilder():
         dataset = dataset.batch(self.params.model["batch_size"])
         dataset = dataset.map(self._parser)
         # dataset = dataset.repeat()
-        # dataset = dataset.prefetch(1)
-        iterator = dataset.make_one_shot_iterator()
-        return iterator.get_next()
+        dataset = dataset.shuffle(buffer_size=self.params.model["batch_size"], seed=1)
+        dataset = dataset.prefetch(1)
+        #iterator = dataset.make_one_shot_iterator()
+        return dataset#iterator.get_next()
 
     def _load_train_data(self):
         self._train_source_labels, self._train_source_indx, self._train_source_embeddings, self._train_target_embeddings, self._train_all_target_embeddings = self._load_data('train_loss')
@@ -173,7 +174,7 @@ class DataBuilder():
             tokenized_documents = self._obtain_tokenized_documents(self._train_source_indx)
             self._train_source_embeddings, self._train_source_embeddings_lengths = self._pad_documents(tokenized_documents)
         else:
-            self._train_source_embeddings_lengths = tf.zeros([self._train_source_embeddings.shape[0], self._train_source_embeddings.shape[1]])
+            self._train_source_embeddings_lengths = np.zeros([self._train_source_embeddings.shape[0], self._train_source_embeddings.shape[1]])
 
     def train_recall_input_fn(self):
         dataset = tf.data.Dataset.from_tensor_slices(
@@ -184,9 +185,9 @@ class DataBuilder():
              self._train_recall_source_labels))
         dataset = dataset.batch(self.params.files["splitter"]["train_subset_size"])
         dataset = dataset.map(self._parser)
-        # dataset = dataset.prefetch(1)
-        iterator = dataset.make_one_shot_iterator()
-        return iterator.get_next()
+        dataset = dataset.prefetch(1)
+        #iterator = dataset.make_one_shot_iterator()
+        return dataset #iterator.get_next()
 
     def _load_train_recall_data(self):
         self._train_recall_source_labels, self._train_recall_source_indx, self._train_recall_source_embeddings, self._train_recall_target_embeddings, self._train_recall_all_target_embeddings = self._load_data('train_subset_recall')
@@ -196,7 +197,7 @@ class DataBuilder():
             self._train_recall_source_embeddings, self._train_recall_source_embeddings_lengths = self._pad_documents(
                 tokenized_documents)
         else:
-            self._train_recall_source_embeddings_lengths = tf.zeros(
+            self._train_recall_source_embeddings_lengths = np.zeros(
                 [self._train_recall_source_embeddings.shape[0], self._train_recall_source_embeddings.shape[1]])
 
     def test_recall_input_fn(self):
@@ -208,9 +209,9 @@ class DataBuilder():
              self._test_recall_source_labels))
         dataset = dataset.batch(self.params.files["splitter"]["test_subset_size"])
         dataset = dataset.map(self._parser)
-        # dataset = dataset.prefetch(1)
-        iterator = dataset.make_one_shot_iterator()
-        return iterator.get_next()
+        dataset = dataset.prefetch(1)
+        #iterator = dataset.make_one_shot_iterator()
+        return dataset #iterator.get_next()
     def _load_test_recall_data(self):
         self._test_recall_source_labels, self._test_recall_source_indx, self._test_recall_source_embeddings, self._test_recall_target_embeddings, self._test_recall_all_target_embeddings = self._load_data('test_subset_recall')
         self._test_recall_baseline_source_embeddings = self._test_recall_source_embeddings
@@ -218,7 +219,7 @@ class DataBuilder():
             tokenized_documents = self._obtain_tokenized_documents(self._test_recall_source_indx)
             self._test_recall_source_embeddings, self._test_recall_source_embeddings_lengths = self._pad_documents(tokenized_documents)
         else:
-            self._test_recall_source_embeddings_lengths = tf.zeros(
+            self._test_recall_source_embeddings_lengths = np.zeros(
                 [self._test_recall_source_embeddings.shape[0], self._test_recall_source_embeddings.shape[1]])
 
     def predict_input_fn(self):
@@ -227,9 +228,9 @@ class DataBuilder():
              self._source_embeddings_lengths))
         dataset = dataset.batch(self.params.model["batch_size"])
         dataset = dataset.map(self._parser_estimate)
-        # dataset = dataset.prefetch(1)
-        iterator = dataset.make_one_shot_iterator()
-        return iterator.get_next()
+        dataset = dataset.prefetch(1)
+        #iterator = dataset.make_one_shot_iterator()
+        return dataset #iterator.get_next()
     def _load_predict_data(self):
         self._source_embeddings = UTIL.load_embeddings(
             os.path.join(self.base_path, self.params.files['prediction']['source_embeddings']))
@@ -241,7 +242,7 @@ class DataBuilder():
             self._source_embeddings, self._source_embeddings_lengths = self._pad_documents(
                 tokenized_documents)
         else:
-            self._source_embeddings_lengths = tf.zeros(
+            self._source_embeddings_lengths = np.zeros(
                 [self._source_embeddings.shape[0], self._source_embeddings.shape[1]])
 
     def _load_data(self, data_type):

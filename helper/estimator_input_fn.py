@@ -18,7 +18,7 @@ class DataBuilder():
         self.base_path = base_path
         self.verbose = verbose
         self._init_data()
-    def _parser(self_, source_embeddings,
+    def _parser_conv(self_, source_embeddings,
                source_document_length,
                baseline_source_embeddings,
                target_embeddings,
@@ -31,9 +31,22 @@ class DataBuilder():
                   "target_labels": target_labels}
         return features, labels
 
-    def _parser_estimate(self, source_embeddings,source_document_length):
+    def _parser_non_conv(self_, source_embeddings,
+               target_embeddings,
+               target_labels):
+
+        features = {"source_embeddings": source_embeddings}
+        labels = {"target_embeddings": target_embeddings,
+                  "target_labels": target_labels}
+        return features, labels
+
+    def _parser_estimate_conv(self, source_embeddings,source_document_length):
         features = {"source_embeddings": source_embeddings,
                     "source_document_length": source_document_length}
+        return features
+
+    def _parser_estimate_non_conv(self, source_embeddings):
+        features = {"source_embeddings": source_embeddings}
         return features
 
     def _init_data(self):
@@ -152,15 +165,22 @@ class DataBuilder():
         return padded_documents, padded_documents_lengths
 
     def train_input_fn(self):
-        dataset = tf.data.Dataset.from_tensor_slices((self._train_source_embeddings,
-                                                     self._train_source_embeddings_lengths,
-                                                     self._train_baseline_source_embeddings,
-                                                     self._train_target_embeddings,
-                                                     self._train_source_labels))
+        if self.params.model['model_type'].lower() == 'conv':
+            dataset = tf.data.Dataset.from_tensor_slices((self._train_source_embeddings,
+                                                         self._train_source_embeddings_lengths,
+                                                         self._train_baseline_source_embeddings,
+                                                         self._train_target_embeddings,
+                                                         self._train_source_labels))
+            dataset = dataset.map(self._parser_conv)
+        else:
+            dataset = tf.data.Dataset.from_tensor_slices((self._train_source_embeddings,
+                                                          self._train_target_embeddings,
+                                                          self._train_source_labels))
+            dataset = dataset.map(self._parser_non_conv)
+
         if self.params.model["shuffle"]:
             dataset = dataset.shuffle(buffer_size=self._train_source_embeddings.shape[0])
         dataset = dataset.batch(self.params.model["batch_size"])
-        dataset = dataset.map(self._parser)
         # dataset = dataset.repeat()
         dataset = dataset.shuffle(buffer_size=self.params.model["batch_size"], seed=1)
         dataset = dataset.prefetch(1)
@@ -177,14 +197,22 @@ class DataBuilder():
             self._train_source_embeddings_lengths = np.zeros([self._train_source_embeddings.shape[0], self._train_source_embeddings.shape[1]])
 
     def train_recall_input_fn(self):
-        dataset = tf.data.Dataset.from_tensor_slices(
-            (self._train_recall_source_embeddings,
-             self._train_recall_source_embeddings_lengths,
-             self._train_recall_baseline_source_embeddings,
-             self._train_recall_target_embeddings,
-             self._train_recall_source_labels))
+        if self.params.model['model_type'].lower() == 'conv':
+            dataset = tf.data.Dataset.from_tensor_slices(
+                (self._train_recall_source_embeddings,
+                 self._train_recall_source_embeddings_lengths,
+                 self._train_recall_baseline_source_embeddings,
+                 self._train_recall_target_embeddings,
+                 self._train_recall_source_labels))
+            dataset = dataset.map(self._parser_conv)
+        else:
+            dataset = tf.data.Dataset.from_tensor_slices(
+                (self._train_recall_source_embeddings,
+                 self._train_recall_target_embeddings,
+                 self._train_recall_source_labels))
+            dataset = dataset.map(self._parser_non_conv)
+
         dataset = dataset.batch(self.params.files["splitter"]["train_subset_size"])
-        dataset = dataset.map(self._parser)
         dataset = dataset.prefetch(1)
         #iterator = dataset.make_one_shot_iterator()
         return dataset #iterator.get_next()
@@ -201,14 +229,23 @@ class DataBuilder():
                 [self._train_recall_source_embeddings.shape[0], self._train_recall_source_embeddings.shape[1]])
 
     def test_recall_input_fn(self):
-        dataset = tf.data.Dataset.from_tensor_slices(
-            (self._test_recall_source_embeddings,
-             self._test_recall_source_embeddings_lengths,
-             self._test_recall_baseline_source_embeddings,
-             self._test_recall_target_embeddings,
-             self._test_recall_source_labels))
+        if self.params.model['model_type'].lower() == 'conv':
+            dataset = tf.data.Dataset.from_tensor_slices(
+                (self._test_recall_source_embeddings,
+                 self._test_recall_source_embeddings_lengths,
+                 self._test_recall_baseline_source_embeddings,
+                 self._test_recall_target_embeddings,
+                 self._test_recall_source_labels))
+            dataset = dataset.map(self._parser_conv)
+        else:
+            dataset = tf.data.Dataset.from_tensor_slices(
+                (self._test_recall_source_embeddings,
+                 self._test_recall_target_embeddings,
+                 self._test_recall_source_labels))
+            dataset = dataset.map(self._parser_non_conv)
+
         dataset = dataset.batch(self.params.files["splitter"]["test_subset_size"])
-        dataset = dataset.map(self._parser)
+
         dataset = dataset.prefetch(1)
         #iterator = dataset.make_one_shot_iterator()
         return dataset #iterator.get_next()
@@ -223,11 +260,17 @@ class DataBuilder():
                 [self._test_recall_source_embeddings.shape[0], self._test_recall_source_embeddings.shape[1]])
 
     def predict_input_fn(self):
-        dataset = tf.data.Dataset.from_tensor_slices(
-            (self._source_embeddings,
-             self._source_embeddings_lengths))
+        if self.params.model['model_type'].lower() == 'conv':
+            dataset = tf.data.Dataset.from_tensor_slices(
+                (self._source_embeddings,
+                 self._source_embeddings_lengths))
+            dataset = dataset.map(self._parser_estimate_conv)
+        else:
+            dataset = tf.data.Dataset.from_tensor_slices(
+                (self._source_embeddings))
+            dataset = dataset.map(self._parser_estimate_non_conv)
+
         dataset = dataset.batch(self.params.model["batch_size"])
-        dataset = dataset.map(self._parser_estimate)
         dataset = dataset.prefetch(1)
         #iterator = dataset.make_one_shot_iterator()
         return dataset #iterator.get_next()

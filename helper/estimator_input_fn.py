@@ -254,9 +254,9 @@ class DataBuilder():
             os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']]))
         try:
             all_target_embeddings = UTIL.load_embeddings(
-                os.path.join(self.data_dir, self.params.files[data_type]["recall_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']]))
+                os.path.join(self.data_dir, self.params.files[data_type]["all_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']]))
         except:
-            print('{} is not found for {} type'.format("recall_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS'], data_type))
+            print('{} is not found for {} type'.format("all_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS'], data_type))
             all_target_embeddings = None
         return source_labels, source_indx, source_embeddings, target_embeddings,all_target_embeddings
 

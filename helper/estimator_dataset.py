@@ -16,6 +16,7 @@
 import h5py
 import tensorflow as tf
 import numpy as np
+
 class generator:
     def __init__(self, file, additional_file, table_name='embeddings'):
         self.file = file

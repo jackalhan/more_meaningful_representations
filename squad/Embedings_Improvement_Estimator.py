@@ -7,7 +7,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.parser as parser
 import numpy as np
 from helper.utils import load_from_pickle, vocabulary_processor, fit_vocab_to_documents,  tokenize_contexts, load_word_embeddings, prepare_squad_objects, Params, define_pre_executions,dump_embeddings, save_as_pickle, save_as_shelve, load_embeddings
-from helper.estimator_input_fn import DataBuilder#, train_input_fn, train_recall_input_fn , test_recall_input_fn, predict_input_fn
+from helper.estimator_input_fn import DataBuilder
 from helper.estimator_model_fn import model_fn
 import math
 from tensorflow.python.keras.preprocessing import sequence
@@ -126,7 +126,7 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf, databuilder):
 
             if params.executor["is_prediction_during_training"]:
 
-                predictions = estimator.predict(lambda: databuilder.predict_input_fn)
+                predictions = estimator.predict(lambda: databuilder.predict_input_fn())
                 predictions = np.array(list(predictions))
                 dump_embeddings(predictions, os.path.join(base_data_path, "improved_" + params.files["prediction"][
                     "source_embeddings"]))
@@ -169,14 +169,11 @@ def execute_conv_pipeline(params, base_data_path, config, tf, databuilder):
 
     estimator = tf.estimator.Estimator(model_fn, params=params, config=config)
     if not params.executor["is_prediction"]:
-        databuilder.train_input_fn()
-        _train_input_fn = lambda: helper.globalizer.train_input_fn
+        _train_input_fn = lambda: databuilder.train_input_fn()
         if params.executor["recall_calculation_for"] == 'test':
-            databuilder.test_recall_input_fn()
-            _recall_input_fn = lambda: helper.globalizer.test_recall_input_fn
+            _recall_input_fn = lambda: databuilder.test_recall_input_fn()
         else:
-            databuilder.train_recall_input_fn()
-            _recall_input_fn = lambda: helper.globalizer.train_recall_input_fn
+            _recall_input_fn = lambda: databuilder.train_recall_input_fn()
         if not params.executor["is_debug_mode"]:
 
             # -------------------------------------
@@ -257,8 +254,7 @@ def execute_conv_pipeline(params, base_data_path, config, tf, databuilder):
     else:
         # ALL PARAMETERS SHOULD BE SET SAME WITH THE SAVED MODEL :(
         # I AM GOING TO HANDLE HOW TO SAVE IT WITH THE PARAM CONFS.
-        databuilder.predict_input_fn()
-        predictions = estimator.predict(lambda: predict_input_fn)
+        predictions = estimator.predict(lambda: databuilder.predict_input_fn())
         predictions = np.array(list(predictions))
         dump_embeddings(predictions,
                         os.path.join(base_data_path, "improved_" + params.files["prediction"]["source_embeddings"]))
@@ -276,7 +272,6 @@ if __name__ == '__main__':
     # split the files or use the provided files
     base_data_path = os.path.join(params.executor['model_dir'], params.executor['data_dir'])
 
-
     params, model_save_path = define_pre_executions(params, args.json_path, base_data_path)
 
     tf.logging.info("Creating the model...")
@@ -286,7 +281,7 @@ if __name__ == '__main__':
 
 
     # IF MODEL TYPE IS CONV, START THE PIPELINE ACCORDINGLY
-    db = DataBuilder(base_data_path, params, ['train', params.executor["recall_calculation_for"] + '_recall', 'predict'])
+    db = DataBuilder(base_data_path, params, ['train', params.executor["recall_calculation_for"] + '_recall', 'predict'],True)
     params = db.params
     if params.model['model_type'].lower() == 'conv':
         execute_conv_pipeline(params, base_data_path, config,tf, db)

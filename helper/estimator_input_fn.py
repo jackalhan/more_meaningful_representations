@@ -8,17 +8,41 @@ import tensorflow as tf
 import numpy as np
 from tqdm import tqdm
 from tensorflow.python.keras.preprocessing import sequence
+import h5py
 
+
+class generator:
+    def __init__(self, file, table_name='embeddings'):
+        self.file = file
+        self.table_name = table_name
+    def __call__(self):
+        with h5py.File(self.file, 'r') as hf:
+            for im in hf[self.table_name]:
+                yield im
 
 class DataBuilder():
     """ DataBuilder class for all type of estimator input_fn
     """
 
-    def __init__(self, base_path, params, verbose):
+    def __init__(self, base_path, params, verbose, load_with_file_path):
         self.params = params
         self.base_path = base_path
         self.verbose = verbose
+        self.load_with_file_path = load_with_file_path
         self._init_data()
+
+    def _read_dataset(self, file_path, embedding_dim, table_name='embeddings', data_type=tf.float32):
+        if embedding_dim is not None:
+            ds = tf.data.Dataset.from_generator(
+                generator(file_path, table_name),
+                data_type,
+                tf.TensorShape([embedding_dim, ]))
+        else:
+            ds = tf.data.Dataset.from_generator(
+                generator(file_path, table_name),
+                data_type,
+                tf.TensorShape([]))
+        return ds
 
     def _parser_conv(self_, source_embeddings,
                source_document_length,
@@ -51,6 +75,47 @@ class DataBuilder():
         features = {"source_embeddings": source_embeddings}
         return features
 
+    def _load_data_path(self, data_type):
+        source_labels_path = os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_LABELS']])
+        source_indx_path = os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_IDX']])
+        source_embeddings_path = os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_EMBEDDINGS']])
+        target_embeddings_path = os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']])
+        source_padded_path = os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_PADDED']])
+        source_length_path = os.path.join(self.data_dir,
+                                          self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_LENGTH']])
+        print('Data Type: {}'.format(data_type))
+        print('source_labels_path Path:{}'.format(source_labels_path))
+        print('source_indx_path Path:{}'.format(source_indx_path))
+        print('source_embeddings_path Path:{}'.format(source_embeddings_path))
+        print('target_embeddings_path Path:{}'.format(target_embeddings_path))
+        print('source_padded_path Path:{}'.format(source_padded_path))
+        print('source_length_path Path:{}'.format(source_length_path))
+        try:
+            all_target_embeddings_path = os.path.join(self.data_dir,
+                             self.params.files[data_type]["all_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']])
+        except:
+            print('{} is not found for {} type'.format("all_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS'], data_type))
+            all_target_embeddings_path = None
+        return source_labels_path, source_indx_path, source_embeddings_path, target_embeddings_path, all_target_embeddings_path, source_padded_path, source_length_path
+
+    def _load_data(self, data_type):
+        source_labels = UTIL.load_embeddings(os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_LABELS']])).astype(int)
+        source_indx = UTIL.load_embeddings(
+            os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_IDX']])).astype(int)
+        source_embeddings = UTIL.load_embeddings(
+            os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_EMBEDDINGS']]))
+        target_embeddings = UTIL.load_embeddings(
+            os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']]))
+        source_padded=None
+        source_length=None
+        try:
+            all_target_embeddings = UTIL.load_embeddings(
+                os.path.join(self.data_dir, self.params.files[data_type]["all_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']]))
+        except:
+            print('{} is not found for {} type'.format("all_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS'], data_type))
+            all_target_embeddings = None
+        return source_labels, source_indx, source_embeddings, target_embeddings,all_target_embeddings, source_padded, source_length
+
     def _init_data(self):
         """
         :param verbose: list ALL_DATA or one or combination of the followings {TRAIN, TRAIN_RECALL, TEST_RECALL, PREDICT}
@@ -70,19 +135,19 @@ class DataBuilder():
             self._embeddings_initializer()
 
         if 'all_data' in verbose:
-            self._load_train_data()
-            self._load_train_recall_data()
-            self._load_test_recall_data()
-            self._load_predict_data()
+            self._load_train_data(self.load_with_file_path)
+            self._load_train_recall_data(self.load_with_file_path)
+            self._load_test_recall_data(self.load_with_file_path)
+            self._load_predict_data(self.load_with_file_path)
         else:
             if 'train' in verbose:
-                self._load_train_data()
+                self._load_train_data(self.load_with_file_path)
             if 'train_recall' in verbose:
-                self._load_train_recall_data()
+                self._load_train_recall_data(self.load_with_file_path)
             if 'test_recall' in verbose:
-                self._load_test_recall_data()
+                self._load_test_recall_data(self.load_with_file_path)
             if 'predict' in verbose:
-                self._load_predict_data()
+                self._load_predict_data(self.load_with_file_path)
 
     def _embeddings_initializer(self):
         if self.params.files['word_embeddings'] is None:
@@ -100,6 +165,7 @@ class DataBuilder():
                 return word_embeddings
 
             self.params.model['conv_embedding_initializer'] = my_initializer
+
     def _get_tokenized_data(self):
 
         dev_tokenized_questions, \
@@ -166,52 +232,167 @@ class DataBuilder():
         padded_documents_lengths = np.array([min(len(x), self.params.files['max_document_len']) for x in padded_documents])
         return padded_documents, padded_documents_lengths
 
+    """
+    **********************************************
+    TRAIN: START
+    **********************************************
+    """
+
     def train_input_fn(self):
         if self.params.model['model_type'].lower() == 'conv':
-            dataset = tf.data.Dataset.from_tensor_slices((self._train_source_embeddings,
-                                                         self._train_source_embeddings_lengths,
-                                                         self._train_baseline_source_embeddings,
-                                                         self._train_target_embeddings,
-                                                         self._train_source_labels))
+            if self.load_with_file_path:
+                # to get the size of the data
+                _train_source_embeddings = self._read_dataset(self._train_source_embeddings,self.params.files['max_document_len'], data_type=tf.int32)
+                _train_source_embeddings_lengths = self._read_dataset(self._train_source_embeddings,
+                                                       self.params.files['max_document_len'], data_type=tf.int32)
+                _train_baseline_source_embeddings = self._read_dataset(self._train_baseline_source_embeddings,self.params.files['pre_trained_files']['embedding_dim'])
+                _train_target_embeddings = self._read_dataset(self._train_target_embeddings,
+                                                                       self.params.files['pre_trained_files'][
+                                                                           'embedding_dim'])
+                _train_source_labels = self._read_dataset(self._train_source_labels,
+                                                          None,data_type=tf.int64)
+                dataset = tf.data.Dataset.zip((_train_source_embeddings, _train_source_embeddings_lengths, _train_baseline_source_embeddings, _train_target_embeddings, _train_source_labels))
+            else:
+                dataset = tf.data.Dataset.from_tensor_slices((self._train_source_embeddings,
+                                                             self._train_source_embeddings_lengths,
+                                                             self._train_baseline_source_embeddings,
+                                                             self._train_target_embeddings,
+                                                             self._train_source_labels))
             dataset = dataset.map(self._parser_conv)
         else:
-            dataset = tf.data.Dataset.from_tensor_slices((self._train_source_embeddings,
-                                                          self._train_target_embeddings,
-                                                          self._train_source_labels))
+            if self.load_with_file_path:
+                _train_source_embeddings = self._read_dataset(self._train_source_embeddings,self.params.files['pre_trained_files'][
+                                                                           'embedding_dim'])
+                _train_target_embeddings = self._read_dataset(self._train_target_embeddings,
+                                                                       self.params.files['pre_trained_files'][
+                                                                           'embedding_dim'])
+                _train_source_labels = self._read_dataset(self._train_source_labels,
+                                                          None,data_type=tf.int64)
+                dataset = tf.data.Dataset.zip((_train_source_embeddings, _train_target_embeddings, _train_source_labels))
+            else:
+                dataset = tf.data.Dataset.from_tensor_slices((self._train_source_embeddings,
+                                                              self._train_target_embeddings,
+                                                              self._train_source_labels))
             dataset = dataset.map(self._parser_non_conv)
-
+        # print('_train_source_embeddings Path:{}'.format(self._train_source_embeddings))
+        # print('_train_target_embeddings Path:{}'.format(self._train_target_embeddings))
+        # print('_train_source_labels Path:{}'.format(self._train_source_labels))
         if self.params.model["shuffle"]:
-            dataset = dataset.shuffle(buffer_size=self._train_source_embeddings.shape[0])
+            dataset = dataset.shuffle(buffer_size=self._temp_train_source_labels.shape[0])
         dataset = dataset.batch(self.params.model["batch_size"])
-        # dataset = dataset.repeat()
-        # dataset = dataset.shuffle(buffer_size=self.params.model["batch_size"], seed=1)
         dataset = dataset.prefetch(1)
-        # #iterator = dataset.make_one_shot_iterator()
+        #iterator = dataset.make_one_shot_iterator()
+        #def helper.globalizer.train_input_fn():return dataset
         return dataset #iterator.get_next()
 
-    def _load_train_data(self):
-        self._train_source_labels, self._train_source_indx, self._train_source_embeddings, self._train_target_embeddings, self._train_all_target_embeddings = self._load_data('train_loss')
+    def _load_train_data(self, load_with_file_path=False):
+        if load_with_file_path:
+            ## LOAD WITH FILE PATHS
+            self._train_source_labels, self._train_source_indx, self._train_source_embeddings, self._train_target_embeddings, self._train_all_target_embeddings, self._train_source_padded, self._train_source_length = self._load_data_path('train_loss')
+            self._temp_train_source_labels = UTIL.load_embeddings(self._train_source_labels)
+        else:
+            ## LOAD WITH ACTUAL DATA
+            self._train_source_labels, self._train_source_indx, self._train_source_embeddings, self._train_target_embeddings, self._train_all_target_embeddings, self._train_source_padded, self._train_source_length = self._load_data(
+                'train_loss')
+            self._temp_train_source_labels = self._train_source_labels
         self._train_baseline_source_embeddings = self._train_source_embeddings
         if self.params.model['model_type'].lower() == 'conv':
             tokenized_documents = self._obtain_tokenized_documents(self._train_source_indx)
             self._train_source_embeddings, self._train_source_embeddings_lengths = self._pad_documents(tokenized_documents)
-        else:
-            self._train_source_embeddings_lengths = np.zeros([self._train_source_embeddings.shape[0], self._train_source_embeddings.shape[1]])
+            if load_with_file_path:
+                ## SAVE self._train_source_embeddings, self._train_source_embeddings_lengths SO THAT IT CAN BE RELOADED FROM FILE
+                UTIL.dump_embeddings(self._train_source_embeddings, self._train_source_padded)
+                UTIL.dump_embeddings(self._train_source_embeddings_lengths, self._train_source_length, dtype="int32")
+                self._train_source_embeddings, self._train_source_embeddings_lengths = self._train_source_padded, self._train_source_length
 
+        else:
+            self._train_source_embeddings_lengths = np.zeros([self._temp_train_source_labels.shape[0], 1])
+            if load_with_file_path:
+                ## SAVE self._train_source_embeddings, self._train_source_embeddings_lengths SO THAT IT CAN BE RELOADED FROM FILE
+                UTIL.dump_embeddings(self._train_source_embeddings_lengths, self._train_source_length, dtype="int32")
+                self._train_source_embeddings_lengths = self._train_source_length
+        # print('_train_source_labels Path:{}'.format(self._train_source_labels))
+        # print('_train_source_indx Path:{}'.format(self._train_source_indx))
+        # print('_train_source_embeddings Path:{}'.format(self._train_source_embeddings))
+        # print('_train_target_embeddings Path:{}'.format(self._train_target_embeddings))
+        # print('_train_all_target_embeddings Path:{}'.format(self._train_all_target_embeddings))
+        # print('_train_source_embeddings Path:{}'.format(self._train_source_embeddings))
+        # print('_train_source_embeddings_lengths Path:{}'.format(self._train_source_embeddings_lengths))
+    """
+    **********************************************
+    TRAIN: END
+    **********************************************
+    """
+    # ----------------------------------------------------------------------------------
+    """
+    **********************************************
+    TRAIN RECALL: START
+    **********************************************
+    """
+    def _load_train_recall_data(self, load_with_file_path=False):
+        if load_with_file_path:
+            self._train_recall_source_labels, self._train_recall_source_indx, self._train_recall_source_embeddings, self._train_recall_target_embeddings, self._train_recall_all_target_embeddings, self._train_recall_source_padded, self._train_recall_source_length = self._load_data_path(
+                'train_subset_recall')
+            self._temp_train_recall_source_labels = UTIL.load_embeddings(self._train_recall_source_labels)
+        else:
+            self._train_recall_source_labels, self._train_recall_source_indx, self._train_recall_source_embeddings, self._train_recall_target_embeddings, self._train_recall_all_target_embeddings, self._train_recall_source_padded, self._train_recall_source_length  = self._load_data('train_subset_recall')
+            self._temp_train_recall_source_labels = self._train_recall_source_labels
+        self._train_recall_baseline_source_embeddings = self._train_recall_source_embeddings
+        if self.params.model['model_type'].lower() == 'conv':
+            tokenized_documents = self._obtain_tokenized_documents(self._train_recall_source_indx)
+            self._train_recall_source_embeddings, self._train_recall_source_embeddings_lengths = self._pad_documents(
+                tokenized_documents)
+            if load_with_file_path:
+                UTIL.dump_embeddings(self._train_recall_source_embeddings, self._train_recall_source_padded)
+                UTIL.dump_embeddings(self._train_recall_source_embeddings_lengths,  self._train_recall_source_length, dtype="int32")
+                self._train_recall_source_embeddings, self._train_recall_source_embeddings_lengths = self._train_recall_source_padded, self._train_recall_source_length
+        else:
+            self._train_recall_source_embeddings_lengths = np.zeros(
+                [self._temp_train_recall_source_labels.shape[0], 1])
+            if load_with_file_path:
+                UTIL.dump_embeddings(self._train_recall_source_embeddings_lengths, self._train_recall_source_length,
+                                     dtype="int32")
+                self._train_recall_source_embeddings_lengths = self._train_recall_source_length
     def train_recall_input_fn(self):
         if self.params.model['model_type'].lower() == 'conv':
-            dataset = tf.data.Dataset.from_tensor_slices(
-                (self._train_recall_source_embeddings,
-                 self._train_recall_source_embeddings_lengths,
-                 self._train_recall_baseline_source_embeddings,
-                 self._train_recall_target_embeddings,
-                 self._train_recall_source_labels))
+            if self.load_with_file_path:
+                _train_recall_source_embeddings = self._read_dataset(self._train_recall_source_embeddings,self.params.files['max_document_len'], data_type=tf.int32)
+                _train_recall_source_embeddings_lengths = self._read_dataset(self._train_recall_source_embeddings_lengths,
+                                                       self.params.files['max_document_len'], data_type=tf.int32)
+                _train_recall_baseline_source_embeddings = self._read_dataset(self._train_recall_baseline_source_embeddings,self.params.files['pre_trained_files']['embedding_dim'])
+                _train_recall_target_embeddings = self._read_dataset(self._train_recall_target_embeddings,
+                                                                       self.params.files['pre_trained_files'][
+                                                                           'embedding_dim'])
+                _train_recall_source_labels = self._read_dataset(self._train_recall_source_labels,
+                                                          None,data_type=tf.int64)
+                dataset = tf.data.Dataset.zip((_train_recall_source_embeddings, _train_recall_source_embeddings_lengths, _train_recall_baseline_source_embeddings, _train_recall_target_embeddings, _train_recall_source_labels))
+            else:
+                dataset = tf.data.Dataset.from_tensor_slices(
+                        (self._train_recall_source_embeddings,
+                        self._train_recall_source_embeddings_lengths,
+                        self._train_recall_baseline_source_embeddings,
+                        self._train_recall_target_embeddings,
+                        self._train_recall_source_labels))
+
             dataset = dataset.map(self._parser_conv)
         else:
-            dataset = tf.data.Dataset.from_tensor_slices(
-                (self._train_recall_source_embeddings,
-                 self._train_recall_target_embeddings,
-                 self._train_recall_source_labels))
+            if self.load_with_file_path:
+                _train_recall_source_embeddings = self._read_dataset(self._train_recall_source_embeddings,
+                                                                     self.params.files['pre_trained_files'][
+                                                                         'embedding_dim']
+                                                                     )
+
+                _train_recall_target_embeddings = self._read_dataset(self._train_recall_target_embeddings,
+                                                                     self.params.files['pre_trained_files'][
+                                                                         'embedding_dim'])
+                _train_recall_source_labels = self._read_dataset(self._train_recall_source_labels,
+                                                          None,data_type=tf.int64)
+                dataset = tf.data.Dataset.zip((_train_recall_source_embeddings, _train_recall_target_embeddings, _train_recall_source_labels))
+            else:
+                dataset = tf.data.Dataset.from_tensor_slices(
+                    (self._train_recall_source_embeddings,
+                     self._train_recall_target_embeddings,
+                     self._train_recall_source_labels))
             dataset = dataset.map(self._parser_non_conv)
 
         dataset = dataset.batch(self.params.files["splitter"]["train_subset_size"])
@@ -219,61 +400,135 @@ class DataBuilder():
         #iterator = dataset.make_one_shot_iterator()
         # return dataset #iterator.get_next()
         # global train_recall_input_fn
-        return dataset
-
-    def _load_train_recall_data(self):
-        self._train_recall_source_labels, self._train_recall_source_indx, self._train_recall_source_embeddings, self._train_recall_target_embeddings, self._train_recall_all_target_embeddings = self._load_data('train_subset_recall')
-        self._train_recall_baseline_source_embeddings = self._train_recall_source_embeddings
-        if self.params.model['model_type'].lower() == 'conv':
-            tokenized_documents = self._obtain_tokenized_documents(self._train_recall_source_indx)
-            self._train_recall_source_embeddings, self._train_recall_source_embeddings_lengths = self._pad_documents(
-                tokenized_documents)
-        else:
-            self._train_recall_source_embeddings_lengths = np.zeros(
-                [self._train_recall_source_embeddings.shape[0], self._train_recall_source_embeddings.shape[1]])
-
+        #helper.globalizer.train_recall_input_fn  = dataset
+        return dataset #iterator.get_next()
+    """
+    **********************************************
+    TRAIN RECALL: END
+    **********************************************
+    """
+    #----------------------------------------------------------------------------------
+    """
+    **********************************************
+    TEST RECALL: START
+    **********************************************
+    """
     def test_recall_input_fn(self):
         if self.params.model['model_type'].lower() == 'conv':
-            dataset = tf.data.Dataset.from_tensor_slices(
-                (self._test_recall_source_embeddings,
-                 self._test_recall_source_embeddings_lengths,
-                 self._test_recall_baseline_source_embeddings,
-                 self._test_recall_target_embeddings,
-                 self._test_recall_source_labels))
+            if self.load_with_file_path:
+                _test_recall_source_embeddings = self._read_dataset(self._test_recall_source_embeddings,self.params.files['max_document_len'], data_type=tf.int32)
+                _test_recall_source_embeddings_lengths = self._read_dataset(self._test_recall_source_embeddings_lengths,
+                                                       self.params.files['max_document_len'], data_type=tf.int32)
+                _test_recall_baseline_source_embeddings = self._read_dataset(self._test_recall_baseline_source_embeddings,self.params.files['pre_trained_files']['embedding_dim'])
+                _test_recall_target_embeddings = self._read_dataset(self._test_recall_target_embeddings,
+                                                                       self.params.files['pre_trained_files'][
+                                                                           'embedding_dim'])
+                _test_recall_source_labels = self._read_dataset(self._test_recall_source_labels,
+                                                          None,data_type=tf.int64)
+                dataset = tf.data.Dataset.zip((_test_recall_source_embeddings, _test_recall_source_embeddings_lengths, _test_recall_baseline_source_embeddings, _test_recall_target_embeddings, _test_recall_source_labels))
+            else:
+                dataset = tf.data.Dataset.from_tensor_slices(
+                    (self._test_recall_source_embeddings,
+                     self._test_recall_source_embeddings_lengths,
+                     self._test_recall_baseline_source_embeddings,
+                     self._test_recall_target_embeddings,
+                     self._test_recall_source_labels))
             dataset = dataset.map(self._parser_conv)
         else:
-            dataset = tf.data.Dataset.from_tensor_slices(
-                (self._test_recall_source_embeddings,
-                 self._test_recall_target_embeddings,
-                 self._test_recall_source_labels))
+            if self.load_with_file_path:
+                _test_recall_source_embeddings = self._read_dataset(self._test_recall_source_embeddings,
+                                                                    self.params.files['pre_trained_files'][
+                                                                        'embedding_dim'])
+                _test_recall_target_embeddings = self._read_dataset(self._test_recall_target_embeddings,
+                                                                    self.params.files['pre_trained_files'][
+                                                                        'embedding_dim'])
+                _test_recall_source_labels = self._read_dataset(self._test_recall_source_labels,
+                                                          None,data_type=tf.int64)
+                dataset = tf.data.Dataset.zip((_test_recall_source_embeddings, _test_recall_target_embeddings,
+                                               _test_recall_source_labels))
+            else:
+                dataset = tf.data.Dataset.from_tensor_slices(
+                    (self._test_recall_source_embeddings,
+                     self._test_recall_target_embeddings,
+                     self._test_recall_source_labels))
             dataset = dataset.map(self._parser_non_conv)
 
+        # print('_train_source_embeddings Path:{}'.format(self._test_recall_source_embeddings))
+        # print('_train_target_embeddings Path:{}'.format(self._test_recall_target_embeddings))
+        # print('_train_source_labels Path:{}'.format(self._test_recall_source_labels))
         dataset = dataset.batch(self.params.files["splitter"]["test_subset_size"])
 
         dataset = dataset.prefetch(1)
         #iterator = dataset.make_one_shot_iterator()
         #return dataset #iterator.get_next()
         # global test_recall_input_fn
-        return dataset
-    def _load_test_recall_data(self):
-        self._test_recall_source_labels, self._test_recall_source_indx, self._test_recall_source_embeddings, self._test_recall_target_embeddings, self._test_recall_all_target_embeddings = self._load_data('test_subset_recall')
+        return dataset #iterator.get_next()
+    def _load_test_recall_data(self, load_with_file_path=False):
+        if load_with_file_path:
+            self._test_recall_source_labels, self._test_recall_source_indx, self._test_recall_source_embeddings, self._test_recall_target_embeddings, self._test_recall_all_target_embeddings, self._test_recall_source_padded, self._test_recall_source_length = self._load_data_path(
+                'test_subset_recall')
+            self._temp_test_recall_source_labels = UTIL.load_embeddings(self._test_recall_source_labels)
+        else:
+            self._test_recall_source_labels, self._test_recall_source_indx, self._test_recall_source_embeddings, self._test_recall_target_embeddings, self._test_recall_all_target_embeddings, self._test_recall_source_padded, self._test_recall_source_length  = self._load_data('test_subset_recall')
+            self._temp_test_recall_source_labels = self._test_recall_source_labels
         self._test_recall_baseline_source_embeddings = self._test_recall_source_embeddings
         if self.params.model['model_type'].lower() == 'conv':
             tokenized_documents = self._obtain_tokenized_documents(self._test_recall_source_indx)
             self._test_recall_source_embeddings, self._test_recall_source_embeddings_lengths = self._pad_documents(tokenized_documents)
+            if load_with_file_path:
+                UTIL.dump_embeddings(self._test_recall_source_embeddings, self._test_recall_source_padded)
+                UTIL.dump_embeddings(self._test_recall_source_embeddings_lengths,  self._test_recall_source_length, dtype="int32")
+                self._test_recall_source_embeddings, self._test_recall_source_embeddings_lengths = self._test_recall_source_padded, self._test_recall_source_length
         else:
             self._test_recall_source_embeddings_lengths = np.zeros(
-                [self._test_recall_source_embeddings.shape[0], self._test_recall_source_embeddings.shape[1]])
-
+                [self._temp_test_recall_source_labels.shape[0], 1])
+            if load_with_file_path:
+                UTIL.dump_embeddings(self._test_recall_source_embeddings_lengths, self._test_recall_source_length,
+                                     dtype="int32")
+                self._test_recall_source_embeddings_lengths = self._test_recall_source_length
+        # print('_test_recall_source_labels Path:{}'.format(self._test_recall_source_labels))
+        # print('_test_recall_source_indx Path:{}'.format(self._test_recall_source_indx))
+        # print('_test_recall_source_embeddings Path:{}'.format(self._test_recall_source_embeddings))
+        # print('_test_recall_target_embeddings Path:{}'.format(self._test_recall_target_embeddings))
+        # print('_test_recall_all_target_embeddings Path:{}'.format(self._test_recall_all_target_embeddings))
+        # print('_test_recall_source_embeddings Path:{}'.format(self._test_recall_source_embeddings))
+        # print('_test_recall_source_embeddings_lengths Path:{}'.format(self._test_recall_source_embeddings_lengths))
+    """
+    **********************************************
+    TEST RECALL: END
+    **********************************************
+    """
+    # ----------------------------------------------------------------------------------
+    """
+    **********************************************
+    PREDICT: START
+    **********************************************
+    """
     def predict_input_fn(self):
         if self.params.model['model_type'].lower() == 'conv':
-            dataset = tf.data.Dataset.from_tensor_slices(
-                (self._source_embeddings,
-                 self._source_embeddings_lengths))
+            if self.load_with_file_path:
+                _source_embeddings = self._read_dataset(self._source_embeddings,
+                                                                    self.params.files['max_document_len'],
+                                                                    data_type=tf.int32)
+                _source_embeddings_lengths = self._read_dataset(self._source_embeddings_lengths,
+                                                                    self.params.files['pre_trained_files'][
+                                                                        'embedding_dim'])
+                dataset = tf.data.Dataset.zip((_source_embeddings, _source_embeddings_lengths))
+            else:
+                dataset = tf.data.Dataset.from_tensor_slices(
+                    (self._source_embeddings,
+                     self._source_embeddings_lengths))
             dataset = dataset.map(self._parser_estimate_conv)
         else:
-            dataset = tf.data.Dataset.from_tensor_slices(
-                (self._source_embeddings))
+            if self.load_with_file_path:
+                _source_embeddings = self._read_dataset(self._source_embeddings,
+                                                        self.params.files['pre_trained_files'][
+                                                            'embedding_dim']
+                                                        )
+                dataset = tf.data.Dataset.zip((_source_embeddings))
+            else:
+                dataset = tf.data.Dataset.from_tensor_slices(
+                    (self._source_embeddings))
             dataset = dataset.map(self._parser_estimate_non_conv)
 
         dataset = dataset.batch(self.params.model["batch_size"])
@@ -281,11 +536,19 @@ class DataBuilder():
         #iterator = dataset.make_one_shot_iterator()
         # global predict_input_fn
         # predict_input_fn = dataset
-        return dataset  # iterator.get_next()
-
-    def _load_predict_data(self):
-        self._source_embeddings = UTIL.load_embeddings(
-            os.path.join(self.base_path, self.params.files['prediction']['source_embeddings']))
+        return dataset #iterator.get_next()
+    def _load_predict_data(self, load_with_file_path=False):
+        if load_with_file_path:
+            self._source_embeddings = os.path.join(self.base_path, self.params.files['prediction']['source_embeddings'])
+            self._source_padded = os.path.join(self.base_path, self.params.files['prediction']['source_padded'])
+            self._source_length = os.path.join(self.base_path, self.params.files['prediction']['source_length'])
+            self._temp_source_embeddings = UTIL.load_embeddings(self._source_embeddings)
+        else:
+            self._source_embeddings = UTIL.load_embeddings(
+                os.path.join(self.base_path, self.params.files['prediction']['source_embeddings']))
+            self._source_padded =None
+            self._source_length = None
+            self._temp_source_embeddings = self._source_embeddings
         if self.KN_FILE_NAMES['DIR'].lower().startswith('qu'):
             tokenized_documents = self._tokenized_questions
         else:
@@ -293,25 +556,25 @@ class DataBuilder():
         if self.params.model['model_type'].lower() == 'conv':
             self._source_embeddings, self._source_embeddings_lengths = self._pad_documents(
                 tokenized_documents)
+            if load_with_file_path:
+                UTIL.dump_embeddings(self._source_embeddings, self._source_padded)
+                UTIL.dump_embeddings(self._source_embeddings_lengths, self._source_length,
+                                     dtype="int32")
+                self._source_embeddings,self._source_embeddings_lengths  = self._source_padded, self._source_length
         else:
             self._source_embeddings_lengths = np.zeros(
-                [self._source_embeddings.shape[0], self._source_embeddings.shape[1]])
+                [self._temp_source_embeddings.shape[0], 1])
+            if load_with_file_path:
+                UTIL.dump_embeddings(self._source_embeddings_lengths, self._source_length,
+                                     dtype="int32")
+                self._source_embeddings_lengths = self._source_length
+    """
+    **********************************************
+    PREDICT: END
+    **********************************************
+    """
 
-    def _load_data(self, data_type):
-        source_labels = UTIL.load_embeddings(os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_LABELS']])).astype(int)
-        source_indx = UTIL.load_embeddings(
-            os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_IDX']])).astype(int)
-        source_embeddings = UTIL.load_embeddings(
-            os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_SOURCE_EMBEDDINGS']]))
-        target_embeddings = UTIL.load_embeddings(
-            os.path.join(self.data_dir, self.params.files[data_type][self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']]))
-        try:
-            all_target_embeddings = UTIL.load_embeddings(
-                os.path.join(self.data_dir, self.params.files[data_type]["all_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS']]))
-        except:
-            print('{} is not found for {} type'.format("all_" + self.KN_FILE_NAMES['KN_TARGET_EMBEDDINGS'], data_type))
-            all_target_embeddings = None
-        return source_labels, source_indx, source_embeddings, target_embeddings,all_target_embeddings
+
 
 
 

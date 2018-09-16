@@ -165,8 +165,9 @@ def define_pre_executions(params, json_path, base_data_path):
 
             params.save(json_path)
             print('Done with splitting')
-        if not params.executor["is_prediction"]:
-            if not params.executor["is_training_resume"]:
+        if not params.executor["is_training_resume"]:
+            if not params.executor["is_prediction"]:
+                #if not params.executor["is_training_resume"]:
                 try:
                     shutil.rmtree(model_save_path)
                 except:
@@ -374,6 +375,8 @@ def get_file_key_names_for_execution(params):
         KN_FILE_NAMES["KN_SOURCE_LABELS"]= 'question_labels'
         KN_FILE_NAMES["KN_SOURCE_IDX"] = 'question_idx'
         KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]='paragraph_embeddings'
+        KN_FILE_NAMES["KN_SOURCE_PADDED"] = 'question_padded'
+        KN_FILE_NAMES["KN_SOURCE_LENGTH"] = 'question_length'
         KN_FILE_NAMES["DIR"] = 'question_training'
     else:
         # key names
@@ -381,6 +384,8 @@ def get_file_key_names_for_execution(params):
         KN_FILE_NAMES["KN_SOURCE_LABELS"] = 'paragraph_labels'
         KN_FILE_NAMES["KN_SOURCE_IDX"] = 'paragraph_idx'
         KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"] = 'question_embeddings'
+        KN_FILE_NAMES["KN_SOURCE_PADDED"] = 'paragraph_padded'
+        KN_FILE_NAMES["KN_SOURCE_LENGTH"] = 'paragraph_length'
         KN_FILE_NAMES["DIR"] = 'paragraph_training'
 
     return KN_FILE_NAMES
@@ -435,33 +440,60 @@ def train_test_splitter(params, base_path):
     train_source_indices, train_source_embeddings, train_target_embeddings = list(), list(), list()
     test_source_indices, test_source_embeddings, test_target_embeddings = list(), list(), list()
     recall_target_embeddings = list()
+    limits_paragraph = []
+    check_index = 1
     for order, indx in enumerate(labels_as_list):
         #indexes from source list where each of target equals to particular value.
         #sample: par_indx = 3, take all the questions's locationswhere their par_id =3
         #sample: que_indx = 5000, take all the paragraphs locations where their que_id = 5000 (paragraph has only 1 question that is 5000)
         #therefore, can we get all paragraphs locations that are in the group of same paragraph in which que_id = 5000
+
         if not params.executor['source'].lower().startswith('qu'):
             paragraph = pre_trained_question_labels[indx]
-            locations = [paragraph for _, x in enumerate(pre_trained_question_labels) if x == paragraph]
+            locations = []
+            #question_indx = []
+            for q, p in enumerate(pre_trained_question_labels):
+                if p == paragraph:
+                    locations.append(q)
+                    #question_indx.append(q)
+
+            if indx in limits_paragraph:
+                continue
+            limits_paragraph = limits_paragraph + locations
+
+            for q_indx in locations:
+                recall_target_embeddings.append(target_embeddings[q_indx])
+            print(20 * '-')
+            print('Processed {}'.format(check_index))
+            print(20 * '-')
+            check_index +=1
         else:
+            print(20 * '-')
+            print('Processed {}'.format(check_index))
+            print(20 * '-')
+            check_index += 1
             locations = [_ for _, x in enumerate(source_label_list) if x == indx]
+            recall_target_embeddings.append(target_embeddings[indx])
         seed(params.model['seed'])
         shuffle(locations)
         occur = len(locations)
         print(10 * '*')
-        print('For target({}) : {}, we have -> {} sources({}) ---> {}'.format(target, indx, occur, params.executor['source'].lower() ,locations))
+        print('For target({}) : {}, we have -> {} sources({}) ---> {}'.format(target, indx, occur, params.executor['source'].lower() ,locations if params.executor['source'].lower().startswith('qu') else [paragraph for _ in locations]))
         for_local_train_size = math.ceil(occur * params.files['splitter']['train_split_rate'])
         for_local_train_locations = locations[0:for_local_train_size]
         for_local_train_labels = list()
         for_local_train_source_embeddings = list()
         for_local_train_target_embeddings = list()
         for_local_train_source_indices = list()
-        recall_target_embeddings.append(target_embeddings[indx])
         for _l in for_local_train_locations:
             for_local_train_labels.append(order)
-            for_local_train_source_embeddings.append(source_embeddings[_l])
+            if params.executor['source'].lower().startswith('qu'):
+                for_local_train_source_embeddings.append(source_embeddings[_l])
+                for_local_train_source_indices.append(_l)
+            else:
+                for_local_train_source_embeddings.append(source_embeddings[paragraph])
+                for_local_train_source_indices.append(paragraph)
             for_local_train_target_embeddings.append(target_embeddings[indx])
-            for_local_train_source_indices.append(_l)
         train_labels.extend(for_local_train_labels)
         train_source_embeddings.extend(for_local_train_source_embeddings)
         train_target_embeddings.extend(for_local_train_target_embeddings)
@@ -476,9 +508,13 @@ def train_test_splitter(params, base_path):
         for_local_test_source_indices = list()
         for _l in for_local_test_locations:
             for_local_test_labels.append(order)
-            for_local_test_source_embeddings.append(source_embeddings[_l])
+            if params.executor['source'].lower().startswith('qu'):
+                for_local_test_source_embeddings.append(source_embeddings[_l])
+                for_local_test_source_indices.append(_l)
+            else:
+                for_local_test_source_embeddings.append(source_embeddings[paragraph])
+                for_local_test_source_indices.append(paragraph)
             for_local_test_target_embeddings.append(target_embeddings[indx])
-            for_local_test_source_indices.append(_l)
         test_labels.extend(for_local_test_labels)
         test_source_embeddings.extend(for_local_test_source_embeddings)
         test_target_embeddings.extend(for_local_test_target_embeddings)

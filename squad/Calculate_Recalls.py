@@ -3,6 +3,7 @@ from collections import Counter, defaultdict
 from tqdm import tqdm
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
+import math
 import spacy
 import os
 import sys
@@ -20,43 +21,63 @@ datadir = os.path.join(_basepath, dataset_type)
 
 _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
+partition = 50
 
-question_embedddings_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/test_question_5000_embeddings.hdf5'
-paragraph_embeddings_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/recall_paragraph_embeddings.hdf5'
-question_labels_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/test_question_5000_labels.hdf5'
+source_embedddings_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/improved_question_embeddings.hdf5'
+target_embeddings_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/paragraph_embeddings.hdf5'
+labels_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/question_labels.hdfs'
 recalls_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/recalls_###.csv'
 is_from_scratch = False ## Whether you want to fill the p_to_q list from a squad txt file or manually provided by question_labels_path
 
 
-def calculate_recall_at_n(ns, data, number_of_questions):
+def calculate_recall_at_n(ns, data, number_of_sources):
     recalls = []
     for i in ns:
         total_number = len(data[(data['nearest_neighbor_order'] < i) & (data['ground_truth'] == True) ])
-        recalls.append((i, total_number, total_number/number_of_questions))
+        recalls.append((i, total_number, total_number/number_of_sources))
     return recalls
 
-def calculate_similarity_and_dump(paragraphs_embeddings,
-                                  questions_embeddings,
-                                  q_to_p,
-                                  number_of_questions,
+def calculate_similarity_and_dump(target_embeddings,
+                                  source_embeddings,
+                                  s_to_t,
+                                  number_of_sources,
                                   outfile):
+    columns = ['source', 'target', 'ground_truth', 'is_model_answered_correctly',
+               'cosine_score', 'nearest_neighbor_order']
     neighbor_list = []
-    for _id, _q_embedding in enumerate(tqdm(questions_embeddings, total=len(questions_embeddings))):
+    partition_size = math.ceil(source_embeddings.shape[0] / partition)
+    partition_counter = 1
+    print('Each partition has {} size for total {} records'.format(partition_size, source_embeddings.shape[0]))
+    for _id, _q_embedding in enumerate(tqdm(source_embeddings, total=len(source_embeddings))):
         _q_embedding = np.array([_q_embedding])
-        sk_sim = cosine_similarity(_q_embedding, paragraphs_embeddings)[0]
+        sk_sim = cosine_similarity(_q_embedding, target_embeddings)[0]
         neighbors = np.argsort(-sk_sim)
         for _, neighbor_id in enumerate(neighbors):
             neighbor_list.append((_id,
                                   neighbor_id,
-                                  (q_to_p[_id] == neighbor_id),
+                                  (s_to_t[_id] == neighbor_id),
                                   True,
                                   sk_sim[neighbor_id],
                                   _,
                                   ))
+        if _id == partition_size*partition_counter:
+            print('Partition {} is completed'.format(partition_counter))
+            df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
+            df_neighbor_within_paragraph.to_csv(outfile.replace('###', 'partition_' + str(partition_counter)), index=False)
+            partition_counter +=1
+            neighbor_list = []
+    if neighbor_list:
+        print('Last Partition {} is also completed'.format(partition_counter))
+        df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
+        df_neighbor_within_paragraph.to_csv(outfile.replace('###', 'partition_' + str(partition_counter)), index=False)
+        partition_counter += 1
+        neighbor_list = []
 
-    columns = ['question', 'paragraph', 'ground_truth', 'is_model_answered_correctly',
-               'cosine_score', 'nearest_neighbor_order']
-    df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
+    neighbor_within_paragraph = []
+    for part_counter in range(1, partition_counter+1):
+        neighbor_within_paragraph.append(pd.read_csv(outfile.replace('###', 'partition_' + str(part_counter))))
+
+    df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_within_paragraph, columns=columns)
     df_neighbor_within_paragraph = df_neighbor_within_paragraph[
         df_neighbor_within_paragraph['is_model_answered_correctly'] == True]
 
@@ -65,7 +86,7 @@ def calculate_similarity_and_dump(paragraphs_embeddings,
     recall_columns = ['n', 'number_of_true', 'normalized_recalls']
     df_neighbor_within_paragraph_recalls = pd.DataFrame(data=calculate_recall_at_n(recall_ns,
                                                                                    df_neighbor_within_paragraph,
-                                                                                   number_of_questions)
+                                                                                   number_of_sources)
                                                         , columns=recall_columns
                                                         )
 
@@ -126,12 +147,12 @@ if is_from_scratch:
 
 else:
 
-    q_to_ps = UTIL.load_embeddings(question_labels_path)
+    s_to_ts = UTIL.load_embeddings(labels_path).astype(int)
 
-paragraphs_embeddings = UTIL.load_embeddings(paragraph_embeddings_path)
-questions_embeddings = UTIL.load_embeddings(question_embedddings_path)
-calculate_similarity_and_dump(paragraphs_embeddings,
-                                      questions_embeddings,
-                                      q_to_ps,
-                                      len(questions_embeddings),
+target_embeddings = UTIL.load_embeddings(target_embeddings_path)
+source_embeddings = UTIL.load_embeddings(source_embedddings_path)
+calculate_similarity_and_dump(target_embeddings,
+                                      source_embeddings,
+                                      s_to_ts,
+                                      len(source_embeddings),
                                       recalls_path)

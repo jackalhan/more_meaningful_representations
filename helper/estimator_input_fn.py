@@ -8,7 +8,6 @@ import tensorflow as tf
 import numpy as np
 from tqdm import tqdm
 from tensorflow.python.keras.preprocessing import sequence
-import helper.globalizer
 
 
 class DataBuilder():
@@ -185,11 +184,10 @@ class DataBuilder():
             dataset = dataset.shuffle(buffer_size=self._train_source_embeddings.shape[0])
         dataset = dataset.batch(self.params.model["batch_size"])
         # dataset = dataset.repeat()
-        dataset = dataset.shuffle(buffer_size=self.params.model["batch_size"], seed=1)
+        # dataset = dataset.shuffle(buffer_size=self.params.model["batch_size"], seed=1)
         dataset = dataset.prefetch(1)
         # #iterator = dataset.make_one_shot_iterator()
-        def helper.globalizer.train_input_fn():return dataset
-        #return dataset #iterator.get_next()
+        return dataset #iterator.get_next()
 
     def _load_train_data(self):
         self._train_source_labels, self._train_source_indx, self._train_source_embeddings, self._train_target_embeddings, self._train_all_target_embeddings = self._load_data('train_loss')
@@ -221,8 +219,7 @@ class DataBuilder():
         #iterator = dataset.make_one_shot_iterator()
         # return dataset #iterator.get_next()
         # global train_recall_input_fn
-        helper.globalizer.train_recall_input_fn  = dataset
-        #return dataset
+        return dataset
 
     def _load_train_recall_data(self):
         self._train_recall_source_labels, self._train_recall_source_indx, self._train_recall_source_embeddings, self._train_recall_target_embeddings, self._train_recall_all_target_embeddings = self._load_data('train_subset_recall')
@@ -257,8 +254,7 @@ class DataBuilder():
         #iterator = dataset.make_one_shot_iterator()
         #return dataset #iterator.get_next()
         # global test_recall_input_fn
-        helper.globalizer.test_recall_input_fn = dataset
-        #return dataset
+        return dataset
     def _load_test_recall_data(self):
         self._test_recall_source_labels, self._test_recall_source_indx, self._test_recall_source_embeddings, self._test_recall_target_embeddings, self._test_recall_all_target_embeddings = self._load_data('test_subset_recall')
         self._test_recall_baseline_source_embeddings = self._test_recall_source_embeddings
@@ -285,8 +281,7 @@ class DataBuilder():
         #iterator = dataset.make_one_shot_iterator()
         # global predict_input_fn
         # predict_input_fn = dataset
-        #return dataset  # iterator.get_next()
-        helper.globalizer.predict_input_fn = dataset
+        return dataset  # iterator.get_next()
 
     def _load_predict_data(self):
         self._source_embeddings = UTIL.load_embeddings(

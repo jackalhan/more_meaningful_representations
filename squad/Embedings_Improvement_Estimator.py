@@ -70,14 +70,11 @@ def prepare_dict_to_print(result_as_dict_list, params, data_dict, epoch):
 def execute_non_conv_pipeline(params, base_data_path, config, tf, databuilder):
     estimator = tf.estimator.Estimator(model_fn, params=params, config=config)
     if not params.executor["is_prediction"]:
-        helper.globalizer.train_input_fn = databuilder.train_input_fn()
-        _train_input_fn = lambda: helper.globalizer.train_input_fn()
+        _train_input_fn = lambda: databuilder.train_input_fn()
         if params.executor["recall_calculation_for"] == 'test':
-            helper.globalizer.test_recall_input_fn = databuilder.test_recall_input_fn()
-            _recall_input_fn = lambda: helper.globalizer.test_recall_input_fn()
+            _recall_input_fn = lambda: databuilder.test_recall_input_fn()
         else:
-            helper.globalizer.train_recall_input_fn = databuilder.train_recall_input_fn()
-            _recall_input_fn = lambda: helper.globalizer.train_recall_input_fn()
+            _recall_input_fn = lambda: databuilder.train_recall_input_fn()
 
 
         if not params.executor["is_debug_mode"]:
@@ -291,7 +288,6 @@ if __name__ == '__main__':
     # IF MODEL TYPE IS CONV, START THE PIPELINE ACCORDINGLY
     db = DataBuilder(base_data_path, params, ['train', params.executor["recall_calculation_for"] + '_recall', 'predict'])
     params = db.params
-    helper.globalizer.init()
     if params.model['model_type'].lower() == 'conv':
         execute_conv_pipeline(params, base_data_path, config,tf, db)
     else:

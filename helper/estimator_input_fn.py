@@ -201,20 +201,23 @@ class DataBuilder():
         self._paragraphs_nontokenized = paragraphs_nontokenized
 
     def _build_vocabulary(self):
-        if self.KN_FILE_NAMES['dir'].lower().startswith('qu'):
+        if self.KN_FILE_NAMES['DIR'].lower().startswith('qu'):
             tokenized_sources = self._tokenized_questions
         else:
             tokenized_sources = self._tokenized_paragraphs
         indx_to_voc, self.voc_to_indx = UTIL.vocabulary_processor(tokenized_sources)
         self.vocab_size = len(self.voc_to_indx)
+        self.params.files['vocab_size'] = self.vocab_size
         print('Vocab Size: %d' % self.vocab_size)
         # params.files['questions_vocab_size'] = vocab_size
-        print('vocabulary is build on {}'.format(self.KN_FILE_NAMES['dir']))
+        print('vocabulary is build on {}'.format(self.KN_FILE_NAMES['DIR']))
 
     def _obtain_tokenized_documents(self, source_indx):
         documents = []
+        if self.load_with_file_path:
+            source_indx = UTIL.load_embeddings(source_indx).astype(int)
         for indx in tqdm(source_indx):
-            if self.KN_FILE_NAMES['dir'].lower().startswith('qu'):
+            if self.KN_FILE_NAMES['DIR'].lower().startswith('qu'):
                 document = self._questions_nontokenized[indx]
             else:
                 document = self._paragraphs_nontokenized[indx]
@@ -243,8 +246,8 @@ class DataBuilder():
             if self.load_with_file_path:
                 # to get the size of the data
                 _train_source_embeddings = self._read_dataset(self._train_source_embeddings,self.params.files['max_document_len'], data_type=tf.int32)
-                _train_source_embeddings_lengths = self._read_dataset(self._train_source_embeddings,
-                                                       self.params.files['max_document_len'], data_type=tf.int32)
+                _train_source_embeddings_lengths = self._read_dataset(self._train_source_embeddings_lengths,
+                                                       None, data_type=tf.int32)
                 _train_baseline_source_embeddings = self._read_dataset(self._train_baseline_source_embeddings,self.params.files['pre_trained_files']['embedding_dim'])
                 _train_target_embeddings = self._read_dataset(self._train_target_embeddings,
                                                                        self.params.files['pre_trained_files'][
@@ -358,7 +361,7 @@ class DataBuilder():
             if self.load_with_file_path:
                 _train_recall_source_embeddings = self._read_dataset(self._train_recall_source_embeddings,self.params.files['max_document_len'], data_type=tf.int32)
                 _train_recall_source_embeddings_lengths = self._read_dataset(self._train_recall_source_embeddings_lengths,
-                                                       self.params.files['max_document_len'], data_type=tf.int32)
+                                                       None, data_type=tf.int32)
                 _train_recall_baseline_source_embeddings = self._read_dataset(self._train_recall_baseline_source_embeddings,self.params.files['pre_trained_files']['embedding_dim'])
                 _train_recall_target_embeddings = self._read_dataset(self._train_recall_target_embeddings,
                                                                        self.params.files['pre_trained_files'][
@@ -418,7 +421,7 @@ class DataBuilder():
             if self.load_with_file_path:
                 _test_recall_source_embeddings = self._read_dataset(self._test_recall_source_embeddings,self.params.files['max_document_len'], data_type=tf.int32)
                 _test_recall_source_embeddings_lengths = self._read_dataset(self._test_recall_source_embeddings_lengths,
-                                                       self.params.files['max_document_len'], data_type=tf.int32)
+                                                       None, data_type=tf.int32)
                 _test_recall_baseline_source_embeddings = self._read_dataset(self._test_recall_baseline_source_embeddings,self.params.files['pre_trained_files']['embedding_dim'])
                 _test_recall_target_embeddings = self._read_dataset(self._test_recall_target_embeddings,
                                                                        self.params.files['pre_trained_files'][
@@ -511,8 +514,7 @@ class DataBuilder():
                                                                     self.params.files['max_document_len'],
                                                                     data_type=tf.int32)
                 _source_embeddings_lengths = self._read_dataset(self._source_embeddings_lengths,
-                                                                    self.params.files['pre_trained_files'][
-                                                                        'embedding_dim'])
+                                                                    None,tf.int32)
                 dataset = tf.data.Dataset.zip((_source_embeddings, _source_embeddings_lengths))
             else:
                 dataset = tf.data.Dataset.from_tensor_slices(

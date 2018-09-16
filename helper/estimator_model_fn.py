@@ -202,11 +202,10 @@ def model_fn(features, labels, mode, params, config):
     global_step = tf.train.get_global_step()
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
-    baseline_source_embeddings = features['source_embeddings']
-    # if params.model['model_type'].lower() == 'conv':
-    #     baseline_source_embeddings = features['source_embeddings']
-    # else:
-    #     baseline_question_embeddings = features
+    if params.model['model_type'].lower() == 'conv':
+        baseline_source_embeddings = features['baseline_source_embeddings']
+    else:
+        baseline_source_embeddings = features['source_embeddings']
     before_model_embeddings = tf.nn.l2_normalize(baseline_source_embeddings,
                                                      name='normalized_before_model_source_embeddings', axis=1)
     # -----------------------------------------------------------

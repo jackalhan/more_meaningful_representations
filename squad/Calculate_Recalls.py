@@ -22,7 +22,8 @@ datadir = os.path.join(_basepath, dataset_type)
 _squad_file_name = '{}-v1.1.json'
 squad_file = os.path.join(datadir, _squad_file_name)
 partition = 50
-
+left_off = 17
+is_all_done=True
 source_embedddings_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/improved_question_embeddings.hdf5'
 target_embeddings_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/paragraph_embeddings.hdf5'
 labels_path = '/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/recall_test/question_labels.hdfs'
@@ -48,34 +49,40 @@ def calculate_similarity_and_dump(target_embeddings,
     partition_size = math.ceil(source_embeddings.shape[0] / partition)
     partition_counter = 1
     print('Each partition has {} size for total {} records'.format(partition_size, source_embeddings.shape[0]))
-    for _id, _q_embedding in enumerate(tqdm(source_embeddings, total=len(source_embeddings))):
-        _q_embedding = np.array([_q_embedding])
-        sk_sim = cosine_similarity(_q_embedding, target_embeddings)[0]
-        neighbors = np.argsort(-sk_sim)
-        for _, neighbor_id in enumerate(neighbors):
-            neighbor_list.append((_id,
-                                  neighbor_id,
-                                  (s_to_t[_id] == neighbor_id),
-                                  True,
-                                  sk_sim[neighbor_id],
-                                  _,
-                                  ))
-        if _id == partition_size*partition_counter:
-            print('Partition {} is completed'.format(partition_counter))
+    if not is_all_done:
+        for _id, _q_embedding in enumerate(tqdm(source_embeddings, total=len(source_embeddings))):
+            if partition_counter < left_off:
+                partition_counter += 1
+                continue
+            _q_embedding = np.array([_q_embedding])
+            sk_sim = cosine_similarity(_q_embedding, target_embeddings)[0]
+            neighbors = np.argsort(-sk_sim)
+            for _, neighbor_id in enumerate(neighbors):
+                neighbor_list.append((_id,
+                                      neighbor_id,
+                                      (s_to_t[_id] == neighbor_id),
+                                      True,
+                                      sk_sim[neighbor_id],
+                                      _,
+                                      ))
+            if _id == partition_size*partition_counter:
+                print('Partition {} is completed'.format(partition_counter))
+                df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
+                df_neighbor_within_paragraph.to_csv(outfile.replace('###', 'partition_' + str(partition_counter)), index=False)
+                partition_counter +=1
+                neighbor_list = []
+
+        if neighbor_list:
+            print('Last Partition {} is also completed'.format(partition_counter))
             df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
             df_neighbor_within_paragraph.to_csv(outfile.replace('###', 'partition_' + str(partition_counter)), index=False)
-            partition_counter +=1
+            partition_counter += 1
             neighbor_list = []
-    if neighbor_list:
-        print('Last Partition {} is also completed'.format(partition_counter))
-        df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_list, columns=columns)
-        df_neighbor_within_paragraph.to_csv(outfile.replace('###', 'partition_' + str(partition_counter)), index=False)
-        partition_counter += 1
-        neighbor_list = []
 
     neighbor_within_paragraph = []
-    for part_counter in range(1, partition_counter+1):
+    for part_counter in range(1, partition+1):
         neighbor_within_paragraph.append(pd.read_csv(outfile.replace('###', 'partition_' + str(part_counter))))
+        print("{} is completed".format(part_counter))
 
     df_neighbor_within_paragraph = pd.DataFrame(data=neighbor_within_paragraph, columns=columns)
     df_neighbor_within_paragraph = df_neighbor_within_paragraph[

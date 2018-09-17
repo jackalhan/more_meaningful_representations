@@ -81,17 +81,17 @@ def model_3(input, params):
             source_embeddings, params.files['vocab_size'], params.files['pre_trained_files']['embedding_dim'],
             initializer=params.model['conv_embedding_initializer'])
 
-        dropout_emb = tf.layers.dropout(inputs=embedding_layer,
-                                       rate=conf['keep_prob'],
-                                       training=True)
+        # dropout_emb = tf.layers.dropout(inputs=embedding_layer,
+        #                                rate=conf['keep_prob'],
+        #                                training=True)
 
-        conv1 = tf.layers.conv1d(dropout_emb, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
+        conv1 = tf.layers.conv1d(embedding_layer, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
         conv2 = tf.layers.conv1d(conv1, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
         conv3 = tf.layers.conv1d(conv2, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        min_avg_pooling = tf.reduce_min(conv3, axis=1)
+        avg_pooling = tf.reduce_mean(conv3, axis=1)
 
         # dropout_hidden = tf.layers.dropout(inputs=min_avg_pooling, rate=conf['keep_prob'])
         #
@@ -137,7 +137,7 @@ def model_3(input, params):
         #
         # dense_output = tf.layers.dense(inputs=dropout_hidden, units=conf['final_unit'])
 
-        output = tf.add(min_avg_pooling * conf['scaling_factor'], baseline_source_embeddings)
+        output = tf.add(avg_pooling * conf['scaling_factor'], baseline_source_embeddings)
     return output
 
 

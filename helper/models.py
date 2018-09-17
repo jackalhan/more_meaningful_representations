@@ -81,7 +81,11 @@ def model_3(input, params):
             source_embeddings, params.files['vocab_size'], params.files['pre_trained_files']['embedding_dim'],
             initializer=params.model['conv_embedding_initializer'])
 
-        conv1 = tf.layers.conv1d(embedding_layer, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
+        dropout_emb = tf.layers.dropout(inputs=embedding_layer,
+                                       rate=conf['keep_prob'],
+                                       training=True)
+
+        conv1 = tf.layers.conv1d(dropout_emb, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
         conv2 = tf.layers.conv1d(conv1, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 

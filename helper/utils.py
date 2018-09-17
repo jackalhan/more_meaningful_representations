@@ -208,9 +208,9 @@ def train_test_splitter_deprecated(params, base_path):
     question_embeddings = load_embeddings(pre_trained_question_embeddings_file)
     paragraph_embeddings = load_embeddings(pre_trained_paragraph_embeddings_file)
     num_labels = len(set(pre_trained_question_labels))
-    if params.executor['limit_paragraph_size'] is not None:
+    if params.executor['limit_source_size'] is not None:
         # just grab the questions within the size of the paragraph that are limited with this parameter
-        num_labels = params.executor['limit_paragraph_size']
+        num_labels = params.executor['limit_source_size']
 
     labels_as_list = list(range(num_labels))
     seed(params.model['seed'])
@@ -302,7 +302,7 @@ def train_test_splitter_deprecated(params, base_path):
     # Creating a subset test set from the test set
     random.seed(params.model['seed'])
     random.shuffle(test)
-    if params.executor['limit_paragraph_size'] is not None:
+    if params.executor['limit_source_size'] is not None:
         number_of_files_for_test = range(1, params.files['splitter']['test_subset_size'] + 1)
     else:
         number_of_files_for_test = [params.files['splitter']['test_subset_size']]
@@ -325,7 +325,7 @@ def train_test_splitter_deprecated(params, base_path):
 
     random.seed(params.model['seed'])
     random.shuffle(train)
-    if params.executor['limit_paragraph_size'] is not None:
+    if params.executor['limit_source_size'] is not None:
         number_of_files_for_train = range(1, params.files['splitter']['train_subset_size'] + 1)
     else:
         number_of_files_for_train = [params.files['splitter']['train_subset_size']]
@@ -390,6 +390,69 @@ def get_file_key_names_for_execution(params):
 
     return KN_FILE_NAMES
 
+def split_checker(row_num_to_check, source_god_file_path, target_god_file_path, s_to_t_mapping_file_path,
+                  splitted_source_file_path, splitted_target_file_path, splitted_source_file_idx_path, splitted_source_file_label_path, recall_file_path,
+                  type='question'):
+
+    source_god_file = load_embeddings(source_god_file_path)
+    target_god_file = load_embeddings(target_god_file_path)
+    s_to_t_mapping_file_path = pd.read_csv(s_to_t_mapping_file_path)
+    splitted_source_file = load_embeddings(splitted_source_file_path)
+    splitted_target_file = load_embeddings(splitted_target_file_path)
+    splitted_source_file_idx = load_embeddings(splitted_source_file_idx_path).astype(int)
+    splitted_source_file_label = load_embeddings(splitted_source_file_label_path).astype(int)
+    recall_file = load_embeddings(recall_file_path)
+
+    source_row_complex_value_from_source_file = splitted_source_file[row_num_to_check]
+    print('{} in splitted_source_file -> {}'.format(row_num_to_check, source_row_complex_value_from_source_file))
+
+    source_idx_for_god_source_file = splitted_source_file_idx[row_num_to_check]
+    print('{} in splitted_source_file_idx -> {}'.format(row_num_to_check, source_idx_for_god_source_file))
+
+    source_complex_value_from_source_god_file = source_god_file[source_idx_for_god_source_file]
+    print('{} in source_god_file -> {}'.format(source_idx_for_god_source_file, source_complex_value_from_source_god_file))
+
+    if np.array_equal(source_row_complex_value_from_source_file, source_complex_value_from_source_god_file):
+        print('source_row_complex_value_from_source_file and source_complex_value_from_source_god_file are equal')
+    else:
+        print('source_row_complex_value_from_source_file and source_complex_value_from_source_god_file are NOT equal')
+        print('{} - {}'.format(source_row_complex_value_from_source_file, source_complex_value_from_source_god_file))
+
+    target_complex_value_from_target_file = splitted_target_file[row_num_to_check]
+    print('{} in splitted_target_file -> {}'.format(row_num_to_check, target_complex_value_from_target_file))
+
+    source_label_value_from_labels_file = splitted_source_file_label[row_num_to_check]
+    print('{} in splitted_source_file_label -> {}'.format(row_num_to_check, source_label_value_from_labels_file))
+
+    target_complex_value_from_recall_file = recall_file[source_label_value_from_labels_file]
+    print('{} in recall_file -> {}'.format(row_num_to_check, target_complex_value_from_recall_file))
+
+    if np.array_equal(target_complex_value_from_recall_file,target_complex_value_from_target_file):
+        print('target_complex_value_from_target_file and target_complex_value_from_recall_file are equal')
+    else:
+        print('target_complex_value_from_target_file and target_complex_value_from_recall_file are NOT equal')
+        print('{} - {}'.format(target_complex_value_from_recall_file, target_complex_value_from_target_file))
+    if type == 'question':
+        target_god_label_value = s_to_t_mapping_file_path[s_to_t_mapping_file_path['q'] == source_idx_for_god_source_file]
+        target_god_label_value = target_god_label_value['p'].values[0]
+        target_god_complex_value = target_god_file[target_god_label_value]
+        if np.array_equal(target_god_complex_value,target_complex_value_from_target_file):
+            print('target_god_complex_value and target_complex_value_from_recall_file are equal')
+        else:
+            print('target_god_complex_value and target_complex_value_from_recall_file are NOT equal')
+            print('{} - {}'.format(target_god_complex_value, target_complex_value_from_target_file))
+    else:
+        target_god_label_value = s_to_t_mapping_file_path[
+            s_to_t_mapping_file_path['p'] == source_idx_for_god_source_file]
+        target_god_label_value = target_god_label_value['q'].values[0]
+        target_god_complex_value = target_god_file[target_god_label_value]
+        if np.array_equal(target_god_complex_value, target_complex_value_from_target_file):
+            print('target_god_complex_value and target_complex_value_from_recall_file are equal')
+        else:
+            print('target_god_complex_value and target_complex_value_from_recall_file are NOT equal')
+            print('{} - {}'.format(target_god_complex_value, target_complex_value_from_target_file))
+    print('Done')
+
 def train_test_splitter(params, base_path):
     """ Read the embedding file with its labels and split it train - test
         Args:
@@ -440,88 +503,88 @@ def train_test_splitter(params, base_path):
     train_source_indices, train_source_embeddings, train_target_embeddings = list(), list(), list()
     test_source_indices, test_source_embeddings, test_target_embeddings = list(), list(), list()
     recall_target_embeddings = list()
-    limits_paragraph = []
-    check_index = 1
-    for order, indx in enumerate(labels_as_list):
-        #indexes from source list where each of target equals to particular value.
-        #sample: par_indx = 3, take all the questions's locationswhere their par_id =3
-        #sample: que_indx = 5000, take all the paragraphs locations where their que_id = 5000 (paragraph has only 1 question that is 5000)
-        #therefore, can we get all paragraphs locations that are in the group of same paragraph in which que_id = 5000
-
-        if not params.executor['source'].lower().startswith('qu'):
-            paragraph = pre_trained_question_labels[indx]
-            locations = []
-            #question_indx = []
-            for q, p in enumerate(pre_trained_question_labels):
-                if p == paragraph:
-                    locations.append(q)
-                    #question_indx.append(q)
-
-            if indx in limits_paragraph:
-                continue
-            limits_paragraph = limits_paragraph + locations
-
-            for q_indx in locations:
-                recall_target_embeddings.append(target_embeddings[q_indx])
+    if params.executor['source'].lower().startswith('qu'):
+        for order, indx in enumerate(labels_as_list):
             print(20 * '-')
-            print('Processed {}'.format(check_index))
+            print('Processed {}'.format(order + 1))
             print(20 * '-')
-            check_index +=1
-        else:
-            print(20 * '-')
-            print('Processed {}'.format(check_index))
-            print(20 * '-')
-            check_index += 1
             locations = [_ for _, x in enumerate(source_label_list) if x == indx]
             recall_target_embeddings.append(target_embeddings[indx])
-        seed(params.model['seed'])
-        shuffle(locations)
-        occur = len(locations)
-        print(10 * '*')
-        print('For target({}) : {}, we have -> {} sources({}) ---> {}'.format(target, indx, occur, params.executor['source'].lower() ,locations if params.executor['source'].lower().startswith('qu') else [paragraph for _ in locations]))
-        for_local_train_size = math.ceil(occur * params.files['splitter']['train_split_rate'])
-        for_local_train_locations = locations[0:for_local_train_size]
-        for_local_train_labels = list()
-        for_local_train_source_embeddings = list()
-        for_local_train_target_embeddings = list()
-        for_local_train_source_indices = list()
-        for _l in for_local_train_locations:
-            for_local_train_labels.append(order)
-            if params.executor['source'].lower().startswith('qu'):
+            seed(params.model['seed'])
+            shuffle(locations)
+            occur = len(locations)
+            print(10 * '*')
+            print('For target({}) : {}, we have -> {} sources({}) ---> {}'.format(target, indx, occur, params.executor['source'].lower() ,locations))
+            for_local_train_size = math.ceil(occur * params.files['splitter']['train_split_rate'])
+            for_local_train_locations = locations[0:for_local_train_size]
+            for_local_train_labels = list()
+            for_local_train_source_embeddings = list()
+            for_local_train_target_embeddings = list()
+            for_local_train_source_indices = list()
+            for _l in for_local_train_locations:
+                for_local_train_labels.append(order)
                 for_local_train_source_embeddings.append(source_embeddings[_l])
                 for_local_train_source_indices.append(_l)
-            else:
-                for_local_train_source_embeddings.append(source_embeddings[paragraph])
-                for_local_train_source_indices.append(paragraph)
-            for_local_train_target_embeddings.append(target_embeddings[indx])
-        train_labels.extend(for_local_train_labels)
-        train_source_embeddings.extend(for_local_train_source_embeddings)
-        train_target_embeddings.extend(for_local_train_target_embeddings)
-        train_source_indices.extend(for_local_train_source_indices)
-        print('Train Size {} ---> {}'.format(for_local_train_size, for_local_train_locations))
+                for_local_train_target_embeddings.append(target_embeddings[indx])
+            train_labels.extend(for_local_train_labels)
+            train_source_embeddings.extend(for_local_train_source_embeddings)
+            train_target_embeddings.extend(for_local_train_target_embeddings)
+            train_source_indices.extend(for_local_train_source_indices)
+            print('Train Size {} ---> {}'.format(for_local_train_size, for_local_train_locations))
 
-        for_local_test_locations = locations[for_local_train_size:]
-        for_local_test_size = len(for_local_test_locations)
-        for_local_test_labels = list()
-        for_local_test_source_embeddings = list()
-        for_local_test_target_embeddings = list()
-        for_local_test_source_indices = list()
-        for _l in for_local_test_locations:
-            for_local_test_labels.append(order)
-            if params.executor['source'].lower().startswith('qu'):
+            for_local_test_locations = locations[for_local_train_size:]
+            for_local_test_size = len(for_local_test_locations)
+            for_local_test_labels = list()
+            for_local_test_source_embeddings = list()
+            for_local_test_target_embeddings = list()
+            for_local_test_source_indices = list()
+            for _l in for_local_test_locations:
+                for_local_test_labels.append(order)
                 for_local_test_source_embeddings.append(source_embeddings[_l])
                 for_local_test_source_indices.append(_l)
-            else:
-                for_local_test_source_embeddings.append(source_embeddings[paragraph])
-                for_local_test_source_indices.append(paragraph)
-            for_local_test_target_embeddings.append(target_embeddings[indx])
-        test_labels.extend(for_local_test_labels)
-        test_source_embeddings.extend(for_local_test_source_embeddings)
-        test_target_embeddings.extend(for_local_test_target_embeddings)
-        test_source_indices.extend(for_local_test_source_indices)
-        print('Test Size {} ---> {}'.format(for_local_test_size, for_local_test_locations))
+                for_local_test_target_embeddings.append(target_embeddings[indx])
 
-    # assert num_labels == len(set(test_labels)), "Actual Num of Labels: {} vs Test Num of Labels {}".format(num_labels, len(set(test_labels)))
+            test_labels.extend(for_local_test_labels)
+            test_source_embeddings.extend(for_local_test_source_embeddings)
+            test_target_embeddings.extend(for_local_test_target_embeddings)
+            test_source_indices.extend(for_local_test_source_indices)
+            print('Test Size {} ---> {}'.format(for_local_test_size, for_local_test_locations))
+
+    else:
+        if params.files['splitter']['train_split_rate'] is None:
+            for_local_train_size = math.ceil(len(labels_as_list) * params.files['splitter']['train_split_rate'])
+        else:
+            for_local_train_size = params.files['splitter']['split_with_fix_number']
+        for_local_train_locations = labels_as_list[0:for_local_train_size]
+        for_local_test_locations = labels_as_list[for_local_train_size:]
+
+        for_local_test_size = len(for_local_test_locations)
+
+        for order, indx in enumerate(for_local_train_locations):
+            _l = set([x for _, x in enumerate(pre_trained_question_labels) if _ == indx])
+            _l = next(iter(_l))
+            recall_target_embeddings.append(target_embeddings[indx])
+            train_labels.append(order)
+            train_source_embeddings.append(source_embeddings[_l])
+            train_source_indices.append(_l)
+            train_target_embeddings.append(target_embeddings[indx])
+            print(str(order))
+        print(50 * '*')
+        print('Train Size {}'.format(for_local_train_size))
+        print(50 * '*')
+        for order, indx in enumerate(for_local_test_locations, order+1):
+            _l = set([x for _, x in enumerate(pre_trained_question_labels) if _ == indx])
+            _l = next(iter(_l))
+            recall_target_embeddings.append(target_embeddings[indx])
+            test_labels.append(order)
+            test_source_embeddings.append(source_embeddings[_l])
+            test_source_indices.append(_l)
+            test_target_embeddings.append(target_embeddings[indx])
+            print(str(order))
+        print(50 * '*')
+        print('Test Size {}'.format(for_local_test_size))
+        print(50 * '*')
+            # assert num_labels == len(set(test_labels)), "Actual Num of Labels: {} vs Test Num of Labels {}".format(num_labels, len(set(test_labels)))
 
     train = list(zip(train_source_embeddings, train_labels, train_target_embeddings, train_source_indices))
     test = list(zip(test_source_embeddings, test_labels, test_target_embeddings, test_source_indices))

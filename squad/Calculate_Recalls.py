@@ -31,6 +31,32 @@ recalls_path = '/home/jackalhan/Development/github/more_meaningful_representatio
 is_from_scratch = False ## Whether you want to fill the p_to_q list from a squad txt file or manually provided by question_labels_path
 
 
+#"QUESTION"
+
+# UTIL.split_checker(633,
+#                    "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_embeddings.hdf5",
+#                    "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/paragraph_embeddings.hdf5",
+#                    "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_labels.csv",
+#                    "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_training/test_question_embeddings.hdf5",
+#                    "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_training/test_paragraph_embeddings.hdf5",
+#                    "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_training/test_question_idx.hdf5",
+#                    "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_training/test_question_labels.hdf5",
+#                    "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_training/recall_paragraph_embeddings.hdf5")
+#
+# # "PARAGRAPH"
+UTIL.split_checker(15,
+                   "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/paragraph_embeddings.hdf5",
+                   "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_embeddings.hdf5",
+                   "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/question_labels.csv",
+                   "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/paragraph_training/train_paragraph_embeddings.hdf5",
+                   "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/paragraph_training/train_question_embeddings.hdf5",
+                   "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/paragraph_training/train_paragraph_idx.hdf5",
+                   "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/paragraph_training/train_paragraph_labels.hdf5",
+                   "/home/jackalhan/Development/github/more_meaningful_representations/squad/train/improvement/data/ULTIMATE_OLD_API_with_IDF_with_1_0_0/paragraph_training/recall_question_embeddings.hdf5",
+                   'paragraph'
+                   )
+
+
 def calculate_recall_at_n(ns, data, number_of_sources):
     recalls = []
     for i in ns:

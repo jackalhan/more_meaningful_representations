@@ -282,12 +282,27 @@ def model_fn(features, labels, mode, params, config):
 
 
     if params.optimizer['name'] == 'Adam':
-        optimizer = tf.train.AdamOptimizer(params.optimizer['learning_rate'])
+        optimizer = tf.train.AdamOptimizer(params.optimizer['learning_rate']) #tf.contrib.optimizer_v2.AdamOptimizer(params.optimizer['learning_rate']) #
     else:
         raise ValueError("Optimizer is not recognized: {}".format(params.optimizer['name']))
-    tf.summary.scalar("learning_rate", optimizer._lr)
-    #tf.summary.scalar("learning_rate_t", optimizer._lr_t)
-
+    """
+    SPECIAL FOR ADAM: START
+    """
+    # tensorflow calculates the
+    # And the real decaying lr_t is computed as an intermediate result inside the computing function. You seems to have to compute it by yourself.
+    # lr = (lr_t * math_ops.sqrt(1 - beta2_power) / (1 - beta1_power))
+    #tf.summary.scalar("learning_rate", optimizer._get_per_graph_state().get_hyper("learning_rate"))
+    #beta1_power, beta2_power = optimizer._get_beta_accumulators()
+    # beta1 = tf.get_variable("beta1_power")
+    # beta2 = tf.get_variable("beta2_power")
+    # lr = tf.get_variable("learning_rate")
+    # # tf.summary.scalar("beta1_power", beta1_power)
+    # # tf.summary.scalar("beta2_power", beta2_power)
+    # current_lr = (lr * tf.sqrt(1 - beta1) / (1 - beta2))
+    # tf.summary.scalar("current learning rate", current_lr)
+    """
+    SPECIAL FOR ADAM: END
+    """
     #tf.summary.scalar("global_step", global_step)
 
     if params.optimizer['batch_norm']:

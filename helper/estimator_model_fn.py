@@ -285,7 +285,8 @@ def model_fn(features, labels, mode, params, config):
         optimizer = tf.train.AdamOptimizer(params.optimizer['learning_rate'])
     else:
         raise ValueError("Optimizer is not recognized: {}".format(params.optimizer['name']))
-
+    tf.summary.scalar("learning_rate", optimizer._lr)
+    #tf.summary.scalar("learning_rate_t", optimizer._lr_t)
 
     #tf.summary.scalar("global_step", global_step)
 

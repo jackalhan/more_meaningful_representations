@@ -199,7 +199,7 @@ def model_fn(features, labels, mode, params, config):
     base_data_path = os.path.join(params.executor['model_dir'], params.executor['data_dir'])
     base_data_path = os.path.join(base_data_path, KN_FILE_NAMES['DIR'])
 
-    global_step = tf.train.get_global_step()
+
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
 
     if params.model['model_type'].lower() == 'conv':
@@ -280,9 +280,18 @@ def model_fn(features, labels, mode, params, config):
         #eval_metric_ops["loss/recall_top_1"] = tf.metrics.mean(loss_over_recall_top_1)
         return tf.estimator.EstimatorSpec(mode, loss= loss, eval_metric_ops=eval_metric_ops)
 
+    global_step = tf.train.get_global_step()
 
-    if params.optimizer['name'] == 'Adam':
+    if params.optimizer['name'].lower() == 'adam':
         optimizer = tf.train.AdamOptimizer(params.optimizer['learning_rate']) #tf.contrib.optimizer_v2.AdamOptimizer(params.optimizer['learning_rate']) #
+    elif params.optimizer['name'].lower() == 'rmsprop':
+        optimizer = tf.train.RMSPropOptimizer(params.optimizer['learning_rate'])
+        tf.summary.scalar("current_learning_rate", optimizer._learning_rate)
+    elif params.optimizer['name'].lower() == 'exponential':
+        learning_rate = tf.train.exponential_decay(params.optimizer['learning_rate'], global_step,
+                                                   100000, 0.96, staircase=True)
+        tf.summary.scalar("current_learning_rate", learning_rate)
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate)
     else:
         raise ValueError("Optimizer is not recognized: {}".format(params.optimizer['name']))
     """

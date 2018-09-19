@@ -84,15 +84,13 @@ def model_3(input, params):
         dropout_emb = tf.layers.dropout(inputs=embedding_layer,
                                        rate=conf['keep_prob'])
 
-        conv1 = tf.layers.conv1d(dropout_emb, 1024, kernel_size=7, strides=2, padding="same", activation=tf.nn.relu)
+        conv1 = tf.layers.conv1d(dropout_emb, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        conv2 = tf.layers.conv1d(conv1, 1024, kernel_size=7, strides=2, padding="same", activation=tf.nn.relu)
+        conv2 = tf.layers.conv1d(conv1, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        conv3 = tf.layers.conv1d(conv2, 1024, kernel_size=7, strides=2, padding="same", activation=tf.nn.relu)
+        conv3 = tf.layers.conv1d(conv2, 1024, kernel_size=5, strides=2, padding="same", activation=tf.nn.relu)
 
-        conv4 = tf.layers.conv1d(conv3, 1024, kernel_size=7, strides=2, padding="same", activation=tf.nn.relu)
-
-        avg_pooling = tf.reduce_mean(conv4, axis=1)
+        avg_pooling = tf.reduce_mean(conv3, axis=1)
 
         # dropout_hidden = tf.layers.dropout(inputs=min_avg_pooling, rate=conf['keep_prob'])
         #

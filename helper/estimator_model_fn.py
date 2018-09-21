@@ -213,6 +213,8 @@ def model_fn(features, labels, mode, params, config):
 
     if mode == tf.estimator.ModeKeys.PREDICT:
         if params.executor["is_debug_mode"]:
+            if params.loss['require_l2_norm']:
+                after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
             avg_recall_after_model, normalized_recalls_after_model, distance_from_after_model_q_to_p, \
             avg_recall_before_model,normalized_recalls_before_model, distance_from_before_model_q_to_p, \
             delta_before_after_model, actual_labels,are_founds_after,closest_labels_after,distances_after, \
@@ -235,6 +237,8 @@ def model_fn(features, labels, mode, params, config):
             results['distances_before'] = distances_before
 
         else:
+            if params.loss['version'] != 4:
+                after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
             results = after_model_embeddings
 
         return tf.estimator.EstimatorSpec(mode=mode, predictions=results)
@@ -242,13 +246,15 @@ def model_fn(features, labels, mode, params, config):
     #if params.model['model_type'].lower() == 'conv':
     targets = labels['target_embeddings']
     labels = tf.cast(labels['target_labels'], tf.float32)
-    labels = tf.reshape(labels, [-1, 1])
     # else:
     #     # question_embedding_mean_norm = tf.reduce_mean(tf.norm(embeddings, axis=1))
     #     paragraphs = labels[:, 0:params.files['pre_trained_files']['embedding_dim']]
     #     labels = labels[:, params.files['pre_trained_files']['embedding_dim']:params.files['pre_trained_files']['embedding_dim']+1]
 
-    targets = tf.nn.l2_normalize(targets, name='normalized_target_embeddings', axis=1)
+    if params.loss['require_l2_norm']:
+        targets = tf.nn.l2_normalize(targets, name='normalized_target_embeddings', axis=1)
+    else:
+        labels = tf.cast(labels, tf.int32)
     # paragraph_embedding_mean_norm = tf.reduce_mean(tf.norm(paragraph, axis=1))
     if params.loss['name'] == 'abs_reg_loss':
         _loss = euclidean_distance_loss(after_model_embeddings, targets, params, labels)
@@ -264,6 +270,8 @@ def model_fn(features, labels, mode, params, config):
     tf.summary.scalar('loss', loss)
 
     if mode == tf.estimator.ModeKeys.EVAL:
+        if params.loss['require_l2_norm']:
+            after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
         #global_step_ = tf.Print(global_step, [global_step], message="Value of global step")
         avg_recall_after_model, normalized_recalls_after_model, distance_from_after_model_q_to_p, \
         avg_recall_before_model, normalized_recalls_before_model, distance_from_before_model_q_to_p, \
@@ -286,6 +294,9 @@ def model_fn(features, labels, mode, params, config):
         optimizer = tf.train.AdamOptimizer(params.optimizer['learning_rate']) #tf.contrib.optimizer_v2.AdamOptimizer(params.optimizer['learning_rate']) #
     elif params.optimizer['name'].lower() == 'rmsprop':
         optimizer = tf.train.RMSPropOptimizer(params.optimizer['learning_rate'])
+        tf.summary.scalar("current_learning_rate", optimizer._learning_rate)
+    elif params.optimizer['name'].lower() == 'sgd':
+        optimizer = tf.train.GradientDescentOptimizer(params.optimizer['learning_rate'])
         tf.summary.scalar("current_learning_rate", optimizer._learning_rate)
     elif params.optimizer['name'].lower() == 'exponential':
         learning_rate = tf.train.exponential_decay(params.optimizer['learning_rate'], global_step,

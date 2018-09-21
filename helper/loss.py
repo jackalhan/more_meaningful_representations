@@ -24,33 +24,25 @@ def euclidean_distance_loss(question_embeddings, paragraph_embeddings, params, l
         loss = tf.reduce_mean(tf.nn.relu(euc_dist - params.loss["margin"]) + tf.multiply(tf.cast(euc_dist > params.loss["margin"], dtype=tf.float32), params.loss["margin"]))
     elif params.loss["version"] == 3:
         tl = Triplet_Loss()
-        loss = tl.batch_hard_triplet_loss(question_embeddings, paragraph_embeddings, params.loss["margin"])
+        loss = tl.batch_hard_triplet_loss(question_embeddings, paragraph_embeddings, labels, params.loss["margin"])
     elif params.loss["version"] == 4:
-        tl = Triplet_Loss()
-        loss = tl.batch_hard_triplet_loss(question_embeddings, paragraph_embeddings, None)
+        loss = tf.contrib.losses.metric_learning.npairs_loss(
+            labels,
+            question_embeddings,
+            paragraph_embeddings,
+            reg_lambda=params.loss['reg_lambda'],
+            print_losses=True
+        )
+
     elif params.loss["version"] == 5:
+        loss = tf.contrib.losses.metric_learning.npairs_loss_multilabel(
+            labels,
+            question_embeddings,
+            paragraph_embeddings,
+            reg_lambda=params.loss['reg_lambda'],
+            print_losses=True
+        )
 
-        #Somewhat Reduntant but still keep it
-        base_data_path = os.path.join(params.executor['model_dir'], params.executor['data_dir'])
-        all_paragraphs = tf.constant(load_embeddings(os.path.join(base_data_path,
-                                                                  params.files["test_subset_recall"][
-                                                                      "all_paragraph_embeddings"])))
-
-        normalized_all_paragraphs = tf.nn.l2_normalize(all_paragraphs,
-                                                       name='normalized_all_paragraph_embeddings',
-                                                       axis=1)
-
-        subset_labels = tf.reshape(labels, [-1, 1])
-        subset_labels = tf.cast(subset_labels, tf.int32)
-        # AVG RECALLS FOR ALL RECALL_TOPS
-        recalls_after_model, normalized_recalls_after_model = calculate_recalls(question_embeddings,
-                                                                                normalized_all_paragraphs,
-                                                                                subset_labels,
-                                                                                params,
-                                                                                distance_type=params.executor[
-                                                                                    "distance_type"])
-
-        loss = tf.cast(1 - normalized_recalls_after_model[0] + params.loss['margin'], tf.float32)
     else:
         raise ValueError("Loss strategy type is not recognized: {}".format(type))
 
@@ -142,7 +134,7 @@ class  Triplet_Loss(object):
 
         return mask
 
-    def batch_all_triplet_loss(self, question_embeddings, paragraph_embeddings, margin):
+    def batch_all_triplet_loss(self, question_embeddings, paragraph_embeddings, labels, margin):
         """Build the triplet loss over a batch of embeddings.
 
         We generate all the valid triplets and average the loss over the positive ones.
@@ -159,7 +151,7 @@ class  Triplet_Loss(object):
         """
         # Get the pairwise distance matrix
         pairwise_dist = pairwise_euclidean_distances(question_embeddings, paragraph_embeddings)
-        labels = tf.reduce_mean(paragraph_embeddings, axis=1)
+        #labels = tf.reduce_mean(paragraph_embeddings, axis=1)
 
         # shape (batch_size, batch_size, 1)
         anchor_positive_dist = tf.expand_dims(pairwise_dist, 2)
@@ -194,42 +186,45 @@ class  Triplet_Loss(object):
 
         return triplet_loss, fraction_positive_triplets
 
-    def batch_hard_triplet_loss(self,question_embeddings, paragraph_embeddings, margin ):
-        """Build the triplet loss over a batch of embeddings.
+    def batch_hard_triplet_loss(self,question_embeddings, paragraph_embeddings, labels, margin ):
+        """Build the triplet loss over a batch of question and paragraph embeddings.
 
         For each anchor, we get the hardest positive and hardest negative to form a triplet.
 
         Args:
-            labels: labels of the batch, of size (batch_size,)
-            embeddings: tensor of shape (batch_size, embed_dim)
-            margin: margin for triplet loss
-            squared: Boolean. If true, output is the pairwise squared euclidean distance matrix.
-                     If false, output is the pairwise euclidean distance matrix.
+            ....
 
         Returns:
             triplet_loss: scalar tensor containing the triplet loss
         """
-        # Get the pairwise distance matrix
+        # Get the pairwise distance matrix between question and paragraphs
         pairwise_dist  = pairwise_euclidean_distances(question_embeddings, paragraph_embeddings)
-        labels = tf.reduce_mean(paragraph_embeddings, axis=1)
-        # For each anchor, get the hardest positive
-        # First, we need to get a mask for every valid positive (they should have same label)
+
+        # For each question, get the hardest positive paragraphs
+        # First, we need to get a mask for every valid positive paragraphs (must have same label)
+        # The following one provides a 2D mask where mask[question, positive paragraph] is True iff
+        # question and positive paragraph are distinct and
+        # have same label
         mask_anchor_positive = self._get_anchor_positive_triplet_mask(labels)
         mask_anchor_positive = tf.to_float(mask_anchor_positive)
 
-        # We put to 0 any element where (a, p) is not valid (valid if a != p and label(a) == label(p))
+        # Make 0 any element where (question, positive paragraph) is not valid
+        # (valid if question != positive paragraph, label(question) == label(positive paragraph))
         anchor_positive_dist = tf.multiply(mask_anchor_positive, pairwise_dist)
 
         # shape (batch_size, 1)
         hardest_positive_dist = tf.reduce_max(anchor_positive_dist, axis=1, keepdims=True)
         tf.summary.scalar("hardest_positive_dist", tf.reduce_mean(hardest_positive_dist))
 
-        # For each anchor, get the hardest negative
-        # First, we need to get a mask for every valid negative (they should have different labels)
+        # For each anchor, get the hardest negative paragraphs
+        # First, we need to get a mask for every valid negative paragraph (must have different labels)
+        # The following one provides a 2D mask where mask[question, negative paragraph] is True iff
+        # question and negative question have distinct labels
         mask_anchor_negative = self._get_anchor_negative_triplet_mask(labels)
         mask_anchor_negative = tf.to_float(mask_anchor_negative)
 
-        # We add the maximum value in each row to the invalid negatives (label(a) == label(n))
+        # Add the maximum value in each row to the invalid negative paragraph
+        # (label(question) == label(negative paragraph))
         max_anchor_negative_dist = tf.reduce_max(pairwise_dist, axis=1, keepdims=True)
         anchor_negative_dist = pairwise_dist + max_anchor_negative_dist * (1.0 - mask_anchor_negative)
 
@@ -238,10 +233,10 @@ class  Triplet_Loss(object):
         tf.summary.scalar("hardest_negative_dist", tf.reduce_mean(hardest_negative_dist))
 
         if margin is not None:
-            # Combine biggest d(a, p) and smallest d(a, n) into final triplet loss
+            # Combine largest d(question, positive paragraphs) and lowest d(question, negative paragraphs) into final triplet loss
             triplet_loss = tf.nn.relu(hardest_positive_dist - hardest_negative_dist + margin)
         else:
-            triplet_loss = tf.nn.relu((hardest_positive_dist - hardest_negative_dist) + ((hardest_positive_dist - hardest_negative_dist)))
+            pass
 
         # Get final mean triplet loss
         triplet_loss = tf.reduce_mean(triplet_loss)

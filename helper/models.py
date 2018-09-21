@@ -15,7 +15,10 @@ def orchestrate_model(source, params):
         tf.logging.info("Source shape: {}...".format(source))
         output = eval(scope)(source, params)
         tf.contrib.layers.summarize_activation(output)
-        normalized_output = tf.nn.l2_normalize(output, axis=1)
+        if params.loss['require_l2_norm']:
+            normalized_output = tf.nn.l2_normalize(output, axis=1)
+        else:
+            normalized_output = output
         tf.contrib.layers.summarize_activation(normalized_output)
     return normalized_output
 

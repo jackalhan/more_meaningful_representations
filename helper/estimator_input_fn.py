@@ -284,9 +284,9 @@ class DataBuilder():
             dataset = dataset.shuffle(buffer_size=self._temp_train_source_labels.shape[0])
         dataset = dataset.batch(self.params.model["batch_size"])
         dataset = dataset.prefetch(1)
-        #iterator = dataset.make_one_shot_iterator()
+        iterator = dataset.make_one_shot_iterator()
         #def helper.globalizer.train_input_fn():return dataset
-        return dataset #iterator.get_next()
+        return iterator.get_next()
 
     def _load_train_data(self, load_with_file_path=False):
         if load_with_file_path:
@@ -400,11 +400,11 @@ class DataBuilder():
 
         dataset = dataset.batch(self.params.files["splitter"]["train_subset_size"])
         dataset = dataset.prefetch(1)
-        #iterator = dataset.make_one_shot_iterator()
+        iterator = dataset.make_one_shot_iterator()
         # return dataset #iterator.get_next()
         # global train_recall_input_fn
         #helper.globalizer.train_recall_input_fn  = dataset
-        return dataset #iterator.get_next()
+        return iterator.get_next()
     """
     **********************************************
     TRAIN RECALL: END
@@ -462,10 +462,10 @@ class DataBuilder():
         dataset = dataset.batch(self.params.files["splitter"]["test_subset_size"])
 
         dataset = dataset.prefetch(1)
-        #iterator = dataset.make_one_shot_iterator()
+        iterator = dataset.make_one_shot_iterator()
         #return dataset #iterator.get_next()
         # global test_recall_input_fn
-        return dataset #iterator.get_next()
+        return iterator.get_next()
     def _load_test_recall_data(self, load_with_file_path=False):
         if load_with_file_path:
             self._test_recall_source_labels, self._test_recall_source_indx, self._test_recall_source_embeddings, self._test_recall_target_embeddings, self._test_recall_all_target_embeddings, self._test_recall_source_padded, self._test_recall_source_length = self._load_data_path(

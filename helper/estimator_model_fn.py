@@ -201,20 +201,22 @@ def model_fn(features, labels, mode, params, config):
 
 
     is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-
+    source_embeddings = features['source_embeddings']
     if params.model['model_type'].lower() == 'conv':
-        baseline_source_embeddings = features['baseline_source_embeddings']
+        source_baseline_embeddings = features['baseline_source_embeddings']
     else:
-        baseline_source_embeddings = features['source_embeddings']
-    before_model_embeddings = tf.nn.l2_normalize(baseline_source_embeddings,
-                                                     name='normalized_before_model_source_embeddings', axis=1)
+        source_baseline_embeddings = features['source_embeddings']
     # -----------------------------------------------------------
-    after_model_embeddings = orchestrate_model(features, params)
+    after_model_embeddings = orchestrate_model(source_embeddings, source_baseline_embeddings, params)
 
     if mode == tf.estimator.ModeKeys.PREDICT:
+        before_model_embeddings = tf.nn.l2_normalize(source_baseline_embeddings,
+                                                     name='normalized_before_model_source_embeddings', axis=1)
         if params.executor["is_debug_mode"]:
-            if params.loss['require_l2_norm']:
-                after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
+            normalized_output = tf.nn.l2_normalize(after_model_embeddings, axis=1)
+            tf.contrib.layers.summarize_activation(normalized_output)
+            # if params.loss['require_l2_norm']:
+            #     after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
             avg_recall_after_model, normalized_recalls_after_model, distance_from_after_model_q_to_p, \
             avg_recall_before_model,normalized_recalls_before_model, distance_from_before_model_q_to_p, \
             delta_before_after_model, actual_labels,are_founds_after,closest_labels_after,distances_after, \
@@ -237,19 +239,19 @@ def model_fn(features, labels, mode, params, config):
             results['distances_before'] = distances_before
 
         else:
-            if params.loss['version'] != 4:
-                after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
+            # if params.loss['require_l2_norm']:
+            #     after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
             results = after_model_embeddings
 
         return tf.estimator.EstimatorSpec(mode=mode, predictions=results)
 
+    if params.loss['require_l2_norm']:
+        after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
+    tf.contrib.layers.summarize_activation(after_model_embeddings)
+
     #if params.model['model_type'].lower() == 'conv':
     targets = labels['target_embeddings']
     labels = tf.cast(labels['target_labels'], tf.float32)
-    # else:
-    #     # question_embedding_mean_norm = tf.reduce_mean(tf.norm(embeddings, axis=1))
-    #     paragraphs = labels[:, 0:params.files['pre_trained_files']['embedding_dim']]
-    #     labels = labels[:, params.files['pre_trained_files']['embedding_dim']:params.files['pre_trained_files']['embedding_dim']+1]
 
     if params.loss['require_l2_norm']:
         targets = tf.nn.l2_normalize(targets, name='normalized_target_embeddings', axis=1)
@@ -270,9 +272,13 @@ def model_fn(features, labels, mode, params, config):
     tf.summary.scalar('loss', loss)
 
     if mode == tf.estimator.ModeKeys.EVAL:
-        if params.loss['require_l2_norm']:
-            after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
+        # if params.loss['require_l2_norm']:
+        #     after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
         #global_step_ = tf.Print(global_step, [global_step], message="Value of global step")
+
+        before_model_embeddings = tf.nn.l2_normalize(source_baseline_embeddings,
+                                                     name='normalized_before_model_source_embeddings', axis=1)
+
         avg_recall_after_model, normalized_recalls_after_model, distance_from_after_model_q_to_p, \
         avg_recall_before_model, normalized_recalls_before_model, distance_from_before_model_q_to_p, \
         delta_before_after_model, actual_labels, are_founds_after,closest_labels_after,distances_after, \

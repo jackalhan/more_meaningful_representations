@@ -282,6 +282,17 @@ class DataBuilder():
         # print('_train_source_labels Path:{}'.format(self._train_source_labels))
         if self.params.model["shuffle"]:
             dataset = dataset.shuffle(buffer_size=self._temp_train_source_labels.shape[0])
+        if self.params.loss['version'] in [4,5]:
+            unique, counts = np.unique(self._temp_train_source_labels, return_counts=True)
+            print('class size is {}'.format(unique.shape[0]))
+            target_list_np = np.random.choice(self._temp_train_source_labels.shape[0], self.params.model["batch_size"], replace=False)
+            for i, t in enumerate(target_list_np):
+                if i == 0:
+                    dataset_ = dataset.filter(lambda features, labels: tf.equal(labels['target_labels'], t)).take(1)
+                else:
+                    dataset_ = dataset_.concatenate(
+                        dataset.filter(lambda features, labels: tf.equal(labels['target_labels'], t)).take(1))
+            dataset = dataset_
         dataset = dataset.batch(self.params.model["batch_size"])
         dataset = dataset.prefetch(1)
         iterator = dataset.make_one_shot_iterator()

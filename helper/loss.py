@@ -31,7 +31,7 @@ def euclidean_distance_loss(question_embeddings, paragraph_embeddings, params, l
             question_embeddings,
             paragraph_embeddings,
             reg_lambda=params.loss['reg_lambda'],
-            print_losses=True
+            print_losses=False
         )
 
     elif params.loss["version"] == 5:

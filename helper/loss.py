@@ -86,6 +86,26 @@ class  Triplet_Loss(object):
 
         return mask
 
+    def _get_anchor_pure_positive_triplet_mask(self, labels):
+        """Return a 2D mask where mask[a, p] is True iff a and p are distinct and have same label.
+
+        Args:
+            labels: tf.int32 `Tensor` with shape [batch_size]
+
+        Returns:
+            mask: tf.bool `Tensor` with shape [batch_size, batch_size]
+        """
+        # Check that i and j are distinct
+        indices_equal = tf.cast(tf.eye(tf.shape(labels)[0]), tf.bool)
+        # Check if labels[i] == labels[j]
+        # Uses broadcasting where the 1st argument has shape (1, batch_size) and the 2nd (batch_size, 1)
+        labels_equal = tf.equal(tf.expand_dims(labels, 0), tf.expand_dims(labels, 1))
+
+        # Combine the two masks
+        mask = tf.logical_and(indices_equal, labels_equal)
+
+        return mask
+
     def _get_anchor_negative_triplet_mask(self, labels):
         """Return a 2D mask where mask[a, n] is True iff a and n have distinct labels.
 
@@ -205,7 +225,7 @@ class  Triplet_Loss(object):
         # The following one provides a 2D mask where mask[question, positive paragraph] is True iff
         # question and positive paragraph are distinct and
         # have same label
-        mask_anchor_positive = self._get_anchor_positive_triplet_mask(labels)
+        mask_anchor_positive = self._get_anchor_pure_positive_triplet_mask(labels)
         mask_anchor_positive = tf.to_float(mask_anchor_positive)
 
         # Make 0 any element where (question, positive paragraph) is not valid
@@ -213,8 +233,8 @@ class  Triplet_Loss(object):
         anchor_positive_dist = tf.multiply(mask_anchor_positive, pairwise_dist)
 
         # shape (batch_size, 1)
-        hardest_positive_dist = tf.reduce_max(anchor_positive_dist, axis=1, keepdims=True)
-        tf.summary.scalar("hardest_positive_dist", tf.reduce_mean(hardest_positive_dist))
+        positive_dist = tf.reduce_max(anchor_positive_dist, axis=1, keepdims=True)
+        tf.summary.scalar("hardest_positive_dist", tf.reduce_mean(positive_dist))
 
         # For each anchor, get the hardest negative paragraphs
         # First, we need to get a mask for every valid negative paragraph (must have different labels)
@@ -234,7 +254,7 @@ class  Triplet_Loss(object):
 
         if margin is not None:
             # Combine largest d(question, positive paragraphs) and lowest d(question, negative paragraphs) into final triplet loss
-            triplet_loss = tf.nn.relu(hardest_positive_dist - hardest_negative_dist + margin)
+            triplet_loss = tf.nn.relu(positive_dist - hardest_negative_dist + margin)
         else:
             pass
 

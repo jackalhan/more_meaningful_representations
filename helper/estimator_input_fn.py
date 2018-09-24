@@ -10,7 +10,7 @@ from tqdm import tqdm
 from tensorflow.python.keras.preprocessing import sequence
 import h5py
 
-
+class_size = None
 class generator:
     def __init__(self, file, table_name='embeddings'):
         self.file = file
@@ -19,6 +19,15 @@ class generator:
         with h5py.File(self.file, 'r') as hf:
             for im in hf[self.table_name]:
                 yield im
+
+# def split_and_merge(dataset):
+#     choices = []
+#     for t in range(class_size):
+#         choices.append(dataset.filter(lambda features, labels: tf.equal(labels['target_labels'], t)))
+#
+#     return tf.contrib.data.choose_from_datasets(
+#         choices,
+#         tf.data.Dataset.range(class_size).repeat())
 
 class DataBuilder():
     """ DataBuilder class for all type of estimator input_fn
@@ -280,24 +289,21 @@ class DataBuilder():
         # print('_train_source_embeddings Path:{}'.format(self._train_source_embeddings))
         # print('_train_target_embeddings Path:{}'.format(self._train_target_embeddings))
         # print('_train_source_labels Path:{}'.format(self._train_source_labels))
-        if self.params.model["shuffle"]:
-            dataset = dataset.shuffle(buffer_size=self._temp_train_source_labels.shape[0])
         if self.params.loss['version'] in [4,5]:
             unique, counts = np.unique(self._temp_train_source_labels, return_counts=True)
-            print('class size is {}'.format(unique.shape[0]))
-            target_list_np = np.random.choice(self._temp_train_source_labels.shape[0], self.params.model["batch_size"], replace=False)
-            for i, t in enumerate(target_list_np):
-                if i == 0:
-                    dataset_ = dataset.filter(lambda features, labels: tf.equal(labels['target_labels'], t)).take(1)
-                else:
-                    dataset_ = dataset_.concatenate(
-                        dataset.filter(lambda features, labels: tf.equal(labels['target_labels'], t)).take(1))
-            dataset = dataset_
+            global  class_size
+            class_size = unique.shape[0]
+            #dataset = dataset.apply(split_and_merge)
+            #todo: tf upgrade? or how to handle unique cases
+        if self.params.model["shuffle"]:
+            dataset = dataset.shuffle(buffer_size=self._temp_train_source_labels.shape[0])
         dataset = dataset.batch(self.params.model["batch_size"])
         dataset = dataset.prefetch(1)
         iterator = dataset.make_one_shot_iterator()
         #def helper.globalizer.train_input_fn():return dataset
         return iterator.get_next()
+
+
 
     def _load_train_data(self, load_with_file_path=False):
         if load_with_file_path:

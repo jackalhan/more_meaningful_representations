@@ -77,6 +77,7 @@ class DataBuilder():
 
     def _parser_estimate_conv(self, source_embeddings,source_document_length):
         features = {"source_embeddings": source_embeddings,
+                    "baseline_source_embeddings": source_embeddings,
                     "source_document_length": source_document_length}
         return features
 

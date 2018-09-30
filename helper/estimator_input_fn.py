@@ -75,9 +75,9 @@ class DataBuilder():
                   "target_labels": target_labels}
         return features, labels
 
-    def _parser_estimate_conv(self, source_embeddings,source_document_length):
+    def _parser_estimate_conv(self, source_embeddings,source_document_length, baseline_source_embeddings):
         features = {"source_embeddings": source_embeddings,
-                    "baseline_source_embeddings": source_embeddings,
+                    'baseline_source_embeddings': baseline_source_embeddings,
                     "source_document_length": source_document_length}
         return features
 
@@ -531,9 +531,13 @@ class DataBuilder():
                 _source_embeddings = self._read_dataset(self._source_embeddings,
                                                                     self.params.files['max_document_len'],
                                                                     data_type=tf.int32)
+                _predict_baseline_source_embeddings = self._read_dataset(
+                    self._baseline_source_embeddings,
+                    self.params.files['pre_trained_files']['embedding_dim'])
+
                 _source_embeddings_lengths = self._read_dataset(self._source_embeddings_lengths,
                                                                     None,tf.int32)
-                dataset = tf.data.Dataset.zip((_source_embeddings, _source_embeddings_lengths))
+                dataset = tf.data.Dataset.zip((_source_embeddings, _source_embeddings_lengths, _predict_baseline_source_embeddings))
             else:
                 dataset = tf.data.Dataset.from_tensor_slices(
                     (self._source_embeddings,
@@ -553,22 +557,25 @@ class DataBuilder():
 
         dataset = dataset.batch(self.params.model["batch_size"])
         dataset = dataset.prefetch(1)
-        #iterator = dataset.make_one_shot_iterator()
+        iterator = dataset.make_one_shot_iterator()
         # global predict_input_fn
         # predict_input_fn = dataset
-        return dataset #iterator.get_next()
+        return iterator.get_next()
     def _load_predict_data(self, load_with_file_path=False):
         if load_with_file_path:
             self._source_embeddings = os.path.join(self.base_path, self.params.files['prediction']['source_embeddings'])
             self._source_padded = os.path.join(self.base_path, self.params.files['prediction']['source_padded'])
             self._source_length = os.path.join(self.base_path, self.params.files['prediction']['source_length'])
+            self._baseline_source_embeddings = self._source_embeddings
             self._temp_source_embeddings = UTIL.load_embeddings(self._source_embeddings)
         else:
             self._source_embeddings = UTIL.load_embeddings(
                 os.path.join(self.base_path, self.params.files['prediction']['source_embeddings']))
             self._source_padded =None
             self._source_length = None
+            self._baseline_source_embeddings = self._source_embeddings
             self._temp_source_embeddings = self._source_embeddings
+
         if self.KN_FILE_NAMES['DIR'].lower().startswith('qu'):
             tokenized_documents = self._tokenized_questions
         else:

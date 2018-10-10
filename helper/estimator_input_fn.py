@@ -255,9 +255,12 @@ class DataBuilder():
         if self.params.model['model_type'].lower() == 'conv':
             if self.load_with_file_path:
                 # to get the size of the data
-                _train_source_embeddings = self._read_dataset(self._train_source_embeddings,self.params.files['max_document_len'], data_type=tf.int32)
+                _train_source_embeddings = self._read_dataset(self._train_source_embeddings,
+                                                              self.params.files['max_document_len'],
+                                                              data_type=tf.int32)
                 _train_source_embeddings_lengths = self._read_dataset(self._train_source_embeddings_lengths,
-                                                       None, data_type=tf.int32)
+                                                       None,
+                                                       data_type=tf.int32)
                 _train_baseline_source_embeddings = self._read_dataset(self._train_baseline_source_embeddings,self.params.files['pre_trained_files']['embedding_dim'])
                 _train_target_embeddings = self._read_dataset(self._train_target_embeddings,
                                                                        self.params.files['pre_trained_files'][
@@ -529,14 +532,15 @@ class DataBuilder():
         if self.params.model['model_type'].lower() == 'conv':
             if self.load_with_file_path:
                 _source_embeddings = self._read_dataset(self._source_embeddings,
-                                                                    self.params.files['max_document_len'],
-                                                                    data_type=tf.int32)
+                                                        self.params.files['max_document_len'],
+                                                        data_type=tf.int32)
                 _predict_baseline_source_embeddings = self._read_dataset(
                     self._baseline_source_embeddings,
                     self.params.files['pre_trained_files']['embedding_dim'])
 
                 _source_embeddings_lengths = self._read_dataset(self._source_embeddings_lengths,
-                                                                    None,tf.int32)
+                                                                None,
+                                                                data_type=tf.int32)
                 dataset = tf.data.Dataset.zip((_source_embeddings, _source_embeddings_lengths, _predict_baseline_source_embeddings))
             else:
                 dataset = tf.data.Dataset.from_tensor_slices(

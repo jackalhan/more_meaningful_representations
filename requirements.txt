@@ -5,9 +5,7 @@ numpy==1.14.2
 pandas==0.22.0
 scikit_learn==0.19.1
 spacy==2.0.8
-tensorboard==1.8.0
 tensorflow-gpu==1.8.0
-tensorflow-tensorboard==0.4.0
 tqdm==4.19.6
 typing==3.6.4
 scipy==1.1.0

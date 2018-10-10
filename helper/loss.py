@@ -42,7 +42,14 @@ def euclidean_distance_loss(question_embeddings, paragraph_embeddings, params, l
             reg_lambda=params.loss['reg_lambda'],
             print_losses=True
         )
-
+    elif params.loss["version"] == 6:
+        tl = Triplet_Loss()
+        loss = tl.batch_hard_triplet_loss(question_embeddings, question_embeddings, labels, params.loss["margin"])
+    elif params.loss["version"] == 7:
+        tl = Triplet_Loss()
+        loss_q_tp_p = tl.batch_hard_triplet_loss(question_embeddings, paragraph_embeddings, labels, params.loss["margin"])
+        loss_q_to_q = tl.batch_hard_triplet_loss(question_embeddings, question_embeddings, labels, params.loss["margin"])
+        loss = loss_q_tp_p + loss_q_to_q
     else:
         raise ValueError("Loss strategy type is not recognized: {}".format(type))
 

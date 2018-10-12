@@ -45,6 +45,21 @@ def euclidean_distance_loss(question_embeddings, paragraph_embeddings, params, l
     elif params.loss["version"] == 6:
         tl = Triplet_Loss()
         loss = tl.batch_hard_triplet_loss(question_embeddings, question_embeddings, labels, params.loss["margin"])
+
+        def true_fn_1():
+            return 0.0
+
+        def true_fn_2():
+            return 30.0
+
+        def false_fn():
+            return loss
+
+        loss = tf.cond(loss < 0.0,true_fn_1, false_fn)
+        loss = tf.cond(loss > 30.0, true_fn_2, false_fn)
+        # p = tf_print(loss,loss , "hello")
+        # p.eval()
+        #output = tf.Print(loss, [loss], 'Raw Loss:')
     elif params.loss["version"] == 7:
         tl = Triplet_Loss()
         loss_q_tp_p = tl.batch_hard_triplet_loss(question_embeddings, paragraph_embeddings, labels, params.loss["margin"])
@@ -54,6 +69,16 @@ def euclidean_distance_loss(question_embeddings, paragraph_embeddings, params, l
         raise ValueError("Loss strategy type is not recognized: {}".format(type))
 
     return loss
+
+# def tf_print(op, tensors, message=None):
+#     def print_message(x):
+#         sys.stdout.write(message + " %s\n" % x)
+#         return x
+#
+#     prints = [tf.py_func(print_message, [tensor], tensor.dtype) for tensor in tensors]
+#     with tf.control_dependencies(prints):
+#         op = tf.identity(op)
+#     return op
 
 def euclidean_distance(question_embeddings, paragraph_embeddings):
     """Compute the 2D matrix of distances between all the embeddings.

@@ -92,8 +92,10 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf, databuilder):
                 # -------------------------------------
                 # Train and Test : Train
                 # -------------------------------------
-            train_spec = tf.estimator.TrainSpec(_train_input_fn,
-                                                max_steps= params.model['num_epochs'] * math.ceil(params.files['splitter']['train_size'] / params.model['batch_size']))
+            # train_spec = tf.estimator.TrainSpec(_train_input_fn,
+            #                                     max_steps= params.model['num_epochs'] * math.ceil(params.files['splitter']['train_size'] / params.model['batch_size']))
+
+            train_spec = tf.estimator.TrainSpec(_train_input_fn)
 
 
             # -------------------------------------
@@ -116,7 +118,7 @@ def execute_non_conv_pipeline(params, base_data_path, config, tf, databuilder):
                 # -------------------------------------
                 # Train and Test : Test
                 # -------------------------------------
-            test_spec = tf.estimator.EvalSpec(_recall_input_fn) #steps=params.model['num_epochs']
+            test_spec = tf.estimator.EvalSpec(_recall_input_fn, steps=params.model['num_epochs']) #steps=params.model['num_epochs']
 
             # -------------------------------------
             # Train and Test

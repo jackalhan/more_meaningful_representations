@@ -299,9 +299,9 @@ class DataBuilder():
             class_size = unique.shape[0]
             #dataset = dataset.apply(split_and_merge)
             #todo: tf upgrade? or how to handle unique cases
-        dataset = dataset.repeat(self.params.model['num_epochs'])
         if self.params.model["shuffle"]:
-            dataset = dataset.shuffle(buffer_size=self._temp_train_source_labels.shape[0] * self.params.model['num_epochs'])
+            dataset = dataset.shuffle(buffer_size=self._temp_train_source_labels.shape[0])
+        dataset = dataset.repeat(self.params.model['num_epochs'])
         dataset = dataset.batch(self.params.model["batch_size"])
         dataset = dataset.prefetch(1)
         iterator = dataset.make_one_shot_iterator()

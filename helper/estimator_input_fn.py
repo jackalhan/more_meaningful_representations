@@ -301,8 +301,8 @@ class DataBuilder():
             #todo: tf upgrade? or how to handle unique cases
         if self.params.model["shuffle"]:
             dataset = dataset.shuffle(buffer_size=self._temp_train_source_labels.shape[0])
-        dataset = dataset.repeat(self.params.model['num_epochs'])
         dataset = dataset.batch(self.params.model["batch_size"])
+        dataset = dataset.repeat(self.params.model['num_epochs'])
         dataset = dataset.prefetch(1)
         iterator = dataset.make_one_shot_iterator()
         #def helper.globalizer.train_input_fn():return dataset

@@ -28,6 +28,7 @@ encoding="utf-8"
 def word_tokenize(sent):
     doc = nlp(sent)
     return [token.text for token in doc]
+
 def convert_idx(text, tokens):
     current = 0
     spans = []
@@ -1234,10 +1235,13 @@ def create_dir(dir):
         os.makedirs(dir)
     return dir
 
-def dump_tokenized_contexts(tokenized_contexts:list, file_path:str):
+def dump_tokenized_contexts(tokenized_contexts:list, file_path:str, apply_filter=False):
     with open(file_path, 'w') as fout:
         for context in tokenized_contexts:
-            fout.write(' '.join(context) + '\n')
+            if apply_filter:
+                fout.write(' '.join(filter(None, context)) + '\n')
+            else:
+                fout.write(' '.join(context) + '\n')
 
 def tokenize_contexts(contexts:list):
     tokenized_context = [word_tokenize(context.strip()) for context in contexts]

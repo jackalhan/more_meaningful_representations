@@ -3,6 +3,7 @@
 import json
 import logging
 import pandas as pd
+import queue
 import h5py
 import random
 import numpy as np
@@ -99,6 +100,40 @@ def set_logger(log_path):
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(stream_handler)
+
+def load_multijsons_from_single_file(file_path, encoding='utf-8'):
+    jsons=[]
+    line_queue = queue.Queue(maxsize=50)
+    with tf.gfile.Open(file_path,"r") as reader:
+        try:
+            while True:
+                line = json.loads(reader.readline())
+                id = line['guide']['content_id']
+                if line_queue.empty():
+                    sub_json = []
+                    line_queue.put(id)
+                    sub_json.append(line)
+                else:
+                    id_in_q = line_queue.get()
+                    line_queue.put(id)
+                    if id_in_q == id:
+                        sub_json.append(line)
+                    else:
+                        jsons.append(sub_json)
+                        sub_json = []
+                        sub_json.append(line)
+        except Exception as ex:
+            # in order to handle extra line in json.
+            pass
+
+    if len(sub_json)> 0:
+        jsons.append(sub_json)
+    return jsons
+
+def get_file_contents(filename, encoding='utf-8'):
+    with open(filename, encoding=encoding) as f:
+        content = f.read()
+    return content
 
 def load_word_embeddings(path, vocab, embedding_size):
     embeddings = {}

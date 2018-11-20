@@ -101,7 +101,7 @@ def set_logger(log_path):
         stream_handler.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(stream_handler)
 
-def load_multijsons_from_single_file(file_path, encoding='utf-8'):
+def load_bert_jsons_from_single_file(file_path, encoding='utf-8'):
     jsons=[]
     line_queue = queue.Queue(maxsize=50)
     with tf.gfile.Open(file_path,"r") as reader:
@@ -109,26 +109,33 @@ def load_multijsons_from_single_file(file_path, encoding='utf-8'):
             while True:
                 line = json.loads(reader.readline())
                 id = line['guide']['content_id']
+                content_line_index = line['guide']['content_line_index']
                 if line_queue.empty():
                     sub_json = []
                     line_queue.put(id)
-                    sub_json.append(line)
+                    sub_json.append((content_line_index, line))
                 else:
                     id_in_q = line_queue.get()
                     line_queue.put(id)
                     if id_in_q == id:
-                        sub_json.append(line)
+                        sub_json.append((content_line_index, line))
                     else:
+                        sub_json.sort()
+                        sub_json = [_[1] for _ in sub_json] # in order to get ordered lines
                         jsons.append(sub_json)
                         sub_json = []
-                        sub_json.append(line)
+                        sub_json.append((content_line_index, line))
         except Exception as ex:
             # in order to handle extra line in json.
             pass
 
     if len(sub_json)> 0:
+        sub_json.sort()
+        sub_json = [_[1] for _ in sub_json]  # in order to get ordered lines
         jsons.append(sub_json)
     return jsons
+
+
 
 def get_file_contents(filename, encoding='utf-8'):
     with open(filename, encoding=encoding) as f:
@@ -186,7 +193,8 @@ def fit_vocab_to_documents(tokenized_docs, voc_to_indx):
     document_lists = np.array(document_lists)
     return document_lists
 
-
+def reversedEnumerate(l):
+    return zip(range(len(l)-1, -1, -1), l)
 
 def define_pre_executions(params, json_path, base_data_path):
     model_save_path = os.path.join(params.executor['model_dir'], params.executor['save_dir'],
@@ -1277,6 +1285,11 @@ def dump_tokenized_contexts(tokenized_contexts:list, file_path:str, apply_filter
                 fout.write(' '.join(filter(None, context)) + '\n')
             else:
                 fout.write(' '.join(context) + '\n')
+
+def dump_vocab(path, vocab_as_set):
+    with open(path, "w") as f:
+        for item in vocab_as_set:
+            f.write(item + "\n")
 
 def tokenize_contexts(contexts:list):
     tokenized_context = [word_tokenize(context.strip()) for context in contexts]

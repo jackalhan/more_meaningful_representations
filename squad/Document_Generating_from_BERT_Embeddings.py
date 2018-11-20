@@ -10,7 +10,7 @@ import numpy as np
 import h5py
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.utils as UTIL
-import squad.wordpiece_tokenization as wordpiece
+#import squad.wordpiece_tokenization as wordpiece
 import argparse
 
 def get_parser():
@@ -22,9 +22,9 @@ def get_parser():
     parser.add_argument('--ind_layer', default=None,
                         help='whether to create individual representations for specified layer or None')
     parser.add_argument('--is_inject_idf', default=False, type=bool, help="whether inject idf or not to the weights")
-    parser.add_argument('--is_parititioned', default=False, type=bool,
+    parser.add_argument('--is_parititioned', default=True, type=bool,
                         help="handle file read/write partially")
-    parser.add_argument('--partition_size', default=100000,
+    parser.add_argument('--partition_size', default=10000,
                         help="size of partition to handle tokens")
     parser.add_argument('--test_size', default=None,
                         help="question, paragraph sizes")
@@ -46,49 +46,6 @@ def find_file_name(index, file_names):
             return file_name[2], file_name[0] - index
 
 def main(args):
-    # ################ CONFIGURATIONS #################
-    #
-    # NEW_API_ELMO={"is_inject_idf":True,
-    # "load_data_partially": False,
-    # "partition_size": None,
-    # "calculated_idf_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_and_idf_@@.hdf5'.format(dataset_type),
-    #       "root_path": "ELMO_CONTEXT_NEW_API_EMBEDDINGS",
-    #       "embedding_paragraphs_path": "paragraphs",
-    #       "embedding_paragraphs_file_pattern": "{}_paragraph_embedding_LSTM1_@@.hdf5".format(dataset_type),
-    #       "contextualized_paragraphs_embeddings_with_token": '{}_contextualized_paragraphs_embeddings_with_token_LSTM1.hdf5'.format(dataset_type),
-    #       "embedding_questions_path": "questions",
-    #       "embedding_questions_file_pattern": "{}_question_embeddings_LSTM1_@@.hdf5".format(dataset_type),
-    #       "contextualized_questions_embeddings_with_token": '{}_contextualized_questions_embeddings_with_token_LSTM1.hdf5'.format(dataset_type),
-    #        "is_paragraphs_listed_after_questions":False,
-    #       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token_LSTM1.hdf5'.format(dataset_type),
-    #       "change_shape": False,
-    #       "weights_arguments": [1],
-    #       'questions_file': '{}_question_document_embeddings_LSTM1_@@.hdf5'.format(dataset_type),
-    #       'paragraphs_file': '{}_paragraph_document_embeddings_LSTM1_@@.hdf5'.format(dataset_type),
-    #       'is_calculate_recalls': True,
-    #       'recall_file_path': '{}_recalls_weights_LSTM1_@@_###.csv'.format(dataset_type)
-    #       }
-    #
-    # OLD_API_ELMO={"is_inject_idf":True,
-    #               "load_data_partially": True,
-    #               "partition_size": 100000,
-    #               "calculated_token_embeddings_file": '{}_contextualized_document_embeddings_with_token_##_@@.hdf5'.format(dataset_type),
-    #       "root_path": "ELMO_CONTEXT_OLD_API_EMBEDDINGS",
-    #       "embedding_paragraphs_path": None,
-    #       "embedding_paragraphs_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
-    #       "contextualized_paragraphs_embeddings_with_token": '{}_contextualized_paragraphs_embeddings_with_token.hdf5'.format(dataset_type),
-    #       "embedding_questions_path": None,
-    #       "embedding_questions_file_pattern": "{}_token_embeddings_old_api_doc_@@.hdf5".format(dataset_type),
-    #       "contextualized_questions_embeddings_with_token": '{}_contextualized_questions_embeddings_with_token.hdf5'.format(dataset_type),
-    #       "is_paragraphs_listed_after_questions":True,
-    #       "contextualized_document_embeddings_with_token": '{}_contextualized_document_embeddings_with_token.hdf5'.format(dataset_type),
-    #       "change_shape": False,
-    #       "weights_arguments": [1, 0, 0], #icerde max index olarak kullanilabilr.
-    #       'questions_file': '{}_question_document_embeddings_@@.hdf5'.format(dataset_type),
-    #       'paragraphs_file': '{}_paragraph_document_embeddings_@@.hdf5'.format(dataset_type),
-    #       'is_calculate_recalls': False,
-    #       'recall_file_path': '{}_recalls_weights_@@_###.csv'.format(dataset_type)
-    #       }
 
     ################ CONFIGURATIONS #################
     squad_formatted_file = os.path.join(args.data_path, args.squad_formatted_file)
@@ -177,7 +134,7 @@ def main(args):
         file_names = get_file_names(questions_folder_path, file_name_splitter, bert_extension)
         tokenized_questions_size = test_size[0] if test_size is not None else len(tokenized_questions)
         checkpoint = None
-        for question_indx in range(tokenized_questions_size):
+        for question_indx in tqdm(range(tokenized_questions_size)):
             question_bert_index = question_indx + 1
             file_name, remaining_index_to_pass_this_file = find_file_name(question_bert_index, file_names)
             if remaining_index_to_pass_this_file >= 0:
@@ -187,6 +144,7 @@ def main(args):
             if checkpoint is not None:
                 question_indx = question_indx - checkpoint
             new_question_token = []
+            token_embeddings = None
             for line_index, json in UTIL.reversedEnumerate(jsons[question_indx]):
                 # 0 and -1 token indexes belong to [CLS, SEP] we are ignoring them.
                 json['features'].pop(0)
@@ -194,9 +152,8 @@ def main(args):
 
                 # filter out the non-contributional tokens from the list.
                 features = [x for x in json['features'] if not x['token'].startswith("##")]
-                token_embeddings = None
                 for feature_index, feature in UTIL.reversedEnumerate(features):
-                    if line_index > 0 and feature_index <= args.window_length:
+                    if line_index > 0 and feature_index < args.window_length:
                         #print(feature['token'])
                         continue
 
@@ -255,6 +212,7 @@ def main(args):
 
             new_paragraph_token = []
             try:
+                token_embeddings = None
                 for line_index, json in UTIL.reversedEnumerate(jsons[paragraph_indx]):
                     # 0 and -1 token indexes belong to [CLS, SEP] we are ignoring them.
                     json['features'].pop(0)
@@ -262,9 +220,8 @@ def main(args):
 
                     # filter out the non-contributional tokens from the list.
                     features = [x for x in json['features'] if not x['token'].startswith("##")]
-                    token_embeddings = None
                     for feature_index, feature in UTIL.reversedEnumerate(features):
-                        if line_index > 0 and feature_index <= args.window_length:
+                        if line_index > 0 and feature_index < args.window_length:
                             continue
 
                         if args.ind_layer is not None:
@@ -278,13 +235,11 @@ def main(args):
                             token_embeddings = token_embedding
                         else:
                             token_embeddings = np.vstack((token_embeddings, token_embedding))
-
                         new_paragraph_token.append(feature['token'])
                 if len(new_paragraph_token) != token_embeddings.shape[0]:
                     print(30 * '*')
                     print('********** Size of token paragraph embeddings {} has problem in {} checkpoint**********'.format(paragraph_indx, checkpoint))
                     print(30 * '*')
-
                 new_paragraph_tokens.append(new_paragraph_token)
                 #print('Token Size : {}'.format(sum([len(sentence) for sentence in new_paragraph_tokens])))
             except:
@@ -369,6 +324,7 @@ def main(args):
                     UTIL.dump_embeddings(temp_weighted_token_embeddings, calculated_token_embeddings_file_path.replace('@@', str(partition_counter)).replace('##', 'idf'))
                     print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition, partition + args.partition_size))
         else:
+            idf_vec = idf_vec.reshape(-1, 1)
             weighted_token_embeddings = np.multiply(idf_vec, document_embeddings)
         del idf_vec
         del token2idfweight
@@ -419,7 +375,6 @@ def main(args):
                 weighted_token_embeddings = np.vstack((weighted_token_embeddings, temp_weighted_token_embeddings))
             print("Partition {} is loaded".format(partition))
 
-    print('Weighted are getting to applied documents with the following weights: {}'.format(args['weights_arguments']))
 
     WM = None #np.array(args['weights_arguments']).reshape((1, len(args['weights_arguments']), 1))
     questions_embeddings, paragraphs_embeddings = UTIL.token_to_document_embeddings(new_question_tokens,

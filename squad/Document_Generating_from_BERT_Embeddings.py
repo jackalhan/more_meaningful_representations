@@ -24,8 +24,10 @@ def get_parser():
     parser.add_argument('--is_inject_idf', default=False, type=bool, help="whether inject idf or not to the weights")
     parser.add_argument('--is_parititioned', default=True, type=bool,
                         help="handle file read/write partially")
-    parser.add_argument('--partition_size', default=10000,
+    parser.add_argument('--token_partition_size', default=50000,
                         help="size of partition to handle tokens")
+    parser.add_argument('--document_partition_size', default=5000,
+                        help="size of partition to handle documents")
     parser.add_argument('--test_size', default=None,
                         help="question, paragraph sizes")
     return parser
@@ -44,6 +46,59 @@ def find_file_name(index, file_names):
     for file_name in file_names:
         if file_name[0] <= index <= file_name[1]:
             return file_name[2], file_name[0] - index
+
+def process_documents(partition, checkpoint, tokenized_document_size, file_names, file_folder_path, ind_layer, conc_layers, all_tokens, contextualized_questions_with_token_file_path):
+    embeddings = None
+    for indx in tqdm(range(partition, tokenized_document_size)):
+        bert_index = indx + 1
+        file_name, remaining_index_to_pass_this_file = find_file_name(bert_index, file_names)
+        if remaining_index_to_pass_this_file >= 0:
+            jsons = UTIL.load_bert_jsons_from_single_file(os.path.join(file_folder_path, file_name))
+            if indx > 0:
+                checkpoint = indx
+        if checkpoint is not None:
+            indx = indx - checkpoint
+        new_token = []
+        token_embeddings = None
+        for line_index, json in UTIL.reversedEnumerate(jsons[indx]):
+            # 0 and -1 token indexes belong to [CLS, SEP] we are ignoring them.
+            json['features'].pop(0)
+            json['features'].pop(-1)
+
+            # filter out the non-contributional tokens from the list.
+            features = [x for x in json['features'] if not x['token'].startswith("##")]
+            for feature_index, feature in UTIL.reversedEnumerate(features):
+                if line_index > 0 and feature_index < args.window_length:
+                    # print(feature['token'])
+                    continue
+
+                if args.ind_layer is not None:
+                    token_embedding = np.array(
+                        [l['values'] for l in feature['layers'] if l['index'] == ind_layer])
+                else:
+                    token_embedding = np.concatenate(
+                        [l['values'] for l in feature['layers'] if l['index'] in conc_layers])
+
+                if token_embeddings is None:
+                    token_embeddings = token_embedding
+                else:
+                    token_embeddings = np.vstack((token_embeddings, token_embedding))
+
+                new_token.append(feature['token'])
+        if len(new_token) != token_embeddings.shape[0]:
+            print(30 * '*')
+            print('********** Size of token embeddings {} has problem in {} checkpoint **********'.format(
+                indx, checkpoint))
+            print(30 * '*')
+        all_tokens.append(new_token)
+        if embeddings is None:
+            embeddings = token_embeddings
+        else:
+            embeddings = np.vstack((embeddings, token_embeddings))
+
+    print('embeddings shape: {}'.format(embeddings.shape))
+    UTIL.dump_embeddings(embeddings, contextualized_questions_with_token_file_path)
+    print('Questions are dumped')
 
 def main(args):
 
@@ -65,9 +120,9 @@ def main(args):
         test_size = [int(x) for x in args.test_size.split(",")]
     if args.ind_layer is not None:
         ind_layer= int(args.ind_layer)
-        contextualized_questions_with_token_file_path = os.path.join(args.data_path, "contextualized_questions_embeddings_with_tokens_{}_layers.hdf5".format(args.ind_layer))
+        contextualized_questions_with_token_file_path = os.path.join(args.data_path, "contextualized_questions_embeddings_with_tokens_{}_layers_@@.hdf5".format(args.ind_layer))
         contextualized_paragraphs_with_token_file_path = os.path.join(args.data_path,
-                                                                     "contextualized_paragraphs_embeddings_with_tokens_{}_layers.hdf5".format(
+                                                                     "contextualized_paragraphs_embeddings_with_tokens_{}_layers.hdf5_@@".format(
                                                                          args.ind_layer))
         contextualized_document_embeddings_with_token_path = os.path.join(args.data_path,
                                                                      "contextualized_document_embeddings_with_token_{}_layers.hdf5".format(
@@ -81,10 +136,10 @@ def main(args):
     else:
         conc_layers = [int(x) for x in args.conc_layers.split(",")]
         contextualized_questions_with_token_file_path = os.path.join(args.data_path,
-                                                                     "contextualized_questions_embeddings_with_tokens_{}_layers.hdf5".format(
+                                                                     "contextualized_questions_embeddings_with_tokens_{}_layers_@@.hdf5".format(
                                                                          conc_layers))
         contextualized_paragraphs_with_token_file_path = os.path.join(args.data_path,
-                                                                     "contextualized_paragraphs_embeddings_with_tokens_{}_layers.hdf5".format(
+                                                                     "contextualized_paragraphs_embeddings_with_tokens_{}_layers_@@.hdf5".format(
                                                                          conc_layers))
         contextualized_document_embeddings_with_token_path = os.path.join(args.data_path,
                                                                           "contextualized_document_embeddings_with_token_{}_layers.hdf5".format(
@@ -125,73 +180,36 @@ def main(args):
     ******************************************************************************************************************
     ******************************************************************************************************************
     """
-    question_embeddings = None
     new_question_tokens = []
     if os.path.exists(contextualized_questions_with_token_file_path):
-        question_embeddings = UTIL.load_embeddings(contextualized_questions_with_token_file_path)
+        question_embeddings = UTIL.load_embeddings(contextualized_questions_with_token_file_path.replace('@@', ''))
         new_question_tokens = UTIL.load_from_pickle(new_question_tokens_path)
     else:
         file_names = get_file_names(questions_folder_path, file_name_splitter, bert_extension)
         tokenized_questions_size = test_size[0] if test_size is not None else len(tokenized_questions)
         checkpoint = None
-        for question_indx in tqdm(range(tokenized_questions_size)):
-            question_bert_index = question_indx + 1
-            file_name, remaining_index_to_pass_this_file = find_file_name(question_bert_index, file_names)
-            if remaining_index_to_pass_this_file >= 0:
-                jsons = UTIL.load_bert_jsons_from_single_file(os.path.join(questions_folder_path, file_name))
-                if question_indx > 0:
-                    checkpoint = question_indx
-            if checkpoint is not None:
-                question_indx = question_indx - checkpoint
-            new_question_token = []
-            token_embeddings = None
-            for line_index, json in UTIL.reversedEnumerate(jsons[question_indx]):
-                # 0 and -1 token indexes belong to [CLS, SEP] we are ignoring them.
-                json['features'].pop(0)
-                json['features'].pop(-1)
+        if args.is_parititioned is True:
+            partition_counter = 0
+            print("Partition {} is running for writing questions".format(partition_counter))
+            for _p_counter in tqdm(range(0, tokenized_questions_size, args.document_partition_size)):
+                partition_counter +=1
+                process_documents(_p_counter, checkpoint, tokenized_questions_size, file_names, questions_folder_path, ind_layer, conc_layers, new_question_tokens,contextualized_questions_with_token_file_path.replace('@@', str(_p_counter)) )
 
-                # filter out the non-contributional tokens from the list.
-                features = [x for x in json['features'] if not x['token'].startswith("##")]
-                for feature_index, feature in UTIL.reversedEnumerate(features):
-                    if line_index > 0 and feature_index < args.window_length:
-                        #print(feature['token'])
-                        continue
+            print("Partition {} is running for reading questions".format(partition_counter))
+            for _p_counter in tqdm(range(0, partition_counter)):
+                question_embeddings = np.vstack((question_embeddings, UTIL.load_embeddings(
+                    contextualized_questions_with_token_file_path.replace("@@", str(_p_counter)))))
 
-                    if args.ind_layer is not None:
-                        token_embedding = np.array(
-                            [l['values'] for l in feature['layers'] if l['index'] == ind_layer])
-                    else:
-                        token_embedding = np.concatenate([l['values']for l in feature['layers'] if l['index'] in conc_layers])
-
-                    if token_embeddings is None:
-                        token_embeddings = token_embedding
-                    else:
-                        token_embeddings = np.vstack((token_embeddings, token_embedding))
-
-                    new_question_token.append(feature['token'])
-            if len(new_question_token) != token_embeddings.shape[0]:
-                print(30 * '*')
-                print('********** Size of token question embeddings {} has problem in {} checkpoint **********'.format(question_indx, checkpoint))
-                print(30 * '*')
-            new_question_tokens.append(new_question_token)
-            if question_embeddings is None:
-                question_embeddings = token_embeddings
-            else:
-                question_embeddings = np.vstack((question_embeddings, token_embeddings))
-
-            # # if args['change_shape']:
-            # #     question_embedding = np.expand_dims(question_embedding, axis=1)
-
-            # print('Question {} is processed. It has {} tokens and embedding shape is {} so {}'.format(question_indx,
-            #                                                                                           org_tokens_len,
-            #                                                                                           token_embeddings.shape[0],
-            #                                                                                           org_tokens_len == token_embeddings.shape[0]))
-        print('Question_embeddings shape: {}'.format(question_embeddings.shape))
+        else:
+            print("It is running for writing questions")
+            process_documents(0, checkpoint, tokenized_questions_size, file_names, questions_folder_path,
+                              ind_layer, conc_layers, new_question_tokens,
+                              contextualized_questions_with_token_file_path.replace('@@', ''))
         UTIL.save_as_pickle(new_question_tokens, new_question_tokens_path)
-        UTIL.dump_embeddings(question_embeddings, contextualized_questions_with_token_file_path)
-        print('Questions are dumped')
-        del jsons
-    paragraph_embeddings = None
+
+    ## ***************************************************************************************************************
+    ## ***************************************************************************************************************
+    ## ***************************************************************************************************************
     new_paragraph_tokens = []
     if os.path.exists(contextualized_paragraphs_with_token_file_path):
         paragraph_embeddings = UTIL.load_embeddings(contextualized_paragraphs_with_token_file_path)
@@ -200,68 +218,25 @@ def main(args):
         file_names = get_file_names(paragraphs_folder_path, file_name_splitter, bert_extension)
         tokenized_paragraphs_size = test_size[1] if test_size is not None else len(tokenized_paragraphs)
         checkpoint=None
-        for paragraph_indx in tqdm(range(tokenized_paragraphs_size)):
-            paragraph_bert_index = paragraph_indx + 1
-            file_name, remaining_index_to_pass_this_file = find_file_name(paragraph_bert_index, file_names)
-            if remaining_index_to_pass_this_file >= 0:
-               jsons = UTIL.load_bert_jsons_from_single_file(os.path.join(paragraphs_folder_path, file_name))
-               if paragraph_indx >0:
-                   checkpoint = paragraph_indx
-            if checkpoint is not None:
-                paragraph_indx = paragraph_indx - checkpoint
+        if args.is_parititioned is True:
+            partition_counter = 0
+            print("Partition {} is running for writing paragraphs".format(partition_counter))
+            for _p_counter in tqdm(range(0, tokenized_paragraphs_size, args.document_partition_size)):
+                partition_counter += 1
+                process_documents(_p_counter, checkpoint, tokenized_paragraphs_size, file_names, paragraphs_folder_path,
+                                  ind_layer, conc_layers, new_question_tokens,
+                                  contextualized_paragraphs_with_token_file_path.replace('@@', str(_p_counter)))
 
-            new_paragraph_token = []
-            try:
-                token_embeddings = None
-                for line_index, json in UTIL.reversedEnumerate(jsons[paragraph_indx]):
-                    # 0 and -1 token indexes belong to [CLS, SEP] we are ignoring them.
-                    json['features'].pop(0)
-                    json['features'].pop(-1)
+            print("Partition {} is running for reading paragraphs".format(partition_counter))
+            for _p_counter in tqdm(range(0, partition_counter)):
+                paragraph_embeddings = np.vstack((paragraph_embeddings, UTIL.load_embeddings(contextualized_paragraphs_with_token_file_path.replace("@@", str(_p_counter)))))
 
-                    # filter out the non-contributional tokens from the list.
-                    features = [x for x in json['features'] if not x['token'].startswith("##")]
-                    for feature_index, feature in UTIL.reversedEnumerate(features):
-                        if line_index > 0 and feature_index < args.window_length:
-                            continue
-
-                        if args.ind_layer is not None:
-                            token_embedding = np.array(
-                                [l['values'] for l in feature['layers'] if l['index'] == ind_layer])
-                        else:
-                            token_embedding = np.concatenate(
-                                [l['values'] for l in feature['layers'] if l['index'] in conc_layers])
-
-                        if token_embeddings is None:
-                            token_embeddings = token_embedding
-                        else:
-                            token_embeddings = np.vstack((token_embeddings, token_embedding))
-                        new_paragraph_token.append(feature['token'])
-                if len(new_paragraph_token) != token_embeddings.shape[0]:
-                    print(30 * '*')
-                    print('********** Size of token paragraph embeddings {} has problem in {} checkpoint**********'.format(paragraph_indx, checkpoint))
-                    print(30 * '*')
-                new_paragraph_tokens.append(new_paragraph_token)
-                #print('Token Size : {}'.format(sum([len(sentence) for sentence in new_paragraph_tokens])))
-            except:
-                pass
-
-            if paragraph_embeddings is None:
-                paragraph_embeddings = token_embeddings
-            else:
-                paragraph_embeddings = np.vstack((paragraph_embeddings, token_embeddings))
-
-            # print('Question {} is processed. It has {} tokens and embedding shape is {} so {}'.format(question_indx,
-            #                                                                                           org_tokens_len,
-            #                                                                                           token_embeddings.shape[
-            #                                                                                               0],
-            #                                                                                           org_tokens_len ==
-            #                                                                                           token_embeddings.shape[
-            #                                                                                               0]))
-        print('Paragraph_embeddings shape: {}'.format(paragraph_embeddings.shape))
+        else:
+            print("It is running for writing paragraphs")
+            process_documents(0, checkpoint, tokenized_paragraphs_size, file_names, questions_folder_path,
+                              ind_layer, conc_layers, new_question_tokens,
+                              contextualized_paragraphs_with_token_file_path.replace('@@', ''))
         UTIL.save_as_pickle(new_paragraph_tokens, new_paragraph_tokens_path)
-        UTIL.dump_embeddings(paragraph_embeddings, contextualized_paragraphs_with_token_file_path)
-        print('Paragraphs are dumped')
-        del jsons
 
     if os.path.exists(contextualized_document_embeddings_with_token_path):
         if args.is_parititioned is not True:
@@ -314,15 +289,15 @@ def main(args):
         if args.is_parititioned is True:
             with h5py.File(contextualized_document_embeddings_with_token_path, 'r') as fin:
                 partition_counter=0
-                for partition in range(0,idf_vec.shape[0], args.partition_size):
+                for partition in range(0,idf_vec.shape[0], args.token_partition_size):
                     partition_counter += 1
-                    temp_doc_embeddings = fin['embeddings'][partition:partition + args.partition_size, :]
-                    temp_idf_vec = idf_vec[partition:partition + args.partition_size, :].reshape(-1,1)
+                    temp_doc_embeddings = fin['embeddings'][partition:partition + args.token_partition_size, :]
+                    temp_idf_vec = idf_vec[partition:partition + args.token_partition_size, :].reshape(-1,1)
                     #temp_doc_embeddings = temp_doc_embeddings[:,0,:]
                     #temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
                     temp_weighted_token_embeddings = np.multiply(temp_idf_vec, temp_doc_embeddings)
                     UTIL.dump_embeddings(temp_weighted_token_embeddings, calculated_token_embeddings_file_path.replace('@@', str(partition_counter)).replace('##', 'idf'))
-                    print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition, partition + args.partition_size))
+                    print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition, partition + args.token_partition_size))
         else:
             idf_vec = idf_vec.reshape(-1, 1)
             weighted_token_embeddings = np.multiply(idf_vec, document_embeddings)
@@ -336,14 +311,14 @@ def main(args):
         if args.is_parititioned is True:
             with h5py.File(contextualized_document_embeddings_with_token_path, 'r') as fin:
                 partition_counter = 0
-                for partition in range(0, len(corpus_as_tokens), args.partition_size):
+                for partition in range(0, len(corpus_as_tokens), args.token_partition_size):
                     partition_counter += 1
-                    temp_doc_embeddings = fin['embeddings'][partition:partition + args.partition_size, :]
+                    temp_doc_embeddings = fin['embeddings'][partition:partition + args.token_partition_size, :]
                     #temp_doc_embeddings = temp_doc_embeddings[:, 0, :]
                     #temp_doc_embeddings = preprocessing.normalize(temp_doc_embeddings, norm='l2')
                     UTIL.dump_embeddings(temp_doc_embeddings, calculated_token_embeddings_file_path.replace('@@', str(partition_counter)).replace('##', ''))
                     print("Partition {} is completed and processed {} - {} tokens".format(partition_counter, partition,
-                                                                                          partition + args.partition_size))
+                                                                                          partition + args.token_partition_size))
         else:
             weighted_token_embeddings = document_embeddings
     """

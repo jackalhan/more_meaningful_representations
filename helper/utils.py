@@ -1253,6 +1253,14 @@ def load_module(module_url = "https://tfhub.dev/google/universal-sentence-encode
         embed = hub.Module(module_url)
     return embed
 
+def str2bool(v):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 def create_idf_matrix(tokenized_questions, tokenized_paragraphs, token2idfweight):
     idf_matrix = []
     for sentence in tokenized_questions + tokenized_paragraphs:

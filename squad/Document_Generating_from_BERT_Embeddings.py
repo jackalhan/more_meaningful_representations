@@ -21,8 +21,8 @@ def get_parser():
     parser.add_argument('--conc_layers', default="-1,-2,-3,-4", help='whether to concatenate all specified layers or None')
     parser.add_argument('--ind_layer', default=None,
                         help='whether to create individual representations for specified layer or None')
-    parser.add_argument('--is_inject_idf', default=False, type=bool, help="whether inject idf or not to the weights")
-    parser.add_argument('--is_parititioned', default=True, type=bool,
+    parser.add_argument('--is_inject_idf', default=False, type=UTIL.str2bool, help="whether inject idf or not to the weights")
+    parser.add_argument('--is_parititioned', default=True, type=UTIL.str2bool,
                         help="handle file read/write partially")
     parser.add_argument('--token_partition_size', default=50000, type=int,
                         help="size of partition to handle tokens")

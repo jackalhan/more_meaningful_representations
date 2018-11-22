@@ -47,10 +47,11 @@ def find_file_name(index, file_names):
         if file_name[0] <= index <= file_name[1]:
             return file_name[2], file_name[0] - index
 
-def process_documents(partition, document_partition_size, checkpoint, jsons, tokenized_document_size, file_names, file_folder_path, ind_layer, conc_layers, all_tokens, contextualized_questions_with_token_file_path):
+def process_documents(partition, document_partition_size, checkpoint, jsons, tokenized_document_size, file_names, file_folder_path, ind_layer, conc_layers, all_tokens, contextualized_questions_with_token_file_path, dictionary_path):
     embeddings = None
     start = partition
     end =  (partition + document_partition_size) if document_partition_size is not None else tokenized_document_size
+    local_tokens = []
     for indx in tqdm(range(start, end)):
         if tokenized_document_size > indx:
             bert_index = indx + 1
@@ -94,7 +95,7 @@ def process_documents(partition, document_partition_size, checkpoint, jsons, tok
                     indx, checkpoint))
                 print(30 * '*')
             all_tokens.append(new_token)
-
+            local_tokens.append(new_token)
             # TOKEN DEBUGGING
             # print("*" * 25)
             # print("Sub Token size in dictionary for the document {} in the partition: {}".format(indx, len(new_token)))
@@ -107,6 +108,7 @@ def process_documents(partition, document_partition_size, checkpoint, jsons, tok
 
     print('embeddings shape: {}'.format(embeddings.shape))
     UTIL.dump_embeddings(embeddings, contextualized_questions_with_token_file_path)
+    UTIL.save_as_pickle(local_tokens, dictionary_path)
     print('embeddings are dumped')
     return jsons, checkpoint, embeddings.shape ## TOKEN DEBUGGING
 def main(args):
@@ -118,8 +120,8 @@ def main(args):
     document_embeddings = None
     questions_folder_path = os.path.join(args.data_path, 'questions')
     paragraphs_folder_path = os.path.join(args.data_path, 'paragraphs')
-    new_question_tokens_path = os.path.join(args.data_path, 'questions_tokens.pkl')
-    new_paragraph_tokens_path = os.path.join(args.data_path, 'paragraphs_tokens.pkl')
+    new_question_tokens_path = os.path.join(args.data_path, 'questions_tokens@@.pkl')
+    new_paragraph_tokens_path = os.path.join(args.data_path, 'paragraphs_tokens@@.pkl')
     calculated_token_embeddings_file_path= os.path.join(args.data_path, 'contextualized_document_embeddings_with_token_##_@@.hdf5')
     vocab_path = os.path.join(args.data_path, 'wordpiece_vocab.txt')
     ind_layer = None
@@ -190,9 +192,9 @@ def main(args):
     ******************************************************************************************************************
     """
     new_question_tokens = []
+    is_questions_already_processed = False
     if os.path.exists(contextualized_questions_with_token_file_path.replace('@@', '')):
-        question_embeddings = UTIL.load_embeddings(contextualized_questions_with_token_file_path.replace('@@', ''))
-        new_question_tokens = UTIL.load_from_pickle(new_question_tokens_path)
+        is_questions_already_processed=True
     else:
         file_names = get_file_names(questions_folder_path, file_name_splitter, bert_extension)
         tokenized_questions_size = test_size[0] if test_size is not None else len(tokenized_questions)
@@ -202,17 +204,20 @@ def main(args):
             partition_counter = 0
             for _p_counter in tqdm(range(0, tokenized_questions_size, args.document_partition_size)):
                 print("Partition {} is running for writing questions".format(partition_counter))
-                # TOKEN DEBUGGING
-                #tokens_size_before_partition = sum([len(sentence) for sentence in new_question_tokens])
-                jsons, checkpoint, partition_shape = process_documents(_p_counter, args.document_partition_size, checkpoint, jsons, tokenized_questions_size, file_names, questions_folder_path, ind_layer, conc_layers, new_question_tokens,contextualized_questions_with_token_file_path.replace('@@', str(partition_counter)) )
+                if not os.path.exists(
+                        contextualized_questions_with_token_file_path.replace('@@', str(partition_counter))):
+                    # TOKEN DEBUGGING
+                    #tokens_size_before_partition = sum([len(sentence) for sentence in new_question_tokens])
+                    jsons, checkpoint, partition_shape = process_documents(_p_counter, args.document_partition_size, checkpoint, jsons, tokenized_questions_size, file_names, questions_folder_path, ind_layer, conc_layers, new_question_tokens,contextualized_questions_with_token_file_path.replace('@@', str(partition_counter)), new_question_tokens_path.replace('@@', str(partition_counter)))
+                    # TOKEN DEBUGGING
+                    # tokens_size_after_partition = sum([len(sentence) for sentence in new_question_tokens])
+                    # if tokens_size_after_partition - tokens_size_before_partition != partition_shape[0]:
+                    #     print("*" * 25)
+                    #     print("Tokens problem in partition {}, before: {}, after: {}, partition_shape:{}".format(_p_counter, tokens_size_before_partition, tokens_size_after_partition, partition_shape[0]))
+                    #     print("*" * 25)
+                else:
+                    new_question_tokens.extend(UTIL.load_from_pickle(new_question_tokens_path.replace('@@', str(partition_counter))))
                 partition_counter += 1
-                # TOKEN DEBUGGING
-                # tokens_size_after_partition = sum([len(sentence) for sentence in new_question_tokens])
-                # if tokens_size_after_partition - tokens_size_before_partition != partition_shape[0]:
-                #     print("*" * 25)
-                #     print("Tokens problem in partition {}, before: {}, after: {}, partition_shape:{}".format(_p_counter, tokens_size_before_partition, tokens_size_after_partition, partition_shape[0]))
-                #     print("*" * 25)
-
             question_embeddings = None
             for _p_counter in tqdm(range(0, partition_counter)):
                 print("Partition {} is running for reading questions".format(partition_counter))
@@ -230,15 +235,15 @@ def main(args):
             jsons, checkpoint,partition_shape = process_documents(0, None, checkpoint, jsons, tokenized_questions_size, file_names, questions_folder_path,
                               ind_layer, conc_layers, new_question_tokens,
                               contextualized_questions_with_token_file_path.replace('@@', ''))
-        UTIL.save_as_pickle(new_question_tokens, new_question_tokens_path)
+        UTIL.save_as_pickle(new_question_tokens, new_question_tokens_path.replace('@@', ''))
 
     ## ***************************************************************************************************************
     ## ***************************************************************************************************************
     ## ***************************************************************************************************************
     new_paragraph_tokens = []
+    is_paragraphs_already_processed = False
     if os.path.exists(contextualized_paragraphs_with_token_file_path.replace('@@', '')):
-        paragraph_embeddings = UTIL.load_embeddings(contextualized_paragraphs_with_token_file_path.replace('@@', ''))
-        new_paragraph_tokens = UTIL.load_from_pickle(new_paragraph_tokens_path)
+        is_paragraphs_already_processed=True
     else:
         file_names = get_file_names(paragraphs_folder_path, file_name_splitter, bert_extension)
         tokenized_paragraphs_size = test_size[1] if test_size is not None else len(tokenized_paragraphs)
@@ -248,10 +253,14 @@ def main(args):
             partition_counter = 0
             for _p_counter in tqdm(range(0, tokenized_paragraphs_size, args.document_partition_size)):
                 print("Partition {} is running for writing paragraphs".format(partition_counter))
-                #tokens_size_before_partition = sum([len(sentence) for sentence in new_paragraph_tokens])
-                jsons, checkpoint,partition_shape = process_documents(_p_counter, args.document_partition_size, checkpoint, jsons, tokenized_paragraphs_size, file_names, paragraphs_folder_path,
-                                  ind_layer, conc_layers, new_paragraph_tokens,
-                                  contextualized_paragraphs_with_token_file_path.replace('@@', str(partition_counter)))
+                if not os.path.exists(contextualized_paragraphs_with_token_file_path.replace('@@', str(partition_counter))):
+                    #tokens_size_before_partition = sum([len(sentence) for sentence in new_paragraph_tokens])
+                    jsons, checkpoint,partition_shape = process_documents(_p_counter, args.document_partition_size, checkpoint, jsons, tokenized_paragraphs_size, file_names, paragraphs_folder_path,
+                                      ind_layer, conc_layers, new_paragraph_tokens,
+                                      contextualized_paragraphs_with_token_file_path.replace('@@', str(partition_counter)), new_paragraph_tokens_path.replace('@@', str(partition_counter)))
+                else:
+                    new_paragraph_tokens.extend(
+                        UTIL.load_from_pickle(new_paragraph_tokens_path.replace('@@', str(partition_counter))))
                 partition_counter += 1
                 # TOKEN DEBUGGING
                 # tokens_size_after_partition = sum([len(sentence) for sentence in new_paragraph_tokens])
@@ -277,7 +286,15 @@ def main(args):
             jsons, checkpoint,partition_shape = process_documents(0, None, checkpoint, jsons, tokenized_paragraphs_size, file_names, paragraphs_folder_path,
                               ind_layer, conc_layers, new_paragraph_tokens,
                               contextualized_paragraphs_with_token_file_path.replace('@@', ''))
-        UTIL.save_as_pickle(new_paragraph_tokens, new_paragraph_tokens_path)
+        UTIL.save_as_pickle(new_paragraph_tokens, new_paragraph_tokens_path.replace('@@', ''))
+
+
+    if is_questions_already_processed:
+        question_embeddings = UTIL.load_embeddings(contextualized_questions_with_token_file_path.replace('@@', ''))
+        new_question_tokens = UTIL.load_from_pickle(new_question_tokens_path.replace('@@', ''))
+    if is_paragraphs_already_processed:
+        paragraph_embeddings = UTIL.load_embeddings(contextualized_paragraphs_with_token_file_path.replace('@@', ''))
+        new_paragraph_tokens = UTIL.load_from_pickle(new_paragraph_tokens_path.replace('@@', ''))
 
     if os.path.exists(contextualized_document_embeddings_with_token_path):
         if args.is_parititioned is not True:

@@ -101,6 +101,7 @@ def set_logger(log_path):
         stream_handler.setFormatter(logging.Formatter('%(message)s'))
         logger.addHandler(stream_handler)
 
+
 def load_bert_jsons_from_single_file(file_path, encoding='utf-8'):
     jsons=[]
     line_queue = queue.Queue(maxsize=50)
@@ -1299,12 +1300,12 @@ def dump_vocab(path, vocab_as_set):
         for item in vocab_as_set:
             f.write(item + "\n")
 
-def tokenize_contexts(contexts:list):
-    tokenized_context = [word_tokenize(context.strip()) for context in contexts]
+def tokenize_contexts(contexts:list, max_tokens=-1):
+    tokenized_context = [word_tokenize(context.strip()) if max_tokens == -1 else word_tokenize(context.strip())[0:max_tokens]for context in contexts]
     return tokenized_context
 
 def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=False,
-                          paragraphs_file=None, questions_file=None, mapping_file=None):
+                          paragraphs_file=None, questions_file=None, mapping_file=None, max_tokens=-1):
     print(100 * '*')
     print('Parsing Started')
     start = datetime.datetime.now()
@@ -1321,11 +1322,11 @@ def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=Fals
 
     print(20 * '-')
     print('Paragraphs: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
-    tokenized_paragraphs = tokenize_contexts(paragraphs)
+    tokenized_paragraphs = tokenize_contexts(paragraphs, max_tokens)
     print('# of Tokenized Paragraphs in {} : {}'.format(dataset_type, len(tokenized_paragraphs)))
     print(20 * '-')
     print('Questions: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
-    tokenized_questions = tokenize_contexts(questions)
+    tokenized_questions = tokenize_contexts(questions, max_tokens)
     print('# of Tokenized Questions in {} : {}'.format(dataset_type, len(tokenized_questions)))
 
     if is_dump_during_execution:

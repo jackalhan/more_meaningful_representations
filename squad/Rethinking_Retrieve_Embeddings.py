@@ -18,7 +18,7 @@ def get_parser():
     parser.add_argument('--window_length', default=4, type=int, help="-1: no windows, else should be selected from the given range 1-512. it should be at least 1 lower than truncate_length")
     parser.add_argument('--data_path', help="as a master path to locate all files and older underneath")
     parser.add_argument('--is_read_contents_from_squad_format', type=UTIL.str2bool)
-    parser.add_argument('--max_tokens', default=1000, type=int, help='Whether to limit the number of tokens per context')
+    parser.add_argument('--max_tokens', default=-1, type=int, help='Whether to limit the number of tokens per context')
     parser.add_argument('--dataset_path', type=str, help='whether squad formatted json file or a folder that has individual files')
     parser.add_argument('--conc_layers', default=None, help='whether to concatenate all specified layers or None')
     parser.add_argument('--ind_layers', default=None,
@@ -26,10 +26,8 @@ def get_parser():
     parser.add_argument('--is_inject_idf', default=True, type=UTIL.str2bool, help="whether inject idf or not to the weights")
     parser.add_argument('--is_averaged_token', default=True, type=UTIL.str2bool,
                         help="For FCN models, it must be set to True, for convolution kernels, it must be set to False, but the generated files will be very large")
-    # parser.add_argument('--is_parititioned', default=True, type=UTIL.str2bool,
-    #                     help="handle file read/write partially")
-    # parser.add_argument('--token_partition_size', default=50000, type=int,
-    #                     help="size of partition to handle tokens")
+    parser.add_argument('--is_stack_all_partitioned', default=True, type=UTIL.str2bool,
+                        help="in order to stack all embeddings and make one file.")
     parser.add_argument('--document_source_partition_size', default=2000, type=int,
                         help="size of partition to handle documents")
     parser.add_argument('--document_source_index', default=100, type=int,
@@ -45,6 +43,35 @@ def get_parser():
     return parser
 
 
+def finalize_embeddings(document_embeddings, file_path, last_index):
+    if args.is_averaged_token:
+        document_embeddings = np.asarray(document_embeddings)
+    else:
+        document_embeddings = pad(document_embeddings, args.max_tokens)
+
+    print('Embeddings are completed with a shape of {}'.format(document_embeddings.shape))
+    UTIL.dump_embeddings(document_embeddings, file_path)
+    print('Embeddings are dumped with a name of {}'.format(file_path))
+    print('Last_index is {}'.format(last_index))
+    print('*' * 15)
+
+def stack_partitioned_embeddings(path, file_name_extension):
+    name_prefix = 'partitioned_' + file_name_extension + '_'
+    names=[]
+    for name in [name for name in os.listdir(path)
+                 if name.startswith(name_prefix)]:
+        names.append(name)
+    names.sort()
+    embeddings = None
+    for name in names:
+        name_path = os.path.join(path, name)
+        embedding = UTIL.load_embeddings(name_path)
+    if embeddings is None:
+        embeddings = embedding
+    else:
+        embeddings = np.vstack((embeddings, embedding))
+    UTIL.dump_embeddings(embeddings, os.path.join(path, 'all_embeddings_'+file_name_extension + '.hdf5'))
+    print("Embeddings are getting dumped {}".format(embeddings.shape))
 
 def generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers, ind_layers, partition_size, last_index, file_name_extension, token2idfweight):
     document_embeddings = []
@@ -56,7 +83,7 @@ def generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers,
     # else:
     for partition_counter in range(0, len(documents_as_tokens), partition_size):
         partition_number = partition_counter + partition_size
-        file_path = os.path.join(path, 'partition_' + str(partition_counter) + '_' + file_name_extension+ '.hdf5')
+        file_path = os.path.join(path, 'partitioned_' +  file_name_extension + '_' + str(partition_counter) + '.hdf5')
         if partition_number <= last_index: #10000 <= 5000 - False
             continue
         if os.path.exists(file_path):
@@ -88,16 +115,12 @@ def generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers,
                     token_embeddings = np.mean(token_embeddings, axis=0)
                 document_embeddings.append(token_embeddings)
             else:
-                if args.is_averaged_token:
-                    document_embeddings = np.asarray(document_embeddings)
-                else:
-                    document_embeddings = pad(document_embeddings, args.max_tokens)
-                    print('Embeddings are padded with a shape of {}'.format(document_embeddings.shape))
-                UTIL.dump_embeddings(document_embeddings, file_path)
-                print('Embeddings are dumped with a name of {}'.format(file_path))
-                print('Last_index is {}'.format(last_index))
-                print('*' * 15)
+                finalize_embeddings(document_embeddings, file_path, last_index)
+                document_embeddings = []
                 break
+        if len(document_embeddings) != 0:
+            finalize_embeddings(document_embeddings, file_path, last_index)
+
     # return embeddings, labels
 
 def pad(x_matrix, max_tokens):
@@ -122,6 +145,7 @@ def retrieve_IDF_weights(non_tokenized_documents):
         lambda: max_idf,
         [(w, tfidf.idf_[i]) for w, i in tfidf.vocabulary_.items()])
     return token2idfweight
+
 
 def main(args):
     ################ CONFIGURATIONS #################
@@ -173,6 +197,12 @@ def main(args):
         print('SOURCES: Starting to embeddings generations')
         generate_elmo_embeddings(elmo,tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight)
         print('SOURCES: Ending to embeddings generations')
+        print('*' * 15)
+        print('DESTINATION: Starting to embeddings generations')
+        generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
+                                 args.document_destination_partition_size, args.document_destination_index, file_name_extension,
+                                 token2idfweight)
+        print('DESTINATION: Ending to embeddings generations')
     elif args.embedding_type == 'bert':
         #TODO: Bert
         pass
@@ -182,14 +212,15 @@ def main(args):
     else:
         raise Exception('There is no such embedding or is not supported yet.')
 
+    if args.is_stack_all_partitioned:
+        print('SOURCES: Starting to stack embeddings')
+        stack_partitioned_embeddings(source_folder_path, file_name_extension)
+        print('SOURCES: Ending to stack embeddings')
+        print('*' * 15)
+        print('DESTINATION: Starting to stack embeddings')
+        stack_partitioned_embeddings(source_folder_path, file_name_extension)
+        print('DESTINATION: Ending to stack embeddings')
 
-
-    new_question_tokens_path = os.path.join(args.data_path, 'questions_tokens@@.pkl')
-    new_paragraph_tokens_path = os.path.join(args.data_path, 'paragraphs_tokens@@.pkl')
-    calculated_token_embeddings_file_path = os.path.join(args.data_path,
-                                                         'contextualized_document_embeddings_with_token_##_@@.hdf5')
-
-    i
     # ################ CONFIGURATIONS #################
 
 

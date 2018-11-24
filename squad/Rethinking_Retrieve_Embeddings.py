@@ -88,7 +88,8 @@ def generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers,
         if partition_number <= last_index: #10000 <= 5000 - False
             continue
         if os.path.exists(file_path):
-            raise Exception('Check the last index document since it is already processed in {}'.format(file_path))
+            continue
+            #raise Exception('Check the last index document since it is already processed in {}'.format(file_path))
         start_index = last_index # 5000
         document_embeddings = []
         print('Partition Counter:{}'.format(partition_counter))

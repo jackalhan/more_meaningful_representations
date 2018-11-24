@@ -30,7 +30,7 @@ def get_parser():
                         help="in order to stack all embeddings and make one file.")
     parser.add_argument('--document_source_partition_size', default=2000, type=int,
                         help="size of partition to handle documents")
-    parser.add_argument('--document_source_index', default=100, type=int,
+    parser.add_argument('--document_source_index', default=0, type=int,
                         help="last document index processed so that parititon would continue from that index on")
     parser.add_argument('--document_destination_partition_size', default=2000, type=int,
                         help="size of partition to handle documents")
@@ -40,6 +40,8 @@ def get_parser():
                         help="question, paragraph sizes")
     parser.add_argument('--embedding_type', default='elmo', type=str,
                         help="elmo, bert, glove")
+    parser.add_argument('--is_powerful_gpu', default=True, type=UTIL.str2bool,
+                        help="whether it is a high gpu or not")
     return parser
 
 
@@ -201,12 +203,13 @@ def main(args):
         print('SOURCES: Starting to embeddings generations')
         generate_elmo_embeddings(elmo,tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight)
         print('SOURCES: Ending to embeddings generations')
-        print('*' * 15)
-        print('DESTINATION: Starting to embeddings generations')
-        generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
-                                 args.document_destination_partition_size, args.document_destination_index, file_name_extension,
-                                 token2idfweight)
-        print('DESTINATION: Ending to embeddings generations')
+        if args.is_powerful_gpu:
+            print('*' * 15)
+            print('DESTINATION: Starting to embeddings generations')
+            generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
+                                     args.document_destination_partition_size, args.document_destination_index, file_name_extension,
+                                     token2idfweight)
+            print('DESTINATION: Ending to embeddings generations')
     elif args.embedding_type == 'bert':
         #TODO: Bert
         pass
@@ -221,9 +224,10 @@ def main(args):
         stack_partitioned_embeddings(source_folder_path, file_name_extension)
         print('SOURCES: Ending to stack embeddings')
         print('*' * 15)
-        print('DESTINATION: Starting to stack embeddings')
-        stack_partitioned_embeddings(destination_folder_path, file_name_extension)
-        print('DESTINATION: Ending to stack embeddings')
+        if args.is_powerful_gpu:
+            print('DESTINATION: Starting to stack embeddings')
+            stack_partitioned_embeddings(destination_folder_path, file_name_extension)
+            print('DESTINATION: Ending to stack embeddings')
 
     # ################ CONFIGURATIONS #################
 

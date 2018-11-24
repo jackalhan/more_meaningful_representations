@@ -100,32 +100,35 @@ def generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers,
         print('Partition Size:{}'.format(partition_size))
         print('Partition Number:{}'.format(partition_number))
         print('Start Index:{}'.format(start_index))
-
-        for doc_indx, elmo_embedding in tqdm(enumerate(elmo.embed_sentences(documents_as_tokens[start_index:]), start_index)):
-            last_index = doc_indx # 5000
-            if last_index < partition_number: # 5000 < 5000 True
-                if  args.ind_layers is not None:
-                    token_embeddings = np.array(
-                        [l for l_indx, l in enumerate(reversed(elmo_embedding), 1) if  l_indx * -1 in ind_layers])
-                    token_embeddings = np.average(token_embeddings, axis=0)
+        try:
+            for doc_indx, elmo_embedding in tqdm(enumerate(elmo.embed_sentences(documents_as_tokens[start_index:]), start_index)):
+                last_index = doc_indx # 5000
+                if last_index < partition_number: # 5000 < 5000 True
+                    if  args.ind_layers is not None:
+                        token_embeddings = np.array(
+                            [l for l_indx, l in enumerate(reversed(elmo_embedding), 1) if  l_indx * -1 in ind_layers])
+                        token_embeddings = np.average(token_embeddings, axis=0)
+                    else:
+                        token_embeddings = np.concatenate(
+                            [l for l_indx, l in enumerate(elmo_embedding, 1) if l_indx * -1 in conc_layers], axis=1)
+                    if args.is_averaged_token:
+                        injected_idf_embeddings = []
+                        if args.is_inject_idf:
+                            for token in documents_as_tokens[doc_indx]:
+                                injected_idf_embeddings.append(token2idfweight[token])
+                            injected_idf_embeddings = np.asarray(injected_idf_embeddings).reshape(-1,1)
+                            token_embeddings = np.multiply(token_embeddings, injected_idf_embeddings)
+                        token_embeddings = np.mean(token_embeddings, axis=0)
+                    document_embeddings.append(token_embeddings)
                 else:
-                    token_embeddings = np.concatenate(
-                        [l for l_indx, l in enumerate(elmo_embedding, 1) if l_indx * -1 in conc_layers], axis=1)
-                if args.is_averaged_token:
-                    injected_idf_embeddings = []
-                    if args.is_inject_idf:
-                        for token in documents_as_tokens[doc_indx]:
-                            injected_idf_embeddings.append(token2idfweight[token])
-                        injected_idf_embeddings = np.asarray(injected_idf_embeddings).reshape(-1,1)
-                        token_embeddings = np.multiply(token_embeddings, injected_idf_embeddings)
-                    token_embeddings = np.mean(token_embeddings, axis=0)
-                document_embeddings.append(token_embeddings)
-            else:
+                    finalize_embeddings(document_embeddings, file_path, last_index)
+                    document_embeddings = []
+                    break
+            if len(document_embeddings) != 0:
                 finalize_embeddings(document_embeddings, file_path, last_index)
-                document_embeddings = []
-                break
-        if len(document_embeddings) != 0:
-            finalize_embeddings(document_embeddings, file_path, last_index)
+        except Exception as ex:
+            print('last_index:{}'.format(last_index))
+            raise Exception(ex)
 
     # return embeddings, labels
 

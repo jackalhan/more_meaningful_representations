@@ -60,12 +60,13 @@ def stack_partitioned_embeddings(path, file_name_extension):
     names=[]
     for name in [name for name in os.listdir(path)
                  if name.startswith(name_prefix)]:
-        names.append(name)
+        _name = int(name.rpartition('_')[2].rpartition('.')[0])
+        names.append(_name)
     names.sort()
-    print('File names: {}'.format(''.join(names)))
+    print('File names: {}'.format(names))
     embeddings = None
     for name in names:
-        name_path = os.path.join(path, name)
+        name_path = os.path.join(path, name_prefix + str(name) + '.hdf5')
         embedding = UTIL.load_embeddings(name_path)
     if embeddings is None:
         embeddings = embedding

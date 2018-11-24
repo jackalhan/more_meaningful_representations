@@ -62,6 +62,7 @@ def stack_partitioned_embeddings(path, file_name_extension):
                  if name.startswith(name_prefix)]:
         names.append(name)
     names.sort()
+    print('File names: {}'.format(''.join(names)))
     embeddings = None
     for name in names:
         name_path = os.path.join(path, name)
@@ -218,7 +219,7 @@ def main(args):
         print('SOURCES: Ending to stack embeddings')
         print('*' * 15)
         print('DESTINATION: Starting to stack embeddings')
-        stack_partitioned_embeddings(source_folder_path, file_name_extension)
+        stack_partitioned_embeddings(destination_folder_path, file_name_extension)
         print('DESTINATION: Ending to stack embeddings')
 
     # ################ CONFIGURATIONS #################

@@ -68,10 +68,11 @@ def stack_partitioned_embeddings(path, file_name_extension):
     for name in names:
         name_path = os.path.join(path, name_prefix + str(name) + '.hdf5')
         embedding = UTIL.load_embeddings(name_path)
-    if embeddings is None:
-        embeddings = embedding
-    else:
-        embeddings = np.vstack((embeddings, embedding))
+        if embeddings is None:
+            embeddings = embedding
+        else:
+            embeddings = np.vstack((embeddings, embedding))
+
     UTIL.dump_embeddings(embeddings, os.path.join(path, 'all_embeddings_'+file_name_extension + '.hdf5'))
     print("Embeddings are getting dumped {}".format(embeddings.shape))
 

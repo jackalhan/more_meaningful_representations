@@ -791,6 +791,7 @@ def analyze_labels(labels_file):
 
 def dump_mapping_data(data, outfile_to_dump):
     data_df = pd.DataFrame(np.array(data), columns=list("p"))
+    data_df.index.name = 'q'
     data_df.to_csv(outfile_to_dump)
 
 
@@ -1330,9 +1331,15 @@ def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=Fals
     print('# of Tokenized Questions in {} : {}'.format(dataset_type, len(tokenized_questions)))
 
     if is_dump_during_execution:
-        dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file)
-        dump_tokenized_contexts(tokenized_questions, questions_file)
-        dump_mapping_data(q_to_ps, mapping_file)
+        if paragraphs_file is not None:
+            dump_tokenized_contexts(tokenized_paragraphs, paragraphs_file)
+            print('Paragraphs are dumped to {}'.format(paragraphs_file))
+        if questions_file is not None:
+            dump_tokenized_contexts(tokenized_questions, questions_file)
+            print('Questions are dumped to {}'.format(questions_file))
+        if mapping_file is not None:
+            dump_mapping_data(q_to_ps, mapping_file)
+            print('Mapping data is dumped to {}'.format(mapping_file))
     end = datetime.datetime.now()
     print('Parsing Ended in {} minutes'.format((end - start).seconds / 60))
     print(100 * '*')

@@ -30,7 +30,7 @@ def get_parser():
                         help="For FCN models, it must be set to True, for convolution kernels, it must be set to False, but the generated files will be very large")
     parser.add_argument('--is_stack_all_partitioned', default=True, type=UTIL.str2bool,
                         help="in order to stack all embeddings and make one file.")
-    parser.add_argument('--document_source_partition_size', default=2000, type=int,
+    parser.add_argument('--document_source_partition_size', default=10000, type=int,
                         help="size of partition to handle documents")
     parser.add_argument('--document_source_index', default=0, type=int,
                         help="last document index processed so that parititon would continue from that index on")
@@ -130,7 +130,7 @@ def generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers,
                         token_embeddings = np.average(token_embeddings, axis=0)
                     else:
                         token_embeddings = np.concatenate(
-                            [l for l_indx, l in enumerate(elmo_embedding, 1) if l_indx * -1 in conc_layers], axis=1)
+                            [l for l_indx, l in enumerate(reversed(elmo_embedding), 1) if l_indx * -1 in conc_layers], axis=1)
                     if args.is_averaged_token:
                         injected_idf_embeddings = []
                         if args.is_inject_idf:
@@ -151,10 +151,10 @@ def generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers,
             raise Exception(ex)
 
 
-def embed_with_bert(documents_as_tokens, file_names, window_length):
+def embed_with_bert(documents_as_tokens, start_indx, file_names, window_length):
 
     checkpoint=None
-    for doc_indx, tokens in enumerate(documents_as_tokens):
+    for doc_indx, tokens in enumerate(documents_as_tokens, start_indx):
         bert_index = doc_indx + 1
         file_name, file_path, remaining_index_to_pass_this_file = find_file_name(bert_index, file_names)
         if remaining_index_to_pass_this_file >= 0:
@@ -179,12 +179,21 @@ def embed_with_bert(documents_as_tokens, file_names, window_length):
 
                 token_embedding = np.array(
                         [l['values'] for l in feature['layers']])
-
+                token_embedding = np.expand_dims(token_embedding, axis=1)
                 if token_embeddings is None:
                     token_embeddings = token_embedding
                 else:
-                    token_embeddings = np.vstack((token_embeddings, token_embedding))
-
+                    token_embeddings = np.append(token_embeddings, token_embedding, axis=1)
+        print('*' * 100)
+        print('*' * 100)
+        print('embed_with_bert')
+        print('*' * 20)
+        print('Checkpoint:{}'.format(checkpoint))
+        print('doc_indx:{}'.format(doc_indx))
+        print('len of tokens:{}'.format(len(tokens)))
+        print('token embeddings:{}'.format(token_embeddings.shape))
+        print('tokens: {}'.format(tokens))
+        print('=' * 20)
         yield token_embeddings
 
 def convert_bert_tokens(documents_as_tokens, file_names, window_length):
@@ -237,18 +246,28 @@ def generate_bert_embeddings(documents_as_tokens, path, args, conc_layers, ind_l
         print('Partition Counter:{}'.format(partition_counter))
         print('Partition Size:{}'.format(partition_size))
         print('Partition Number:{}'.format(partition_number))
+        print('File:{}'.format(file_path))
         print('Start Index:{}'.format(start_index))
         try:
-            for doc_indx, bert_embedding in tqdm(enumerate(embed_with_bert(documents_as_tokens[start_index:], file_names, args.window_length), start_index)):
+            for doc_indx, bert_embedding in tqdm(enumerate(embed_with_bert(documents_as_tokens[start_index:], start_index, file_names, args.window_length), start_index)):
                 last_index = doc_indx # 5000
                 if last_index < partition_number: # 5000 < 5000 True
                     if  args.ind_layers is not None:
                         token_embeddings = np.array(
-                            [l for l_indx, l in enumerate(reversed(bert_embedding), 1) if  l_indx * -1 in ind_layers])
+                            [l for l_indx, l in enumerate(bert_embedding, 1) if  l_indx * -1 in ind_layers])
                         token_embeddings = np.average(token_embeddings, axis=0)
                     else:
                         token_embeddings = np.concatenate(
                             [l for l_indx, l in enumerate(bert_embedding, 1) if l_indx * -1 in conc_layers], axis=1)
+
+                    print('generate_bert_embeddings')
+                    print('*' * 20)
+                    print('doc_indx:{}'.format(doc_indx))
+                    print('len of tokens:{}'.format(len(documents_as_tokens[doc_indx])))
+                    print('token embeddings:{}'.format(token_embeddings.shape))
+                    print('tokens: {}'.format(documents_as_tokens[doc_indx]))
+                    print('*' * 100)
+                    print('*' * 100)
                     if args.is_averaged_token:
                         injected_idf_embeddings = []
                         if args.is_inject_idf:
@@ -342,7 +361,7 @@ def main(args):
     source_folder_path = UTIL.create_dir(os.path.join(_embedding_path, 'source', 'injected_idf' if args.is_inject_idf else 'non_idf'))
     destination_folder_path = UTIL.create_dir(os.path.join(_embedding_path, 'destination', 'injected_idf' if args.is_inject_idf else 'non_idf'))
     print_header(args.embedding_type, args.dataset_path)
-
+    token2idfweight = None
     if args.embedding_type == 'elmo':
         if args.is_inject_idf:
             token2idfweight = retrieve_IDF_weights(sources_nontokenized + destinations_nontokenized)
@@ -369,30 +388,41 @@ def main(args):
         if args.is_inject_idf:
             # In order to get IDF weights, we have to calculate IDF weights according to the tokens of the bert.
             # so we have to grap all tokens for all documents and calculate their idf then do the rest.
-            bert_new_tokens_file=os.path.join(args.data_path, args.embedding_type, 'bert_new_tokens.pkl')
-            if not os.path.exists(bert_new_tokens_file):
-                source_new_tokens = convert_bert_tokens(tokenized_sources, source_pre_generated_bert_embeddings_file_names, args.window_length)
-                sources_nontokenized = [" ".join(context) for context in source_new_tokens]
+            bert_new_source_tokens_file=os.path.join(args.data_path, args.embedding_type, 'bert_new_source_tokens.pkl')
+            bert_new_destionation_tokens_file = os.path.join(args.data_path, args.embedding_type,
+                                                       'bert_new_destination_tokens.pkl')
+            if not os.path.exists(bert_new_source_tokens_file):
+                tokenized_sources = convert_bert_tokens(tokenized_sources, source_pre_generated_bert_embeddings_file_names, args.window_length)
                 print('SOURCE: New tokens are generated')
-
-                destination_new_tokens = convert_bert_tokens(tokenized_destinations, destination_pre_generated_bert_embeddings_file_names, args.window_length)
-                destinations_nontokenized = [" ".join(context) for context in destination_new_tokens]
-                print('DESTINATION: New tokens are generated')
-
-                all_tokens = sources_nontokenized + destinations_nontokenized
-                UTIL.save_as_pickle(all_tokens, bert_new_tokens_file)
-                print('New all tokens are dumped')
+                UTIL.save_as_pickle(tokenized_sources, bert_new_source_tokens_file)
+                print('SOURCE: New tokens are dumped')
             else:
-                all_tokens = UTIL.load_from_pickle(bert_new_tokens_file)
-                print('New all tokens are loaded')
+                tokenized_sources = UTIL.load_from_pickle(bert_new_source_tokens_file)
+                print('SOURCE: New tokens are loaded')
 
-            token2idfweight = retrieve_IDF_weights(all_tokens)
+            if not os.path.exists(bert_new_destionation_tokens_file):
+                tokenized_destinations = convert_bert_tokens(tokenized_destinations, destination_pre_generated_bert_embeddings_file_names, args.window_length)
+                print('DESTINATION: New tokens are generated')
+                UTIL.save_as_pickle(tokenized_destinations, bert_new_destionation_tokens_file)
+                print('DESTINATION: New tokens are dumped')
+            else:
+                tokenized_destinations = UTIL.load_from_pickle(bert_new_destionation_tokens_file)
+                print('DESTINATION: New tokens are loaded')
 
+            sources_nontokenized = [" ".join(context) for context in tokenized_sources]
+            destinations_nontokenized = [" ".join(context) for context in tokenized_destinations]
+            token2idfweight = retrieve_IDF_weights(sources_nontokenized + destinations_nontokenized)
 
         print('SOURCE: Starting to embeddings generations')
-        generate_bert_embeddings(tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight, file_names)
+        generate_bert_embeddings(tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight, source_pre_generated_bert_embeddings_file_names)
         print('SOURCE: Ending to embeddings generations')
-        pass
+
+        print('SOURCE: Starting to embeddings generations')
+        generate_bert_embeddings(tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
+                                 args.document_destination_partition_size, args.document_destination_index, file_name_extension,
+                                 token2idfweight, destination_pre_generated_bert_embeddings_file_names)
+        print('SOURCE: Ending to embeddings generations')
+
     elif args.embedding_type == 'glove':
         #TODO: Glove
         pass
@@ -404,10 +434,10 @@ def main(args):
         stack_partitioned_embeddings(source_folder_path, file_name_extension)
         print('SOURCES: Ending to stack embeddings')
         print('*' * 15)
-        if args.is_powerful_gpu:
-            print('DESTINATION: Starting to stack embeddings')
-            stack_partitioned_embeddings(destination_folder_path, file_name_extension)
-            print('DESTINATION: Ending to stack embeddings')
+
+        print('DESTINATION: Starting to stack embeddings')
+        stack_partitioned_embeddings(destination_folder_path, file_name_extension)
+        print('DESTINATION: Ending to stack embeddings')
 
     # ################ CONFIGURATIONS #################
 

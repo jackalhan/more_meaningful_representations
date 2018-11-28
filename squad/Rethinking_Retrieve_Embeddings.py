@@ -131,13 +131,14 @@ def generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers,
                     else:
                         token_embeddings = np.concatenate(
                             [l for l_indx, l in enumerate(reversed(elmo_embedding), 1) if l_indx * -1 in conc_layers], axis=1)
-                    if args.is_averaged_token:
+
+                    if args.is_inject_idf:
                         injected_idf_embeddings = []
-                        if args.is_inject_idf:
-                            for token in documents_as_tokens[doc_indx]:
-                                injected_idf_embeddings.append(token2idfweight[token])
-                            injected_idf_embeddings = np.asarray(injected_idf_embeddings).reshape(-1,1)
-                            token_embeddings = np.multiply(token_embeddings, injected_idf_embeddings)
+                        for token in documents_as_tokens[doc_indx]:
+                            injected_idf_embeddings.append(token2idfweight[token])
+                        injected_idf_embeddings = np.asarray(injected_idf_embeddings).reshape(-1,1)
+                        token_embeddings = np.multiply(token_embeddings, injected_idf_embeddings)
+                    if args.is_averaged_token:
                         token_embeddings = np.mean(token_embeddings, axis=0)
                     document_embeddings.append(token_embeddings)
                 else:
@@ -268,13 +269,14 @@ def generate_bert_embeddings(documents_as_tokens, path, args, conc_layers, ind_l
                     print('tokens: {}'.format(documents_as_tokens[doc_indx]))
                     print('*' * 100)
                     print('*' * 100)
-                    if args.is_averaged_token:
+
+                    if args.is_inject_idf:
                         injected_idf_embeddings = []
-                        if args.is_inject_idf:
-                            for token in documents_as_tokens[doc_indx]:
-                                injected_idf_embeddings.append(token2idfweight[token])
-                            injected_idf_embeddings = np.asarray(injected_idf_embeddings).reshape(-1,1)
-                            token_embeddings = np.multiply(token_embeddings, injected_idf_embeddings)
+                        for token in documents_as_tokens[doc_indx]:
+                            injected_idf_embeddings.append(token2idfweight[token])
+                        injected_idf_embeddings = np.asarray(injected_idf_embeddings).reshape(-1,1)
+                        token_embeddings = np.multiply(token_embeddings, injected_idf_embeddings)
+                    if args.is_averaged_token:
                         token_embeddings = np.mean(token_embeddings, axis=0)
                     document_embeddings.append(token_embeddings)
                 else:

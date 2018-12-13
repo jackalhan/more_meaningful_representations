@@ -12,7 +12,7 @@ import argparse
 from allennlp.commands.elmo import ElmoEmbedder
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import defaultdict
-
+import math
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--window_length', default=4, type=int, help="-1: no windows, else should be selected from the given range 1-512. it should be at least 1 lower than truncate_length")
@@ -42,6 +42,8 @@ def get_parser():
                         help="elmo, bert, glove")
     parser.add_argument('--document_verbose', default=3, type=int,
                         help="1:question, 2:paragraph, 3:document_and_paragraph")
+    parser.add_argument('--is_stack_all', default=True, type=UTIL.str2bool,
+                        help="stack all data into one big file")
 
     return parser
 
@@ -74,8 +76,7 @@ def finalize_embeddings(document_embeddings, file_path, last_index):
     print('Last_index is {}'.format(last_index))
     print('*' * 15)
 
-def stack_partitioned_embeddings(path, file_name_extension):
-    name_prefix = 'partitioned_' + file_name_extension + '_'
+def stack_partitioned_embeddings(path, file_name_extension, name_prefix, partition_size, is_averaged_token):
     names=[]
     for name in [name for name in os.listdir(path)
                  if name.startswith(name_prefix)]:
@@ -83,16 +84,38 @@ def stack_partitioned_embeddings(path, file_name_extension):
         names.append(_name)
     names.sort()
     print('File names: {}'.format(names))
+    partition_size = int(partition_size / 10)
+    range_size = math.ceil(len(names) / (partition_size))
+    for part in range(0, range_size):
+        embeddings = None
+        start = part * partition_size
+        end = start + partition_size
+        for name in tqdm(names[start:end]):
+            name_path = os.path.join(path, name_prefix + str(name) + '.hdf5')
+            embedding = UTIL.load_embeddings(name_path)
+            if not is_averaged_token:
+                embedding = np.expand_dims(embedding, axis=0)
+            if embeddings is None:
+                embeddings = embedding
+            else:
+                embeddings = np.vstack((embeddings, embedding))
+        UTIL.dump_embeddings(embeddings, os.path.join(path, 'all_embeddings_'+file_name_extension + '_part__{}.hdf5'.format(part)))
+
     embeddings = None
-    for name in names:
-        name_path = os.path.join(path, name_prefix + str(name) + '.hdf5')
-        embedding = UTIL.load_embeddings(name_path)
+    for part in range(0, range_size):
+        embedding = UTIL.load_embeddings(os.path.join(path, 'all_embeddings_'+file_name_extension + '_part__{}.hdf5'.format(part)))
         if embeddings is None:
             embeddings = embedding
         else:
-            embeddings = np.vstack((embeddings, embedding))
+            embeddings = np.vstack(
+                (embeddings, embedding))
 
-    UTIL.dump_embeddings(embeddings, os.path.join(path, 'all_embeddings_'+file_name_extension + '.hdf5'))
+    UTIL.dump_embeddings(embeddings, os.path.join(path,
+                                                      'all_embeddings_' + file_name_extension + '.hdf5'))
+
+    for part in range(0, range_size):
+        os.remove(os.path.join(path, 'all_embeddings_'+file_name_extension + '_part__{}.hdf5'.format(part)))
+
     print("Embeddings are getting dumped {}".format(embeddings.shape))
 
 
@@ -105,9 +128,10 @@ def partitionally_generate_elmo_embeddings(elmo, documents_as_tokens, path, args
     #         elmo = hub.Module("https://tfhub.dev/google/elmo/2", trainable=True)
     #
     # else:
+    name_prefix = 'partitioned_' +  file_name_extension + '_'
     for partition_counter in range(0, len(documents_as_tokens), partition_size):
         partition_number = partition_counter + partition_size
-        file_path = os.path.join(path, 'partitioned_' +  file_name_extension + '_' + str(partition_counter) + '.hdf5')
+        file_path = os.path.join(path, name_prefix + str(partition_counter) + '.hdf5')
         if partition_number <= last_index: #10000 <= 5000 - False
             continue
         if os.path.exists(file_path):
@@ -149,14 +173,16 @@ def partitionally_generate_elmo_embeddings(elmo, documents_as_tokens, path, args
         except Exception as ex:
             print('last_index:{}'.format(last_index))
             raise Exception(ex)
+    return name_prefix
 def individually_generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers, ind_layers, partition_size, last_index, file_name_extension, token2idfweight):
 
+    name_prefix = 'individually_' + file_name_extension + '_'
     try:
         start_index = last_index
         for doc_indx, elmo_embedding in tqdm(enumerate(elmo.embed_sentences(documents_as_tokens[start_index:]), start_index)):
             last_index = doc_indx # 5000
             file_path = os.path.join(path,
-                                     'individually_' + file_name_extension + '_' + str(doc_indx) + '.hdf5')
+                                     name_prefix + str(doc_indx) + '.hdf5')
             if  args.ind_layers is not None:
                 token_embeddings = np.array(
                     [l for l_indx, l in enumerate(reversed(elmo_embedding), 1) if  l_indx * -1 in ind_layers])
@@ -171,11 +197,13 @@ def individually_generate_elmo_embeddings(elmo, documents_as_tokens, path, args,
                     injected_idf_embeddings.append(token2idfweight[token])
                 injected_idf_embeddings = np.asarray(injected_idf_embeddings).reshape(-1,1)
                 token_embeddings = np.multiply(token_embeddings, injected_idf_embeddings)
+            token_embeddings = np.expand_dims(token_embeddings, axis=0)
+            token_embeddings = pad(token_embeddings, args.max_tokens)
             UTIL.dump_embeddings(token_embeddings, file_path)
     except Exception as ex:
         print('last_index:{}'.format(last_index))
         raise Exception(ex)
-
+    return name_prefix
 def embed_with_bert(documents_as_tokens, start_indx, file_names, window_length):
 
     checkpoint=None
@@ -258,9 +286,10 @@ def partitionally_generate_bert_embeddings(documents_as_tokens, path, args, conc
     #         elmo = hub.Module("https://tfhub.dev/google/elmo/2", trainable=True)
     #
     # else:
+    name_prefix = 'partitioned_' +  file_name_extension + '_'
     for partition_counter in range(0, len(documents_as_tokens), partition_size):
         partition_number = partition_counter + partition_size
-        file_path = os.path.join(path, 'partitioned_' +  file_name_extension + '_' + str(partition_counter) + '.hdf5')
+        file_path = os.path.join(path, name_prefix + str(partition_counter) + '.hdf5')
         if partition_number <= last_index: #10000 <= 5000 - False
             continue
         if os.path.exists(file_path):
@@ -312,14 +341,15 @@ def partitionally_generate_bert_embeddings(documents_as_tokens, path, args, conc
         except Exception as ex:
             print('last_index:{}'.format(last_index))
             raise Exception(ex)
-
+    return name_prefix
 def individually_generate_bert_embeddings(documents_as_tokens, path, args, conc_layers, ind_layers, partition_size, last_index, file_name_extension, token2idfweight, file_names):
 
+    name_prefix = 'individually_' + file_name_extension + '_'
     try:
         start_index = last_index
         for doc_indx, bert_embedding in tqdm(enumerate(embed_with_bert(documents_as_tokens[start_index:], start_index, file_names, args.window_length), start_index)):
             file_path = os.path.join(path,
-                                     'individually_' + file_name_extension + '_' + str(doc_indx) + '.hdf5')
+                                     name_prefix + str(doc_indx) + '.hdf5')
             last_index = doc_indx # 5000
             if  args.ind_layers is not None:
                 token_embeddings = np.array(
@@ -350,7 +380,7 @@ def individually_generate_bert_embeddings(documents_as_tokens, path, args, conc_
     except Exception as ex:
         print('last_index:{}'.format(last_index))
         raise Exception(ex)
-
+    return name_prefix
 def pad(x_matrix, max_tokens):
     new_x_matrix = None
     for sentenceIdx in range(len(x_matrix)):
@@ -439,10 +469,10 @@ def main(args):
             print('SOURCE: Starting to embeddings generations')
             if args.is_averaged_token:
                 source_folder_path = UTIL.create_dir(os.path.join(source_folder_path, 'paritionally'))
-                partitionally_generate_elmo_embeddings(elmo,tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight)
+                source_name_prefix = partitionally_generate_elmo_embeddings(elmo,tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight)
             else:
                 source_folder_path = UTIL.create_dir(os.path.join(source_folder_path, 'individually'))
-                individually_generate_elmo_embeddings(elmo, tokenized_sources, source_folder_path, args, conc_layers,
+                source_name_prefix = individually_generate_elmo_embeddings(elmo, tokenized_sources, source_folder_path, args, conc_layers,
                                                        ind_layers, args.document_source_partition_size,
                                                        args.document_source_index, file_name_extension, token2idfweight)
             print('SOURCE: Ending to embeddings generations')
@@ -451,12 +481,12 @@ def main(args):
             print('DESTINATION: Starting to embeddings generations')
             if args.is_averaged_token:
                 destination_folder_path =  UTIL.create_dir(os.path.join(destination_folder_path, 'paritionally'))
-                partitionally_generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
+                destination_name_prefix = partitionally_generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
                                          args.document_destination_partition_size, args.document_destination_index, file_name_extension,
                                          token2idfweight)
             else:
                 destination_folder_path = UTIL.create_dir(os.path.join(destination_folder_path, 'individually'))
-                individually_generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args,
+                destination_name_prefix = individually_generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args,
                                                        conc_layers, ind_layers,
                                                        args.document_destination_partition_size,
                                                        args.document_destination_index, file_name_extension,
@@ -503,10 +533,10 @@ def main(args):
             print('SOURCE: Starting to embeddings generations')
             if args.is_averaged_token:
                 source_folder_path = UTIL.create_dir(os.path.join(source_folder_path, 'paritionally'))
-                partitionally_generate_bert_embeddings(tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight, source_pre_generated_bert_embeddings_file_names)
+                source_name_prefix = partitionally_generate_bert_embeddings(tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight, source_pre_generated_bert_embeddings_file_names)
             else:
                 source_folder_path = UTIL.create_dir(os.path.join(source_folder_path, 'individually'))
-                individually_generate_bert_embeddings(tokenized_sources, source_folder_path, args, conc_layers,
+                source_name_prefix = individually_generate_bert_embeddings(tokenized_sources, source_folder_path, args, conc_layers,
                                                        ind_layers, args.document_source_partition_size,
                                                        args.document_source_index, file_name_extension, token2idfweight,
                                                        source_pre_generated_bert_embeddings_file_names)
@@ -516,12 +546,12 @@ def main(args):
             print('SOURCE: Starting to embeddings generations')
             if args.is_averaged_token:
                 destination_folder_path = UTIL.create_dir(os.path.join(destination_folder_path, 'paritionally'))
-                partitionally_generate_bert_embeddings(tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
+                destination_name_prefix = partitionally_generate_bert_embeddings(tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
                                          args.document_destination_partition_size, args.document_destination_index, file_name_extension,
                                          token2idfweight, destination_pre_generated_bert_embeddings_file_names)
             else:
                 destination_folder_path = UTIL.create_dir(os.path.join(destination_folder_path, 'individually'))
-                individually_generate_bert_embeddings(tokenized_destinations, destination_folder_path, args,
+                destination_name_prefix = individually_generate_bert_embeddings(tokenized_destinations, destination_folder_path, args,
                                                        conc_layers, ind_layers,
                                                        args.document_destination_partition_size,
                                                        args.document_destination_index, file_name_extension,
@@ -535,15 +565,15 @@ def main(args):
     else:
         raise Exception('There is no such embedding or is not supported yet.')
 
-    if args.is_averaged_token:
+    if args.is_stack_all:
         if args.document_verbose == 1 or args.document_verbose == 3:
             print('SOURCES: Starting to stack embeddings')
-            stack_partitioned_embeddings(source_folder_path, file_name_extension)
+            stack_partitioned_embeddings(source_folder_path, file_name_extension, source_name_prefix, args.document_source_partition_size, args.is_averaged_token)
             print('SOURCES: Ending to stack embeddings')
         if args.document_verbose == 2 or args.document_verbose == 3:
             print('*' * 15)
             print('DESTINATION: Starting to stack embeddings')
-            stack_partitioned_embeddings(destination_folder_path, file_name_extension)
+            stack_partitioned_embeddings(destination_folder_path, file_name_extension, destination_name_prefix, args.document_destination_partition_size, args.is_averaged_token)
             print('DESTINATION: Ending to stack embeddings')
 
     # ################ CONFIGURATIONS #################

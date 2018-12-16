@@ -20,6 +20,9 @@ We need to comment google sdk line by typing the following command
 sudo gedit /etc/apt/sources.list.d/google-cloud-sdk.list
 
 and then 
+install tf-ranking by following the guideline from the given link
+https://github.com/tensorflow/ranking
 
 pip install --upgrade tensorflow
-pip install --upgrade tensorflow-gpu==1.8.0
+pip install --upgrade tensorflow-gpu==1.9.0
+

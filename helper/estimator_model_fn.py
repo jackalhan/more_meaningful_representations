@@ -4,9 +4,9 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from helper.models import orchestrate_model
 from helper.loss import euclidean_distance_loss, euclidean_distance
-from helper.utils import get_file_key_names_for_execution, load_embeddings, calculate_recalls, pairwise_expanded_cosine_similarities, calculate_recall_top_k, pairwise_euclidean_distances
+from helper.utils import get_file_key_names_for_execution, load_embeddings, evaluation_metrics, pairwise_expanded_cosine_similarities, calculate_top_k, pairwise_euclidean_distances
 
-def recall_fn(base_data_path, params, before_model_embeddings, after_model_embeddings, KN_FILE_NAMES):
+def eval_metrics_fn(base_data_path, params, before_model_embeddings, after_model_embeddings, KN_FILE_NAMES):
     """
     # Evaluate the model's recall on the test set
     # 5k questions, ~20k paragraphs, can not be handled in estimator api (number of questions and number of paragraphs are not same)
@@ -22,167 +22,40 @@ def recall_fn(base_data_path, params, before_model_embeddings, after_model_embed
                                                    axis=1)
 
 
-    all_targets_norm = tf.reduce_mean(tf.norm(normalized_all_targets, axis=1))
-
-
-
     subset_labels = tf.constant(load_embeddings(os.path.join(base_data_path,
                                                              params.files[params.executor[
                                                                               "recall_calculation_for"] + "_subset_recall"][
                                                                   KN_FILE_NAMES["KN_SOURCE_LABELS"]])))
     subset_labels = tf.reshape(subset_labels, [-1, 1])
 
-
-
-
     # AVG RECALLS FOR ALL RECALL_TOPS
-    recalls_after_model, normalized_recalls_after_model = calculate_recalls(after_model_embeddings,
-                                                                            normalized_all_targets,
-                                                    subset_labels,
-                                                    params,
-                                                    distance_type=params.executor["distance_type"])
-
-    avg_recall_after_model = tf.reduce_mean(normalized_recalls_after_model)
-
-    are_founds_before, closest_labels_before, distances_before, \
-    are_founds_after, closest_labels_after, distances_after,\
-    avg_recall_before_model,normalized_recalls_before_model,\
-    distance_from_before_model_q_to_p,distance_from_after_model_q_to_p, delta_before_after_model = tf.constant(0, dtype=tf.float32), \
-                                                                                                   tf.constant(0, dtype=tf.float32), \
-                                                                                                   tf.constant(0,dtype=tf.float32), \
-                                                                                                   tf.constant(0,dtype=tf.float32), \
-                                                                                                   tf.constant(0, dtype=tf.float32),\
-                                                                                                      tf.constant(0, dtype=tf.float32),\
-                                                                                                      tf.constant(0, dtype=tf.float32),\
-                                                                                                      tf.constant(0, dtype=tf.float32),\
-                                                                                                      tf.constant(0, dtype=tf.float32),\
-                                                                                                      tf.constant(0, dtype=tf.float32),\
-                                                                                                      tf.constant(0, dtype=tf.float32),
+    eval_metrics_after = evaluation_metrics(after_model_embeddings,
+                                                        normalized_all_targets,
+                                                        subset_labels,
+                                                        params,
+                                                        distance_type=params.executor["distance_type"])
+    eval_metrics_before = None
     if params.executor["is_debug_mode"]:
-
-
-        target_embeddings = tf.constant(load_embeddings(os.path.join(base_data_path,
-                                                                        params.files[params.executor[
-                                                                                         "recall_calculation_for"] + "_subset_recall"][
-                                                                            KN_FILE_NAMES["KN_TARGET_EMBEDDINGS"]])))
-
-        normalized_target_embeddings = tf.nn.l2_normalize(target_embeddings,
-                                                             name='normalized_target_embeddings',
-                                                             axis=1)
-
-
-
-        # ground truth delta before model
-        # if params.model['model_type'].lower() == 'conv':
-        #     distance_from_before_model_q_to_p = tf.zeros([1,1], tf.float32)
-        # else:
-        distance_from_before_model_q_to_p = euclidean_distance(before_model_embeddings, normalized_target_embeddings)
-
-        GL_distance_from_before_model_q_to_p = distance_from_before_model_q_to_p
-
-
-        # ground truth delta after model
-        distance_from_after_model_q_to_p = euclidean_distance(after_model_embeddings, normalized_target_embeddings)
-
-        # delta before model - after model to ground truth
-        delta_before_after_model = distance_from_before_model_q_to_p - distance_from_after_model_q_to_p
-
-        # if params.model['model_type'].lower() == 'conv':
-        #     recalls_before_model, normalized_recalls_before_model = tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32)
-        # else:
-        recalls_before_model, normalized_recalls_before_model = calculate_recalls(before_model_embeddings,
-                                                                                        normalized_all_targets,
-                                                                                        subset_labels,
-                                                                                        params,
-                                                                                        distance_type=params.executor[
+        eval_metrics_before = evaluation_metrics(before_model_embeddings,
+                                                             normalized_all_targets,
+                                                             subset_labels,
+                                                             params,
+                                                             distance_type=params.executor[
                                                                                             "distance_type"])
 
+    return eval_metrics_after, eval_metrics_before
 
-        avg_recall_before_model = tf.reduce_mean(normalized_recalls_before_model)
-
-        if params.executor["distance_type"] == 'cosine':
-            # if params.model['model_type'].lower() == 'conv':
-            #     _, _labels_before, ___, _scores_before = tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32),tf.zeros([1, 1], tf.float32)
-            # else:
-            _, _labels_after, ___, _scores_after = pairwise_expanded_cosine_similarities(
-                                                                                            after_model_embeddings,
-                                                                                            subset_labels,
-                                                                                            normalized_all_targets)
-
-        else:
-            # if params.model['model_type'].lower() == 'conv':
-            #     _scores_before = tf.zeros([1, 1], tf.float32)
-            # else:
-            _scores_before = pairwise_euclidean_distances(before_model_embeddings, normalized_all_targets)
-            _labels_before = subset_labels
-
-            _scores_after = pairwise_euclidean_distances(after_model_embeddings, normalized_all_targets)
-            _labels_after = subset_labels
-
-        avg_recall_after_model = tf.tile([avg_recall_after_model], [tf.shape(after_model_embeddings)[0]])
-        normalized_recalls_after_model = tf.reshape(normalized_recalls_after_model, (1,-1))
-        normalized_recalls_after_model = tf.tile(normalized_recalls_after_model, (tf.shape(after_model_embeddings)[0],1))
-
-        # if params.model['model_type'].lower() == 'conv':
-        #     avg_recall_before_model = tf.zeros([1, 1], tf.float32)
-        #     normalized_recalls_before_model = tf.zeros([1, 1], tf.float32)
-        # else:
-        avg_recall_before_model = tf.tile([avg_recall_before_model],
-                                          [tf.shape(before_model_embeddings)[0]])
-        normalized_recalls_before_model = tf.reshape(normalized_recalls_before_model, (1, -1))
-        normalized_recalls_before_model = tf.tile(normalized_recalls_before_model, (tf.shape(before_model_embeddings)[0], 1))
-        for _k in range(1, params.executor["debug_top_k"]+1):
-            # if params.model['model_type'].lower() == 'conv':
-            #     _are_founds_before, _closest_labels_before, _distances_before = tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32), tf.zeros([1, 1], tf.float32)
-            # else:
-            _are_founds_before, _closest_labels_before, _distances_before = calculate_recall_top_k(_scores_before,
-                                                                                                _labels_before, _k,
-                                                                                                params.executor[
-                                                                                                    "distance_type"])
-            _are_founds_before = tf.reshape(_are_founds_before, [-1, 1])
-            _closest_labels_before = tf.reshape(_closest_labels_before, [-1, _k])
-            _distances_before = tf.reshape(_distances_before, [-1, _k])
-
-
-            _are_founds_after, _closest_labels_after, _distances_after = calculate_recall_top_k(_scores_after, _labels_after, _k, params.executor["distance_type"])
-            _are_founds_after = tf.reshape(_are_founds_after, [-1, 1])
-            _closest_labels_after = tf.reshape(_closest_labels_after, [-1, _k])
-            _distances_after = tf.reshape(_distances_after, [-1, _k])
-
-            if _k < 2:
-                # if params.model['model_type'].lower() == 'conv':
-                #     are_founds_before = tf.zeros([1, 1], tf.float32)
-                #     closest_labels_before = tf.zeros([1, 1], tf.float32)
-                #     distances_before = tf.zeros([1, 1], tf.float32)
-                #
-                # else:
-                are_founds_before = _are_founds_before
-                closest_labels_before = _closest_labels_before
-                distances_before = _distances_before
-
-                are_founds_after = _are_founds_after
-                closest_labels_after = _closest_labels_after
-                distances_after = _distances_after
-
+def extract_metrics_ops(eval_metrics_after, eval_metrics_before):
+    eval_metric_ops = {}
+    for fn_name, ks in eval_metrics_after.items():
+        for k, v in ks.items():
+            if eval_metrics_before is not None:
+                eval_metric_ops[fn_name + '_' + str(k)] = tf.reshape(eval_metrics_before[fn_name][k], (1,))
+                #eval_metric_ops[fn_name + '_' + str(k)] = tf.reshape(v, (1,))
             else:
-                # if params.model['model_type'].lower() == 'conv':
-                #     are_founds_before = tf.zeros([1, 1], tf.float32)
-                #     closest_labels_before = tf.zeros([1, 1], tf.float32)
-                #     distances_before = tf.zeros([1, 1], tf.float32)
-                # else:
-                are_founds_before = tf.concat([are_founds_before, are_founds_before], axis=1)
-                closest_labels_before = tf.concat([closest_labels_before, closest_labels_before], axis=1)
-                distances_before = tf.concat([distances_before, distances_before], axis=1)
-
-                are_founds_after = tf.concat([are_founds_after, _are_founds_after], axis=1)
-                closest_labels_after = tf.concat([closest_labels_after, _closest_labels_after], axis=1)
-                distances_after = tf.concat([distances_after, _distances_after], axis=1)
-
-    return avg_recall_after_model, normalized_recalls_after_model, distance_from_after_model_q_to_p, \
-           avg_recall_before_model, normalized_recalls_before_model, distance_from_before_model_q_to_p, \
-           delta_before_after_model, subset_labels, are_founds_after,closest_labels_after,distances_after,\
-           are_founds_before,closest_labels_before,distances_before,
-
+                eval_metric_ops[fn_name + '_' + str(k)] = tf.metrics.mean(v)
+                tf.summary.scalar(fn_name + '_' + str(k), v)
+    return eval_metric_ops
 def model_fn(features, labels, mode, params, config):
     """Model function for tf.estimator
 
@@ -215,35 +88,17 @@ def model_fn(features, labels, mode, params, config):
         if params.executor["is_debug_mode"]:
             normalized_output = tf.nn.l2_normalize(after_model_embeddings, axis=1)
             tf.contrib.layers.summarize_activation(normalized_output)
-            # if params.loss['require_l2_norm']:
-            #     after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
-            avg_recall_after_model, normalized_recalls_after_model, distance_from_after_model_q_to_p, \
-            avg_recall_before_model,normalized_recalls_before_model, distance_from_before_model_q_to_p, \
-            delta_before_after_model, actual_labels,are_founds_after,closest_labels_after,distances_after, \
-            are_founds_before, closest_labels_before, distances_before   = recall_fn(base_data_path, params, before_model_embeddings, after_model_embeddings,KN_FILE_NAMES)
+            eval_metrics_after,  eval_metrics_before = eval_metrics_fn(base_data_path,
+                                                                      params,
+                                                                      before_model_embeddings,
+                                                                      after_model_embeddings,
+                                                                      KN_FILE_NAMES)
 
-            results = {'embeddings': after_model_embeddings}
-            results['avg_recall_after_model'] = avg_recall_after_model
-            results['normalized_recalls_after_model'] = normalized_recalls_after_model
-            results['distance_from_after_model_q_to_p'] = distance_from_after_model_q_to_p
-            results['avg_recall_before_model'] = avg_recall_before_model
-            results['normalized_recalls_before_model'] = normalized_recalls_before_model
-            results['distance_from_before_model_q_to_p'] = distance_from_before_model_q_to_p
-            results['delta_before_after_model'] = delta_before_after_model
-            results['actual_labels'] = actual_labels
-            results['are_founds_after'] = are_founds_after
-            results['closest_labels_after'] = closest_labels_after
-            results['distances_after'] = distances_after
-            results['are_founds_before'] = are_founds_before
-            results['closest_labels_before'] = closest_labels_before
-            results['distances_before'] = distances_before
-
+            eval_metric_ops = extract_metrics_ops(eval_metrics_after, eval_metrics_before)
         else:
-            # if params.loss['require_l2_norm']:
-            #     after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
-            results = after_model_embeddings
+            eval_metric_ops = after_model_embeddings
 
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=results)
+        return tf.estimator.EstimatorSpec(mode=mode, predictions=eval_metric_ops)
 
     if params.loss['require_l2_norm']:
         after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
@@ -272,26 +127,16 @@ def model_fn(features, labels, mode, params, config):
     tf.summary.scalar('loss', loss)
 
     if mode == tf.estimator.ModeKeys.EVAL:
-        # if params.loss['require_l2_norm']:
-        #     after_model_embeddings = tf.nn.l2_normalize(after_model_embeddings, axis=1)
-        #global_step_ = tf.Print(global_step, [global_step], message="Value of global step")
 
         before_model_embeddings = tf.nn.l2_normalize(source_baseline_embeddings,
                                                      name='normalized_before_model_source_embeddings', axis=1)
 
-        avg_recall_after_model, normalized_recalls_after_model, distance_from_after_model_q_to_p, \
-        avg_recall_before_model, normalized_recalls_before_model, distance_from_before_model_q_to_p, \
-        delta_before_after_model, actual_labels, are_founds_after,closest_labels_after,distances_after, \
-        are_founds_before, closest_labels_before, distances_before = recall_fn(base_data_path, params, before_model_embeddings, after_model_embeddings,KN_FILE_NAMES)
-        #loss_over_recall_top_1 = tf.cast(loss, dtype=tf.float64) + tf.keras.backend.epsilon() / normalized_recalls_after_model[0]
-        tf.summary.scalar("avg_recall", avg_recall_after_model)
-        tf.summary.scalar("recall_top_1", normalized_recalls_after_model[0])
-        tf.summary.scalar("recall_top_2", normalized_recalls_after_model[1])
-        #tf.summary.scalar("loss/recall_top_1", loss_over_recall_top_1)
-        eval_metric_ops= {"recall_top_1": tf.metrics.mean(normalized_recalls_after_model[0])}
-        eval_metric_ops["recall_top_2"] = tf.metrics.mean(normalized_recalls_after_model[1])
-        eval_metric_ops["avg_recall"] = tf.metrics.mean(avg_recall_after_model)
-        #eval_metric_ops["loss/recall_top_1"] = tf.metrics.mean(loss_over_recall_top_1)
+        eval_metrics_after, eval_metrics_before = eval_metrics_fn(base_data_path,
+                                                                                        params,
+                                                                                        before_model_embeddings,
+                                                                                        after_model_embeddings,
+                                                                                        KN_FILE_NAMES)
+        eval_metric_ops = extract_metrics_ops(eval_metrics_after, eval_metrics_before)
         return tf.estimator.EstimatorSpec(mode, loss= loss, eval_metric_ops=eval_metric_ops)
 
     global_step = tf.train.get_global_step()

@@ -11,6 +11,7 @@ import math
 import os
 from random import shuffle, seed
 import tensorflow as tf
+import tensorflow_ranking as tfr
 import shutil
 from tqdm import tqdm
 import pickle
@@ -844,31 +845,59 @@ def pairwise_euclidean_distances(A, B):
     return D
 
 
-def calculate_recalls(questions, paragraphs, labels, params, k=None, distance_type='cosine'):
+def evaluation_metrics(questions, paragraphs, labels, params, k=None, distance_type='cosine', functions=None):
     """
      question [n x d] tensor of n rows with d dimensions
      paragraphs [m x d] tensor of n rows with d dimensions
      params config
-     returns:
-     loss : scalar value
      """
-
-    recalls = []  # tf.zeros([len(params.recall_top_k), 1], tf.float32)
     if distance_type == 'cosine':
         questions, labels, paragraphs, scores = pairwise_expanded_cosine_similarities(questions, labels, paragraphs)
-        number_of_questions = tf.to_int64(tf.shape(questions)[1])
     else:
         scores= pairwise_euclidean_distances(questions, paragraphs)
-        number_of_questions = tf.to_int64(tf.shape(questions)[0])
-    for _k in [k] if k is not None else params.recall:
-        with tf.name_scope('top_k_{}'.format(_k)) as k_scope:
-            founds, _, __ = calculate_recall_top_k(scores, labels, _k, distance_type)
-            total_founds_in_k = tf.reduce_sum(founds, name='{}_reduce_sum'.format(_k))
-            recalls.append(total_founds_in_k)
+        scores = tf.negative(scores)
+        #number_of_questions = tf.to_int64(tf.shape(questions)[0])
+    formatted_labels = tf.reshape(tf.one_hot(labels, paragraphs.shape[0]), [-1,paragraphs.shape[0]])
+    metrics = dict()
+    for _function in [functions] if functions is not None else params.metrics["functions"]:
+        metrics[_function] = dict()
+        for _k in [k] if k is not None else params.metrics["top_k"]:
+            with tf.name_scope('top_k_{}'.format(_k)) as k_scope:
+                #founds, _, __ = calculate_top_k(scores, labels, _k, distance_type)
+                # total_founds_in_k = tf.reduce_sum(founds, name='{}_reduce_sum'.format(_k))
+                if _function.lower() == "recall":
+                    labels = tf.cast(labels, dtype=tf.int64)
+                    _, value = tf.metrics.recall_at_k(labels, scores, _k)
+                    metrics[_function][_k] = value
+                elif _function.lower() == "precision":
+                    labels = tf.cast(labels, dtype=tf.int64)
+                    _, value = tf.metrics.precision_at_k(labels, scores, _k)
+                    metrics[_function][_k] = value
+                elif _function.lower() == "map":
+                    labels = tf.cast(labels, dtype=tf.int64)
+                    _, value = tf.metrics.average_precision_at_k(labels, scores, _k)
+                    metrics[_function][_k] = value
+                elif _function.lower() == "dcg":
+                    labels = tf.cast(labels, dtype=tf.float32)
+                    _, value = tfr.metrics.discounted_cumulative_gain(formatted_labels, scores, topn=_k)
+                    metrics[_function][_k] = value
+                elif _function.lower() == "ndcg":
+                    labels = tf.cast(labels, dtype=tf.float32)
+                    _, value = tfr.metrics.normalized_discounted_cumulative_gain(formatted_labels, scores, topn=_k)
+                    metrics[_function][_k] = value
+                else:
+                    labels = tf.cast(labels, dtype=tf.float32)
+                    if 'all' in metrics[_function]:
+                        continue
+                    if _function.lower() == "arp":
+                        _, value_all = tfr.metrics.average_relevance_position(formatted_labels, scores)
+                    elif _function.lower() == "mrp":
+                        _, value_all = tfr.metrics.mean_reciprocal_rank(formatted_labels, scores)
+                    else:
+                        raise ValueError("No evaluation function is found : {}".format(_function))
+                    metrics[_function]['all'] = value_all
 
-    recalls = tf.stack(recalls)
-
-    return recalls, (recalls / number_of_questions)
+    return metrics  #recalls, rates #recalls / number_of_questions)
 
 def pairwise_expanded_cosine_similarities(questions, labels, paragraphs):
     # in order to support batch_size feature, we expanded dims for 1
@@ -879,7 +908,8 @@ def pairwise_expanded_cosine_similarities(questions, labels, paragraphs):
     cosine_similarities = pairwise_cosine_sim(questions, paragraphs)
     return questions, labels, paragraphs, cosine_similarities
 
-def calculate_recall_top_k(scores, labels, k, distance_type = 'cosine'):
+
+def calculate_top_k(scores, labels, k, distance_type = 'cosine'):
 
 
     if distance_type == 'cosine':
@@ -912,6 +942,13 @@ def calculate_recall_top_k(scores, labels, k, distance_type = 'cosine'):
     tmp_indices = tf.where(tf.equal(closest_labels, labels))
     found_orders = tf.segment_min(tmp_indices[:, 1], tmp_indices[:, 0])
     return founds,closest_labels, distances
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# EVALUATIONS FUNCTIONS
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+
 
 def next_batch(begin_indx, batch_size, questions, paragraphs, labels):
     '''

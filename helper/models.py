@@ -3,7 +3,7 @@ import os
 import sys
 
 from numpy.ma import in1d
-from prompt_toolkit.key_binding.bindings.named_commands import accept_line
+#from prompt_toolkit.key_binding.bindings.named_commands import accept_line
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from helper.utils import get_variable_name_as_str

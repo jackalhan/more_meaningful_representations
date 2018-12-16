@@ -13,3 +13,13 @@
 
 (2) python -m spacy download en
 
+### if you have any problem during the sudo apt-get update command
+
+#### Solution :
+We need to comment google sdk line by typing the following command
+sudo gedit /etc/apt/sources.list.d/google-cloud-sdk.list
+
+and then 
+
+pip install --upgrade tensorflow
+pip install --upgrade tensorflow-gpu==1.8.0

@@ -2,7 +2,7 @@ import tensorflow as tf
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from helper.utils import pairwise_euclidean_distances, load_embeddings, calculate_recalls
+from helper.utils import pairwise_euclidean_distances, load_embeddings, evaluation_metrics
 
 
 def euclidean_distance_loss(question_embeddings, paragraph_embeddings, params, labels=None):

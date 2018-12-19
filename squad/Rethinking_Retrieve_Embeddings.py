@@ -248,7 +248,7 @@ def embed_with_glove(documents_as_tokens):
         print('token embeddings:{}'.format(token_embeddings.shape))
         print('tokens: {}'.format(tokens))
         print('=' * 20)
-        yield token_embeddings
+        yield np.expand_dims(token_embeddings, axis=0)
 
 def embed_with_fasttext(documents_as_tokens):
     for doc_indx, tokens in enumerate(documents_as_tokens):
@@ -269,7 +269,7 @@ def embed_with_fasttext(documents_as_tokens):
         print('token embeddings:{}'.format(token_embeddings.shape))
         print('tokens: {}'.format(tokens))
         print('=' * 20)
-        yield token_embeddings
+        yield np.expand_dims(token_embeddings, axis=0)
 
 def embed_with_bert(documents_as_tokens, start_indx, file_names, window_length):
 
@@ -479,7 +479,7 @@ def embed_with_tfidf(documents_as_tokens):
         print('doc_indx:{}'.format(doc_indx))
         print('token embeddings:{}'.format(token_embeddings.shape))
         print('=' * 20)
-        yield token_embeddings
+        yield np.expand_dims(token_embeddings, axis=0)
 
 def embed_with_bm25(documents_as_tokens):
     print('bm-25 is going to be calculated')
@@ -492,7 +492,7 @@ def embed_with_bm25(documents_as_tokens):
         print('doc_indx:{}'.format(doc_indx))
         print('token embeddings:{}'.format(token_embeddings.shape))
         print('=' * 20)
-        yield token_embeddings
+        yield np.expand_dims(token_embeddings, axis=0)
 
 def generate_tfidf(non_tokenized_documents, spacy_verbose=None):
     print('TF-IDF is going to be calculated')

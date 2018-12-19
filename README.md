@@ -26,3 +26,6 @@ https://github.com/tensorflow/ranking
 pip install --upgrade tensorflow
 pip install --upgrade tensorflow-gpu==1.9.0
 
+### if you have some strange problem for gensim:
+#### Solution :
+pip install -U boto

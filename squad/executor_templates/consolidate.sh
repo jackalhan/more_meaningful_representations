@@ -1,0 +1,1 @@
+python ../Consolidate_Dev_Train_Document_Pairs.py --label_path="../DATA/" --embedding_path="../DATA/consolidated/glove/token_verbose_none/averaged_token/"

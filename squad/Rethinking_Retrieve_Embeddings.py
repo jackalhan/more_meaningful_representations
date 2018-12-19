@@ -9,10 +9,15 @@ import tensorflow_hub as hub
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.utils as UTIL
 import argparse
-from allennlp.commands.elmo import ElmoEmbedder
+#from allennlp.commands.elmo import ElmoEmbedder
+from gensim.summarization.bm25 import get_bm25_weights
+from gensim.models import KeyedVectors
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import defaultdict
 import math
+import six
+import array
+import io
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--window_length', default=4, type=int, help="-1: no windows, else should be selected from the given range 1-512. it should be at least 1 lower than truncate_length")
@@ -44,8 +49,23 @@ def get_parser():
                         help="1:question, 2:paragraph, 3:document_and_paragraph")
     parser.add_argument('--is_stack_all', default=True, type=UTIL.str2bool,
                         help="stack all data into one big file")
+    parser.add_argument('--token_verbose', default=None, type=int,
+                        help="verbose: None, just tokenize on sent, 1, "
+                             "lowercase and tokenize on sent 2, "
+                             "lemmatize(lowercased) and tokenize on sent, "
+                             "3, tokenize and remove stopwords on sent, "
+                             "4, lowercase, tokenize and remove stopwords on sent, "
+                             "5, lemmatize(lowercased), tokenize and remove stopwords on sent")
 
     return parser
+
+
+glove_embeddings = None
+fasttext_embeddings = None
+tfidf_transformer=None
+bm25_embeddings = None
+#thanks to gensim!!! since it does not provide fit/transform structure, I need to trace the index of the corpus in order to reach the specified document
+bm25_index=None
 
 def get_file_names(path, file_name_splitter, bert_extension):
     bert_embeddings_file_names = []
@@ -120,7 +140,7 @@ def stack_partitioned_embeddings(path, file_name_extension, name_prefix, partiti
 
 
 
-def partitionally_generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers, ind_layers, partition_size, last_index, file_name_extension, token2idfweight):
+def partitionally_generate_generic_embeddings(documents_as_tokens, path, args, conc_layers, ind_layers, partition_size, last_index, file_name_extension, token2idfweight, embedding_function):
     document_embeddings = []
 
     # if args.ind_layer is not None:
@@ -144,8 +164,10 @@ def partitionally_generate_elmo_embeddings(elmo, documents_as_tokens, path, args
         print('Partition Number:{}'.format(partition_number))
         print('Start Index:{}'.format(start_index))
         try:
-            for doc_indx, elmo_embedding in tqdm(enumerate(elmo.embed_sentences(documents_as_tokens[start_index:]), start_index)):
+            for doc_indx, elmo_embedding in tqdm(enumerate(embedding_function(documents_as_tokens[start_index:]), start_index)):
                 last_index = doc_indx # 5000
+                global bm25_index
+                bm25_index = doc_indx
                 if last_index < partition_number: # 5000 < 5000 True
                     if  args.ind_layers is not None:
                         token_embeddings = np.array(
@@ -174,13 +196,15 @@ def partitionally_generate_elmo_embeddings(elmo, documents_as_tokens, path, args
             print('last_index:{}'.format(last_index))
             raise Exception(ex)
     return name_prefix
-def individually_generate_elmo_embeddings(elmo, documents_as_tokens, path, args, conc_layers, ind_layers, partition_size, last_index, file_name_extension, token2idfweight):
+def individually_generate_generic_embeddings(documents_as_tokens, path, args, conc_layers, ind_layers, partition_size, last_index, file_name_extension, token2idfweight, embedding_function):
 
     name_prefix = 'individually_' + file_name_extension + '_'
     try:
         start_index = last_index
-        for doc_indx, elmo_embedding in tqdm(enumerate(elmo.embed_sentences(documents_as_tokens[start_index:]), start_index)):
+        for doc_indx, elmo_embedding in tqdm(enumerate(embedding_function(documents_as_tokens[start_index:]), start_index)):
             last_index = doc_indx # 5000
+            global bm25_index
+            bm25_index = doc_indx
             file_path = os.path.join(path,
                                      name_prefix + str(doc_indx) + '.hdf5')
             if  args.ind_layers is not None:
@@ -204,6 +228,49 @@ def individually_generate_elmo_embeddings(elmo, documents_as_tokens, path, args,
         print('last_index:{}'.format(last_index))
         raise Exception(ex)
     return name_prefix
+
+def embed_with_glove(documents_as_tokens):
+    for doc_indx, tokens in enumerate(documents_as_tokens):
+        token_embeddings = None
+        for token in tokens:
+            token_embedding = glove_embeddings[token]
+            token_embedding = np.expand_dims(token_embedding, axis=0)
+            if token_embeddings is None:
+                token_embeddings = token_embedding
+            else:
+                token_embeddings = np.append(token_embeddings, token_embedding, axis=0)
+        print('*' * 100)
+        print('*' * 100)
+        print('embed_with_glove')
+        print('*' * 20)
+        print('doc_indx:{}'.format(doc_indx))
+        print('len of tokens:{}'.format(len(tokens)))
+        print('token embeddings:{}'.format(token_embeddings.shape))
+        print('tokens: {}'.format(tokens))
+        print('=' * 20)
+        yield token_embeddings
+
+def embed_with_fasttext(documents_as_tokens):
+    for doc_indx, tokens in enumerate(documents_as_tokens):
+        token_embeddings = None
+        for token in tokens:
+            token_embedding = fasttext_embeddings[token]
+            token_embedding = np.expand_dims(token_embedding, axis=0)
+            if token_embeddings is None:
+                token_embeddings = token_embedding
+            else:
+                token_embeddings = np.append(token_embeddings, token_embedding, axis=0)
+        print('*' * 100)
+        print('*' * 100)
+        print('embed_with_fasttext')
+        print('*' * 20)
+        print('doc_indx:{}'.format(doc_indx))
+        print('len of tokens:{}'.format(len(tokens)))
+        print('token embeddings:{}'.format(token_embeddings.shape))
+        print('tokens: {}'.format(tokens))
+        print('=' * 20)
+        yield token_embeddings
+
 def embed_with_bert(documents_as_tokens, start_indx, file_names, window_length):
 
     checkpoint=None
@@ -248,7 +315,6 @@ def embed_with_bert(documents_as_tokens, start_indx, file_names, window_length):
         print('tokens: {}'.format(tokens))
         print('=' * 20)
         yield token_embeddings
-
 def convert_bert_tokens(documents_as_tokens, file_names, window_length):
 
     checkpoint=None
@@ -383,6 +449,8 @@ def individually_generate_bert_embeddings(documents_as_tokens, path, args, conc_
     return name_prefix
 def pad(x_matrix, max_tokens):
     new_x_matrix = None
+    if max_tokens == -1:
+        return x_matrix
     for sentenceIdx in range(len(x_matrix)):
         sent = x_matrix[sentenceIdx]
         sentence_vec = np.array(sent, dtype=np.float32)
@@ -398,12 +466,43 @@ def pad(x_matrix, max_tokens):
     #matrix = np.array(x_matrix, dtype=np.float32)
     return new_x_matrix
 
-def retrieve_IDF_weights(non_tokenized_documents):
-    print('IDF is going to be calculated')
-    nlp = spacy.blank("en")
-    tokenize = lambda doc: [token.text for token in nlp(doc)]
+
+def embed_with_tfidf(documents_as_tokens):
+    non_tokenized_documents = [" ".join(context) for context in documents_as_tokens]
+    tfidf_matrix = np.array(tfidf_transformer.transform(non_tokenized_documents).todense())
+    for doc_indx, doc in enumerate(non_tokenized_documents):
+        token_embeddings = tfidf_matrix[doc_indx]
+        print('*' * 100)
+        print('*' * 100)
+        print('embed_with_tfidf')
+        print('*' * 20)
+        print('doc_indx:{}'.format(doc_indx))
+        print('token embeddings:{}'.format(token_embeddings.shape))
+        print('=' * 20)
+        yield token_embeddings
+
+def embed_with_bm25(documents_as_tokens):
+    print('bm-25 is going to be calculated')
+    for doc_indx, doc in enumerate(documents_as_tokens):
+        token_embeddings = np.array(bm25_embeddings[bm25_index])
+        print('*' * 100)
+        print('*' * 100)
+        print('embed_with_glove')
+        print('*' * 20)
+        print('doc_indx:{}'.format(doc_indx))
+        print('token embeddings:{}'.format(token_embeddings.shape))
+        print('=' * 20)
+        yield token_embeddings
+
+def generate_tfidf(non_tokenized_documents, spacy_verbose=None):
+    print('TF-IDF is going to be calculated')
+    tokenize = lambda doc: [token.text for token in UTIL.word_tokenize(doc, spacy_verbose)]
     tfidf = TfidfVectorizer(analyzer=lambda x: x, smooth_idf=False, sublinear_tf=False, tokenizer=tokenize)
     tfidf.fit(non_tokenized_documents)
+    return tfidf
+
+def retrieve_IDF_weights(non_tokenized_documents, spacy_verbose=None):
+    tfidf = generate_tfidf(non_tokenized_documents, spacy_verbose)
     max_idf = max(tfidf.idf_)
     token2idfweight = defaultdict(
         lambda: max_idf,
@@ -417,6 +516,104 @@ def print_header(embedding_type, dataset_path):
     print('DATASET :{}'.format(dataset_path))
     print('*' * 20)
     print('*' * 20)
+
+def load_fasttext_embedding(vocab, fasttext_file):
+    en_model = KeyedVectors.load_word2vec_format(fasttext_file)
+    embeddings = {}
+    for word in vocab:
+        if word not in embeddings:
+            vector = [float(x) for x in en_model[word]]
+        else:
+            alpha = 0.5 * (2.0 * np.random.random() - 1.0)
+            vector = (2.0 * np.random.random_sample([en_model.vector_size]) - 1.0) * alpha
+        embeddings[word] = np.array(vector)
+    return embeddings
+def load_glove_embedding(vocab, w2v_file):
+    """
+    Pros:
+        Save the oov words in oov.p for further analysis.
+    Refs:
+        class Vectors, https://github.com/pytorch/text/blob/master/torchtext/vocab.py
+    Args:
+        vocab: dict,
+        w2v_file: file, path to file of pre-trained word2vec/glove/fasttext
+    Returns:
+        vectors
+    """
+
+    embeddings = {}  # (n_words, n_dim)
+
+    # str call is necessary for Python 2/3 compatibility, since
+    # argument must be Python 2 str (Python 3 bytes) or
+    # Python 3 str (Python 2 unicode)
+    vectors, dim = array.array(str('d')), None
+
+    # Try to read the whole file with utf-8 encoding.
+    binary_lines = False
+    try:
+        with io.open(w2v_file, encoding="utf8") as f:
+            lines = [line for line in f]
+    # If there are malformed lines, read in binary mode
+    # and manually decode each word from utf-8
+    except:
+        print("Could not read {} as UTF8 file, "
+              "reading file as bytes and skipping "
+              "words with malformed UTF8.".format(w2v_file))
+        with open(w2v_file, 'rb') as f:
+            lines = [line for line in f]
+        binary_lines = True
+
+    print("Loading vectors from {}".format(w2v_file))
+
+    for line in tqdm(lines):
+        # Explicitly splitting on " " is important, so we don't
+        # get rid of Unicode non-breaking spaces in the vectors.
+        entries = line.rstrip().split(b" " if binary_lines else " ")
+
+        word, entries = entries[0], entries[1:]
+        if dim is None and len(entries) > 1:
+            dim = len(entries)
+            # init the embeddings
+            #embeddings = np.random.uniform(-0.25, 0.25, (n_words, dim))
+
+        elif len(entries) == 1:
+            print("Skipping token {} with 1-dimensional "
+                  "vector {}; likely a header".format(word, entries))
+            continue
+        elif dim != len(entries):
+            raise RuntimeError(
+                "Vector for token {} has {} dimensions, but previously "
+                "read vectors have {} dimensions. All vectors must have "
+                "the same number of dimensions.".format(word, len(entries), dim))
+
+        if binary_lines:
+            try:
+                if isinstance(word, six.binary_type):
+                    word = word.decode('utf-8')
+
+            except:
+                print("Skipping non-UTF8 token {}".format(repr(word)))
+                continue
+
+        if word in vocab:
+            if word not in embeddings:
+                # vectors = np.asarray(values[1:], dtype='float32')
+                vector = [float(x) for x in entries]
+            else:
+                alpha = 0.5 * (2.0 * np.random.random() - 1.0)
+                vector = (2.0 * np.random.random_sample([dim]) - 1.0) * alpha
+            embeddings[word] = np.array(vector)
+
+    # the words not in the embedding voc:
+    for word in vocab:
+        if word not in embeddings:
+            alpha = 0.5 * (2.0 * np.random.random() - 1.0)
+            vector = (2.0 * np.random.random_sample([dim]) - 1.0) * alpha
+            embeddings[word] = np.array(vector)
+    print('Total generated embeddings for this corpus is {}'.format(len(embeddings)))
+    print('Total words in voc is {}'.format(len(vocab)))
+    return embeddings
+
 def main(args):
     ################ CONFIGURATIONS #################
 
@@ -428,7 +625,8 @@ def main(args):
             tokenized_sources, tokenized_destinations, sources_nontokenized, destinations_nontokenized \
                 = UTIL.prepare_squad_objects(squad_file = dataset_path,
                                              dataset_type = args.dataset_path,
-                                             max_tokens=args.max_tokens)
+                                             max_tokens=args.max_tokens,
+                                             spacy_verbose=args.token_verbose)
         else:
             raise Exception('Reading from folders is not supported yet.')
             ##TODO: Reading from folders will be handling
@@ -444,10 +642,10 @@ def main(args):
 
     if args.ind_layers is not None:
         ind_layers = [int(x) for x in args.ind_layers.split(",")]
-        file_name_extension = 'ind_layers_' + args.ind_layers
+        file_name_extension = 'ind_layers_' + args.ind_layers + '_token_verbose_' + str(args.token_verbose)
     else:
         conc_layers = [int(x) for x in args.conc_layers.split(",")]
-        file_name_extension = 'conc_layers_' + args.conc_layers
+        file_name_extension = 'conc_layers_' + args.conc_layers +'_token_verbose_' + str(args.token_verbose)
 
     if args.ind_layers is None and args.conc_layers is None:
         raise Exception('There must be some layer configurations !!!')
@@ -461,36 +659,92 @@ def main(args):
     destination_folder_path = UTIL.create_dir(os.path.join(_embedding_path, 'destination', 'injected_idf' if args.is_inject_idf else 'non_idf'))
     print_header(args.embedding_type, args.dataset_path)
     token2idfweight = None
-    if args.embedding_type == 'elmo':
-        if args.is_inject_idf:
-            token2idfweight = retrieve_IDF_weights(sources_nontokenized + destinations_nontokenized)
-        elmo = ElmoEmbedder(cuda_device=0)
+    if args.embedding_type in ['elmo', 'glove', 'tfidf','bm25', 'fasttext']:
+        if args.embedding_type == 'elmo':
+            elmo = ElmoEmbedder(cuda_device=0)
+            embedding_function = elmo.embed_sentences
+        elif args.embedding_type == 'glove':
+            global glove_embeddings
+            extracted_data_path = os.path.join(args.data_path, args.embedding_type,
+                                                       'source_destination_glove_embeddings{}.pkl'.format(
+                                                           '_token_verbose_' + str(args.token_verbose)))
+            if not os.path.exists(extracted_data_path):
+                voc = UTIL.create_vocabulary(tokenized_sources + tokenized_destinations)
+                glove_embeddings = load_glove_embedding(voc, os.path.join(args.data_path,
+                                                                          args.pre_generated_embeddings_path))
+
+
+                print('Glove embeddings are generated')
+                UTIL.save_as_pickle(glove_embeddings, extracted_data_path)
+                print('Glove embeddings are dumped')
+            else:
+                glove_embeddings = UTIL.load_from_pickle(extracted_data_path)
+                print('Glove embeddings are loaded')
+            embedding_function = embed_with_glove
+        elif args.embedding_type == 'tfidf':
+            global tfidf_transformer
+            embedding_function = embed_with_tfidf
+        elif args.embedding_type == 'bm25':
+            global bm25_embeddings
+            extracted_data_path = os.path.join(args.data_path, args.embedding_type,
+                                               'source_destination_fasttext_embeddings{}.pkl'.format(
+                                                   '_token_verbose_' + str(args.token_verbose)))
+            if not os.path.exists(extracted_data_path):
+                bm25_embeddings = load_fasttext_embedding(sources_nontokenized + destinations_nontokenized, n_jobs=-1)
+
+                print('FastText embeddings are generated')
+                UTIL.save_as_pickle(bm25_embeddings, extracted_data_path)
+                print('FastText embeddings are dumped')
+            else:
+                bm25_embeddings = UTIL.load_from_pickle(extracted_data_path)
+                print('FastText embeddings are loaded')
+
+            embedding_function = embed_with_bm25
+        elif args.embedding_type =='fasttext':
+            global  fasttext_embeddings
+            extracted_data_path = os.path.join(args.data_path, args.embedding_type,
+                                               'source_destination_fasttext_embeddings{}.pkl'.format(
+                                                   '_token_verbose_' + str(args.token_verbose)))
+            if not os.path.exists(extracted_data_path):
+                voc = UTIL.create_vocabulary(tokenized_sources + tokenized_destinations)
+                fasttext_embeddings = load_fasttext_embedding(voc, os.path.join(args.data_path,
+                                                                          args.pre_generated_embeddings_path))
+
+                print('Glove embeddings are generated')
+                UTIL.save_as_pickle(fasttext_embeddings, extracted_data_path)
+                print('Glove embeddings are dumped')
+            else:
+                fasttext_embeddings = UTIL.load_from_pickle(extracted_data_path)
+                print('Glove embeddings are loaded')
+            embedding_function = embed_with_fasttext
+        if args.embedding_type not in ['tfidf', 'bm25'] and args.is_inject_idf:
+            token2idfweight = retrieve_IDF_weights(sources_nontokenized + destinations_nontokenized, args.token_verbose)
         if args.document_verbose == 1 or args.document_verbose == 3:
             print('SOURCE: Starting to embeddings generations')
             if args.is_averaged_token:
                 source_folder_path = UTIL.create_dir(os.path.join(source_folder_path, 'paritionally'))
-                source_name_prefix = partitionally_generate_elmo_embeddings(elmo,tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight)
+                source_name_prefix = partitionally_generate_generic_embeddings(tokenized_sources, source_folder_path, args, conc_layers, ind_layers, args.document_source_partition_size, args.document_source_index, file_name_extension, token2idfweight, embedding_function)
             else:
                 source_folder_path = UTIL.create_dir(os.path.join(source_folder_path, 'individually'))
-                source_name_prefix = individually_generate_elmo_embeddings(elmo, tokenized_sources, source_folder_path, args, conc_layers,
+                source_name_prefix = individually_generate_generic_embeddings(tokenized_sources, source_folder_path, args, conc_layers,
                                                        ind_layers, args.document_source_partition_size,
-                                                       args.document_source_index, file_name_extension, token2idfweight)
+                                                       args.document_source_index, file_name_extension, token2idfweight, embedding_function)
             print('SOURCE: Ending to embeddings generations')
         if args.document_verbose == 2 or args.document_verbose == 3:
             print('*' * 15)
             print('DESTINATION: Starting to embeddings generations')
             if args.is_averaged_token:
                 destination_folder_path =  UTIL.create_dir(os.path.join(destination_folder_path, 'paritionally'))
-                destination_name_prefix = partitionally_generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
+                destination_name_prefix = partitionally_generate_generic_embeddings(tokenized_destinations, destination_folder_path, args, conc_layers, ind_layers,
                                          args.document_destination_partition_size, args.document_destination_index, file_name_extension,
-                                         token2idfweight)
+                                         token2idfweight, embedding_function)
             else:
                 destination_folder_path = UTIL.create_dir(os.path.join(destination_folder_path, 'individually'))
-                destination_name_prefix = individually_generate_elmo_embeddings(elmo, tokenized_destinations, destination_folder_path, args,
+                destination_name_prefix = individually_generate_generic_embeddings(tokenized_destinations, destination_folder_path, args,
                                                        conc_layers, ind_layers,
                                                        args.document_destination_partition_size,
                                                        args.document_destination_index, file_name_extension,
-                                                       token2idfweight)
+                                                       token2idfweight, embedding_function)
             print('DESTINATION: Ending to embeddings generations')
     elif args.embedding_type == 'bert':
         if args.pre_generated_embeddings_path is None:
@@ -504,9 +758,9 @@ def main(args):
         if args.is_inject_idf:
             # In order to get IDF weights, we have to calculate IDF weights according to the tokens of the bert.
             # so we have to grap all tokens for all documents and calculate their idf then do the rest.
-            bert_new_source_tokens_file=os.path.join(args.data_path, args.embedding_type, 'bert_new_source_tokens.pkl')
+            bert_new_source_tokens_file=os.path.join(args.data_path, args.embedding_type, 'bert_new_source{}.pkl'.format('_token_verbose_' + str(args.token_verbose)))
             bert_new_destionation_tokens_file = os.path.join(args.data_path, args.embedding_type,
-                                                       'bert_new_destination_tokens.pkl')
+                                                       'bert_new_destination{}.pkl'.format('_token_verbose_' + str(args.token_verbose)))
             if not os.path.exists(bert_new_source_tokens_file):
                 tokenized_sources = convert_bert_tokens(tokenized_sources, source_pre_generated_bert_embeddings_file_names, args.window_length)
                 print('SOURCE: New tokens are generated')
@@ -559,9 +813,6 @@ def main(args):
                                                        destination_pre_generated_bert_embeddings_file_names)
             print('SOURCE: Ending to embeddings generations')
 
-    elif args.embedding_type == 'glove':
-        #TODO: Glove
-        pass
     else:
         raise Exception('There is no such embedding or is not supported yet.')
 

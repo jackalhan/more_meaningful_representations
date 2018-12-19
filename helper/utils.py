@@ -27,10 +27,30 @@ nlp = spacy.blank("en")
 #nlp_s = spacy.load('en')
 encoding="utf-8"
 #tokenize = lambda doc: [token.text for token in nlp(doc)]
-def word_tokenize(sent):
+def word_tokenize(sent, verbose=None):
+    """
+    :param sent: document {text, phrase, word}
+    :param verbose: None, just tokenize on sent
+           1, lowercase and tokenize on sent
+           2, lemmatize(lowercased) and tokenize on sent
+           3, tokenize and remove stopwords on sent
+           4, lowercase, tokenize and remove stopwords on sent
+           5, lemmatize(lowercased), tokenize and remove stopwords on sent
+    :return:
+    """
     doc = nlp(sent)
-    return [token.text for token in doc]
-
+    new_doc = []
+    for token in doc:
+        if (verbose is None) or (verbose == 3 and not token.is_stop):
+            new_doc.append(token.orth_)
+        elif (verbose == 1) or (verbose == 4 and not token.is_stop):
+            new_doc.append(token.lower_)
+        elif (verbose == 2) or (verbose == 5 and not token.is_stop):
+            new_doc.append(token.lemma_)
+        else:
+            pass
+ #    return [token.orth_ if verbose is None or (verbose ==3 and token.is_stop) is None else token.lower_ if verbose == 1 or (verbose == 4 and token.is_stop) else token.lemma_ if verbose == 2 or (verbose == 5 and token.is_stop) else token.text for token in doc]
+    return new_doc
 def convert_idx(text, tokens):
     current = 0
     spans = []
@@ -1227,7 +1247,7 @@ def load_from_shelve(path):
         obj = myShelve
     return obj
 
-def process_squad_file(filename, data_type, word_counter, char_counter):
+def process_squad_file(filename, data_type, word_counter, char_counter, spacy_verbose=None):
     print("Generating {} examples...".format(data_type))
     examples = []
     eval_examples = {}
@@ -1243,7 +1263,7 @@ def process_squad_file(filename, data_type, word_counter, char_counter):
                 context = para["context"].replace(
                     "''", '" ').replace("``", '" ')
                 paragraphs.append(context)
-                context_tokens = word_tokenize(context)
+                context_tokens = word_tokenize(context, spacy_verbose)
                 context_chars = [list(token) for token in context_tokens]
                 spans = convert_idx(context, context_tokens)
                 for token in context_tokens:
@@ -1256,7 +1276,7 @@ def process_squad_file(filename, data_type, word_counter, char_counter):
                         "''", '" ').replace("``", '" ')
                     questions.append(ques)
                     question_to_paragraph.append(_i_para)
-                    ques_tokens = word_tokenize(ques)
+                    ques_tokens = word_tokenize(ques, spacy_verbose)
                     ques_chars = [list(token) for token in ques_tokens]
                     for token in ques_tokens:
                         word_counter[token] += 1
@@ -1338,12 +1358,12 @@ def dump_vocab(path, vocab_as_set):
         for item in vocab_as_set:
             f.write(item + "\n")
 
-def tokenize_contexts(contexts:list, max_tokens=-1):
-    tokenized_context = [word_tokenize(context.strip()) if max_tokens == -1 else word_tokenize(context.strip())[0:max_tokens]for context in contexts]
+def tokenize_contexts(contexts:list, max_tokens=-1, spacy_verbose=None):
+    tokenized_context = [word_tokenize(context.strip(), spacy_verbose) if max_tokens == -1 else word_tokenize(context.strip(), spacy_verbose)[0:max_tokens]for context in contexts]
     return tokenized_context
 
 def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=False,
-                          paragraphs_file=None, questions_file=None, mapping_file=None, max_tokens=-1):
+                          paragraphs_file=None, questions_file=None, mapping_file=None, max_tokens=-1, spacy_verbose=None):
     print(100 * '*')
     print('Parsing Started')
     start = datetime.datetime.now()
@@ -1352,7 +1372,7 @@ def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=Fals
     examples, eval, questions, paragraphs, q_to_ps = process_squad_file(squad_file,
                                                                         dataset_type,
                                                                         word_counter,
-                                                                        char_counter)
+                                                                        char_counter, spacy_verbose)
 
     print('# of Paragraphs in {} : {}'.format(dataset_type, len(paragraphs)))
     print('# of Questions in {} : {}'.format(dataset_type, len(questions)))
@@ -1360,11 +1380,11 @@ def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=Fals
 
     print(20 * '-')
     print('Paragraphs: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
-    tokenized_paragraphs = tokenize_contexts(paragraphs, max_tokens)
+    tokenized_paragraphs = tokenize_contexts(paragraphs, max_tokens, spacy_verbose)
     print('# of Tokenized Paragraphs in {} : {}'.format(dataset_type, len(tokenized_paragraphs)))
     print(20 * '-')
     print('Questions: Tokenization and Saving Tokenization Started in {}'.format(dataset_type))
-    tokenized_questions = tokenize_contexts(questions, max_tokens)
+    tokenized_questions = tokenize_contexts(questions, max_tokens, spacy_verbose)
     print('# of Tokenized Questions in {} : {}'.format(dataset_type, len(tokenized_questions)))
 
     if is_dump_during_execution:
@@ -1387,8 +1407,6 @@ def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=Fals
 
     return tokenized_questions, tokenized_paragraphs, questions_nontokenized, paragraphs_nontokenized
 
-
-
 def fixing_the_token_problem(tokenized_questions, tokenized_paragraphs):
     # fixing the '' problem:
     fixed_tokenized_question = []
@@ -1409,6 +1427,13 @@ def fixing_the_token_problem(tokenized_questions, tokenized_paragraphs):
                 tokens.append(t)
         fixed_tokenized_paragraph.append(tokens)
     return fixed_tokenized_question, fixed_tokenized_paragraph
+
+def create_vocabulary(tokenized_documents):
+    voc = set()
+    for tokens in tokenized_documents:
+        for token in tokens:
+            voc.add(token)
+    return voc
 def generate_document_embedding_guideline(tokenized_questions, tokenized_paragraphs, is_dump = False,
                                           token_embeddings_guideline_file = None, tokens_ordered_file = None):
     print(100 * '*')

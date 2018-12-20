@@ -479,7 +479,7 @@ def embed_with_tfidf(documents_as_tokens):
         print('doc_indx:{}'.format(doc_indx))
         print('token embeddings:{}'.format(token_embeddings.shape))
         print('=' * 20)
-        yield np.expand_dims(token_embeddings, axis=0)
+        yield np.expand_dims(np.expand_dims(token_embeddings,axis=0), axis=0)
 
 def embed_with_bm25(documents_as_tokens):
     print('bm-25 is going to be calculated')
@@ -492,12 +492,12 @@ def embed_with_bm25(documents_as_tokens):
         print('doc_indx:{}'.format(doc_indx))
         print('token embeddings:{}'.format(token_embeddings.shape))
         print('=' * 20)
-        yield np.expand_dims(token_embeddings, axis=0)
+        yield np.expand_dims(np.expand_dims(token_embeddings, axis=0), axis=0)
 
-def generate_tfidf(non_tokenized_documents, spacy_verbose=None):
+def generate_tfidf(non_tokenized_documents, spacy_verbose=None, max_features=None):
     print('TF-IDF is going to be calculated')
     tokenize = lambda doc: [token.text for token in UTIL.word_tokenize(doc, spacy_verbose)]
-    tfidf = TfidfVectorizer(analyzer=lambda x: x, smooth_idf=False, sublinear_tf=False, tokenizer=tokenize)
+    tfidf = TfidfVectorizer(analyzer=lambda x: x, smooth_idf=False, sublinear_tf=False, tokenizer=tokenize, max_features=max_features)
     tfidf.fit(non_tokenized_documents)
     return tfidf
 
@@ -683,6 +683,16 @@ def main(args):
             embedding_function = embed_with_glove
         elif args.embedding_type == 'tfidf':
             global tfidf_transformer
+            # train_dataset_path = os.path.join(args.data_path, args.pre_generated_embeddings_path)
+            # train_tokenized_sources, train_tokenized_destinations, train_sources_nontokenized, train_destinations_nontokenized \
+            #     = UTIL.prepare_squad_objects(squad_file=train_dataset_path,
+            #                                  dataset_type=args.dataset_path,
+            #                                  max_tokens=args.max_tokens,
+            #                                  spacy_verbose=args.token_verbose)
+
+            #tfidf_transformer = generate_tfidf(train_sources_nontokenized + train_destinations_nontokenized, args.token_verbose, 1024)
+            tfidf_transformer = generate_tfidf(sources_nontokenized +destinations_nontokenized,
+                                               args.token_verbose, 1024)
             embedding_function = embed_with_tfidf
         elif args.embedding_type == 'bm25':
             global bm25_embeddings
@@ -690,7 +700,7 @@ def main(args):
                                                'source_destination_fasttext_embeddings{}.pkl'.format(
                                                    '_token_verbose_' + str(args.token_verbose)))
             if not os.path.exists(extracted_data_path):
-                bm25_embeddings = load_fasttext_embedding(sources_nontokenized + destinations_nontokenized, n_jobs=-1)
+                bm25_embeddings = get_bm25_weights(sources_nontokenized + destinations_nontokenized, n_jobs=-1)
 
                 print('FastText embeddings are generated')
                 UTIL.save_as_pickle(bm25_embeddings, extracted_data_path)

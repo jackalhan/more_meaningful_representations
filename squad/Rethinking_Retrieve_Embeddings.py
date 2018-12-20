@@ -720,22 +720,23 @@ def main(args):
 
             embedding_function = embed_with_bm25
         elif args.embedding_type =='fasttext':
-            global  fasttext_embeddings
+            global glove_embeddings
             extracted_data_path = os.path.join(args.data_path, args.embedding_type,
                                                'source_destination_fasttext_embeddings{}.pkl'.format(
                                                    '_token_verbose_' + str(args.token_verbose)))
             if not os.path.exists(extracted_data_path):
                 voc = UTIL.create_vocabulary(tokenized_sources + tokenized_destinations)
-                fasttext_embeddings = load_fasttext_embedding(voc, os.path.join(args.data_path,
+                # fasttext_embeddings = load_fasttext_embedding(voc, os.path.join(args.data_path,
+                #                                                           args.pre_generated_embeddings_path))
+                glove_embeddings = load_glove_embedding(voc, os.path.join(args.data_path,
                                                                           args.pre_generated_embeddings_path))
-
                 print('Glove embeddings are generated')
-                UTIL.save_as_pickle(fasttext_embeddings, extracted_data_path)
+                UTIL.save_as_pickle(glove_embeddings, extracted_data_path)
                 print('Glove embeddings are dumped')
             else:
-                fasttext_embeddings = UTIL.load_from_pickle(extracted_data_path)
+                glove_embeddings = UTIL.load_from_pickle(extracted_data_path)
                 print('Glove embeddings are loaded')
-            embedding_function = embed_with_fasttext
+            embedding_function = embed_with_glove
         if args.embedding_type not in ['tfidf', 'bm25'] and args.is_inject_idf:
             token2idfweight = retrieve_IDF_weights(sources_nontokenized + destinations_nontokenized, args.token_verbose)
         if args.document_verbose == 1 or args.document_verbose == 3:

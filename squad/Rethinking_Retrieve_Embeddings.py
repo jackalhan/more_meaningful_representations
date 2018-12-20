@@ -657,7 +657,7 @@ def main(args):
             elmo = ElmoEmbedder(cuda_device=0)
             embedding_function = elmo.embed_sentences
         elif args.embedding_type == 'glove':
-            global glove_embeddings
+            #global glove_embeddings
             extracted_data_path = os.path.join(args.data_path, args.embedding_type,
                                                        'source_destination_glove_embeddings{}.pkl'.format(
                                                            '_token_verbose_' + str(args.token_verbose)))
@@ -675,7 +675,7 @@ def main(args):
                 print('Glove embeddings are loaded')
             embedding_function = embed_with_glove
         elif args.embedding_type == 'tfidf':
-            global tfidf_transformer
+            #global tfidf_transformer
             train_dataset_path = os.path.join(args.data_path, args.pre_generated_embeddings_path)
             train_tokenized_sources, train_tokenized_destinations, train_sources_nontokenized, train_destinations_nontokenized \
                 = UTIL.prepare_squad_objects(squad_file=train_dataset_path,
@@ -688,7 +688,7 @@ def main(args):
             #                                    args.token_verbose, 1024)
             embedding_function = embed_with_tfidf
         elif args.embedding_type == 'bm25':
-            global bm25_embeddings
+            #global bm25_embeddings
             extracted_data_path = os.path.join(args.data_path, args.embedding_type,
                                                'source_destination_fasttext_embeddings{}.pkl'.format(
                                                    '_token_verbose_' + str(args.token_verbose)))
@@ -713,7 +713,7 @@ def main(args):
 
             embedding_function = embed_with_bm25
         elif args.embedding_type =='fasttext':
-            global glove_embeddings
+            #global glove_embeddings
             extracted_data_path = os.path.join(args.data_path, args.embedding_type,
                                                'source_destination_fasttext_embeddings{}.pkl'.format(
                                                    '_token_verbose_' + str(args.token_verbose)))
@@ -852,12 +852,12 @@ if __name__ == '__main__':
     assert args.data_path is not None, "No folder path found at {}".format(args.data_path)
     # assert args.to_file_name is not None, "No 'to_file_name' found {}".format(args.to_file_name)
 
-    glove_embeddings = None
-    fasttext_embeddings = None
-    tfidf_transformer = None
-    bm25_embeddings = None
-    # thanks to gensim!!! since it does not provide fit/transform structure, I need to trace the index of the corpus in order to reach the specified document
-    bm25_index = None
+    # glove_embeddings = None
+    # fasttext_embeddings = None
+    # tfidf_transformer = None
+    # bm25_embeddings = None
+    # # thanks to gensim!!! since it does not provide fit/transform structure, I need to trace the index of the corpus in order to reach the specified document
+    # bm25_index = None
 
     main(args)
 

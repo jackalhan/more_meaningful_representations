@@ -60,13 +60,6 @@ def get_parser():
     return parser
 
 
-glove_embeddings = None
-fasttext_embeddings = None
-tfidf_transformer=None
-bm25_embeddings = None
-#thanks to gensim!!! since it does not provide fit/transform structure, I need to trace the index of the corpus in order to reach the specified document
-bm25_index=None
-
 def get_file_names(path, file_name_splitter, bert_extension):
     bert_embeddings_file_names = []
     for name in [name for name in os.listdir(path)
@@ -858,6 +851,14 @@ if __name__ == '__main__':
     args = get_parser().parse_args()
     assert args.data_path is not None, "No folder path found at {}".format(args.data_path)
     # assert args.to_file_name is not None, "No 'to_file_name' found {}".format(args.to_file_name)
+
+    glove_embeddings = None
+    fasttext_embeddings = None
+    tfidf_transformer = None
+    bm25_embeddings = None
+    # thanks to gensim!!! since it does not provide fit/transform structure, I need to trace the index of the corpus in order to reach the specified document
+    bm25_index = None
+
     main(args)
 
 

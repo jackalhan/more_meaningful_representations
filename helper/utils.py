@@ -1247,7 +1247,7 @@ def load_from_shelve(path):
         obj = myShelve
     return obj
 
-def process_squad_file(filename, data_type, word_counter, char_counter, spacy_verbose=None):
+def process_squad_file(filename, data_type, word_counter, char_counter):
     print("Generating {} examples...".format(data_type))
     examples = []
     eval_examples = {}
@@ -1263,7 +1263,7 @@ def process_squad_file(filename, data_type, word_counter, char_counter, spacy_ve
                 context = para["context"].replace(
                     "''", '" ').replace("``", '" ')
                 paragraphs.append(context)
-                context_tokens = word_tokenize(context, spacy_verbose)
+                context_tokens = word_tokenize(context, None)
                 context_chars = [list(token) for token in context_tokens]
                 spans = convert_idx(context, context_tokens)
                 for token in context_tokens:
@@ -1276,7 +1276,7 @@ def process_squad_file(filename, data_type, word_counter, char_counter, spacy_ve
                         "''", '" ').replace("``", '" ')
                     questions.append(ques)
                     question_to_paragraph.append(_i_para)
-                    ques_tokens = word_tokenize(ques, spacy_verbose)
+                    ques_tokens = word_tokenize(ques, None)
                     ques_chars = [list(token) for token in ques_tokens]
                     for token in ques_tokens:
                         word_counter[token] += 1
@@ -1372,7 +1372,7 @@ def prepare_squad_objects(squad_file,dataset_type, is_dump_during_execution=Fals
     examples, eval, questions, paragraphs, q_to_ps = process_squad_file(squad_file,
                                                                         dataset_type,
                                                                         word_counter,
-                                                                        char_counter, spacy_verbose)
+                                                                        char_counter)
 
     print('# of Paragraphs in {} : {}'.format(dataset_type, len(paragraphs)))
     print('# of Questions in {} : {}'.format(dataset_type, len(questions)))

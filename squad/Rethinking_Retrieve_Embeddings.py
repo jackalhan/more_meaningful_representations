@@ -683,16 +683,16 @@ def main(args):
             embedding_function = embed_with_glove
         elif args.embedding_type == 'tfidf':
             global tfidf_transformer
-            # train_dataset_path = os.path.join(args.data_path, args.pre_generated_embeddings_path)
-            # train_tokenized_sources, train_tokenized_destinations, train_sources_nontokenized, train_destinations_nontokenized \
-            #     = UTIL.prepare_squad_objects(squad_file=train_dataset_path,
-            #                                  dataset_type=args.dataset_path,
-            #                                  max_tokens=args.max_tokens,
-            #                                  spacy_verbose=args.token_verbose)
+            train_dataset_path = os.path.join(args.data_path, args.pre_generated_embeddings_path)
+            train_tokenized_sources, train_tokenized_destinations, train_sources_nontokenized, train_destinations_nontokenized \
+                = UTIL.prepare_squad_objects(squad_file=train_dataset_path,
+                                             dataset_type=args.dataset_path,
+                                             max_tokens=args.max_tokens,
+                                             spacy_verbose=args.token_verbose)
 
-            #tfidf_transformer = generate_tfidf(train_sources_nontokenized + train_destinations_nontokenized, args.token_verbose, 1024)
-            tfidf_transformer = generate_tfidf(sources_nontokenized +destinations_nontokenized,
-                                               args.token_verbose, 1024)
+            tfidf_transformer = generate_tfidf(train_sources_nontokenized + train_destinations_nontokenized, args.token_verbose, 1024)
+            # tfidf_transformer = generate_tfidf(sources_nontokenized +destinations_nontokenized,
+            #                                    args.token_verbose, 1024)
             embedding_function = embed_with_tfidf
         elif args.embedding_type == 'bm25':
             global bm25_embeddings
@@ -700,6 +700,15 @@ def main(args):
                                                'source_destination_fasttext_embeddings{}.pkl'.format(
                                                    '_token_verbose_' + str(args.token_verbose)))
             if not os.path.exists(extracted_data_path):
+                # train_dataset_path = os.path.join(args.data_path, args.pre_generated_embeddings_path)
+                # train_tokenized_sources, train_tokenized_destinations, train_sources_nontokenized, train_destinations_nontokenized \
+                #     = UTIL.prepare_squad_objects(squad_file=train_dataset_path,
+                #                                  dataset_type=args.dataset_path,
+                #                                  max_tokens=args.max_tokens,
+                #                                  spacy_verbose=args.token_verbose)
+                #
+                # bm25_embeddings = get_bm25_weights(train_sources_nontokenized + train_destinations_nontokenized,n_jobs=-1)
+
                 bm25_embeddings = get_bm25_weights(sources_nontokenized + destinations_nontokenized, n_jobs=-1)
 
                 print('FastText embeddings are generated')

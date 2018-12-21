@@ -10,7 +10,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import helper.utils as UTIL
 import argparse
 from allennlp.commands.elmo import ElmoEmbedder
-from gensim.summarization.bm25 import get_bm25_weights
+#from gensim.summarization.bm25 import get_bm25_weights
 from gensim.models import KeyedVectors
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import defaultdict

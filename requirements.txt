@@ -12,4 +12,3 @@ scipy==1.1.0
 tensorflow-hub
 seaborn
 chakin
-gensimpytho

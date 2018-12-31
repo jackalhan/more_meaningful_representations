@@ -1,0 +1,70 @@
+import numpy as np
+def load_embeddings(infile_to_get):
+    with h5py.File(infile_to_get, 'r') as fin:
+        document_embeddings = fin['embeddings'][...]
+    return document_embeddings
+
+def dump_embeddings(embeddings, outfile_to_dump, dtype="float32"):
+    with h5py.File(outfile_to_dump, 'w') as fout:
+        ds = fout.create_dataset(
+            'embeddings',
+            embeddings.shape, dtype=dtype,
+            data=embeddings
+        )
+
+import os
+import h5py
+#-------------------
+# fasttext:
+#-------------------
+fasttext_path = "/media/jackalhan/Samsung_T5/Rethinking_Running_Data_QUASAR-T_short/consolidated/fasttext_idf"
+fasttext_train_ques = load_embeddings(os.path.join(fasttext_path, 'train_question_embeddings.hdf5'))
+fasttext_train_par = load_embeddings(os.path.join(fasttext_path, 'train_paragraph_embeddings.hdf5'))
+fasttext_test_par = load_embeddings(os.path.join(fasttext_path, 'test_paragraph_embeddings.hdf5'))
+fasttext_test_ques = load_embeddings(os.path.join(fasttext_path, 'test_question_embeddings.hdf5'))
+
+
+#-------------------
+# elmo:
+#-------------------
+elmo_path = "/media/jackalhan/Samsung_T5/Rethinking_Running_Data_QUASAR-T_short/consolidated/elmo_token_idf"
+elmo_train_ques = load_embeddings(os.path.join(elmo_path, 'train_question_embeddings.hdf5'))
+elmo_train_par = load_embeddings(os.path.join(elmo_path, 'train_paragraph_embeddings.hdf5'))
+elmo_test_par = load_embeddings(os.path.join(elmo_path, 'test_paragraph_embeddings.hdf5'))
+elmo_test_ques = load_embeddings(os.path.join(elmo_path, 'test_question_embeddings.hdf5'))
+
+#-------------------
+# OUT 2:
+#-------------------
+bert_elmo_fasttext_path = "/media/jackalhan/Samsung_T5/Rethinking_Running_Data_QUASAR-T_short/consolidated/fasttext_idf_elmo_token_idf"
+elmo_fasttext_test_ques = np.concatenate((elmo_test_ques, fasttext_test_ques), axis=1)
+elmo_fasttext_train_ques = np.concatenate((elmo_train_ques, fasttext_train_ques), axis=1)
+elmo_fasttext_train_par = np.concatenate((elmo_train_par, fasttext_train_par), axis=1)
+elmo_fasttext_test_par = np.concatenate((elmo_test_par, fasttext_test_par), axis=1)
+dump_embeddings(elmo_fasttext_test_ques,os.path.join(bert_elmo_fasttext_path,'test_question_embeddings.hdf5'))
+dump_embeddings(elmo_fasttext_test_par,os.path.join(bert_elmo_fasttext_path,'test_paragraph_embeddings.hdf5'))
+dump_embeddings(elmo_fasttext_train_par,os.path.join(bert_elmo_fasttext_path,'train_paragraph_embeddings.hdf5'))
+dump_embeddings(elmo_fasttext_train_ques,os.path.join(bert_elmo_fasttext_path,'train_question_embeddings.hdf5'))
+
+#-------------------
+# bert:
+#-------------------
+
+#bert_path = "/media/jackalhan/Samsung_T5/Rethinking_Running_Data_QUASAR-T_short/consolidated/bert_conc_4_layers_noidf"
+#bert_train_ques = load_embeddings(os.path.join(bert_path, 'train_question_embeddings.hdf5'))
+#bert_train_par = load_embeddings(os.path.join(bert_path, 'train_paragraph_embeddings.hdf5'))
+#bert_test_par = load_embeddings(os.path.join(bert_path, 'test_paragraph_embeddings.hdf5'))
+#bert_test_ques = load_embeddings(os.path.join(bert_path, 'test_question_embeddings.hdf5'))
+
+#-------------------
+# OUT 3:
+#-------------------
+bert_elmo_fasttext_path = "/media/jackalhan/Samsung_T5/Rethinking_Running_Data_QUASAR-T_short/consolidated/bert_conc_4_layers_noidf_elmo_token_fastext_idf"
+elmo_fasttext_test_ques = np.concatenate((bert_test_ques, elmo_test_ques, fasttext_test_ques), axis=1)
+elmo_fasttext_train_ques = np.concatenate((bert_train_ques, elmo_train_ques, fasttext_train_ques), axis=1)
+elmo_fasttext_train_par = np.concatenate((bert_train_par,elmo_train_par, fasttext_train_par), axis=1)
+elmo_fasttext_test_par = np.concatenate((bert_test_par, elmo_test_par, fasttext_test_par), axis=1)
+dump_embeddings(elmo_fasttext_test_ques,os.path.join(bert_elmo_fasttext_path,'test_question_embeddings.hdf5'))
+dump_embeddings(elmo_fasttext_test_par,os.path.join(bert_elmo_fasttext_path,'test_paragraph_embeddings.hdf5'))
+dump_embeddings(elmo_fasttext_train_par,os.path.join(bert_elmo_fasttext_path,'train_paragraph_embeddings.hdf5'))
+dump_embeddings(elmo_fasttext_train_ques,os.path.join(bert_elmo_fasttext_path,'train_question_embeddings.hdf5'))

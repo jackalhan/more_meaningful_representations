@@ -1,0 +1,4 @@
+gcloud compute --project "text-embeddings-216415" ssh --zone "us-central1-c" "instance-2"
+
+gcloud compute scp --recurse instace-2:~/Development/github/more_meaningful_representations/squad/MSMARCO_DATA/dev/* /home/jackalhan/Downloads/msmarco_dev/
+
